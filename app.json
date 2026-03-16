@@ -47,7 +47,13 @@
           }
         }
       ],
-      "@sentry/react-native",
+      [
+        "@sentry/react-native",
+        {
+          "organization": "huamumu",
+          "project": "zhihuminusminus"
+        }
+      ],
       "expo-web-browser",
       "expo-sharing"
     ],
@@ -58,7 +64,8 @@
       "router": {},
       "eas": {
         "projectId": "faa0f061-50e6-4ec4-bb6f-accda0dbd24f"
-      }
+      },
+      "sentryDsn": "https://93a6099dd49b040d9c516485eb3c72f6@o4511051860672512.ingest.de.sentry.io/4511051866112080"
     }
   }
 }
