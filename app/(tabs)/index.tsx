@@ -388,6 +388,7 @@ function parseFollowingData(item: any) {
     commentCount: target.comment_count || 0,
     voted: target.relationship?.voting || 0,
     type: appType,
+    topics: target.topics?.map((t: any) => ({ id: t.id, name: t.name })) || [],
   };
 }
 
@@ -422,6 +423,7 @@ function parseRecommendData(item: any) {
     commentCount: target.comment_count || 0,
     voted: target.relationship?.voting || 0,
     type: appType,
+    topics: target.topics?.map((t: any) => ({ id: t.id, name: t.name })) || [],
   };
 }
 

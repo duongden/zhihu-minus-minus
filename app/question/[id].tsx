@@ -445,13 +445,14 @@ export default function QuestionDetail() {
             {question?.topics && (
               <View className="flex-row flex-wrap mb-2.5 mt-2 bg-transparent">
                 {question.topics.map((t: any) => (
-                  <View
+                  <Pressable
                     key={t.id}
+                    onPress={() => router.push(`/topic/${t.id}` as any)}
                     className="px-2.5 py-1 rounded-[15px] mr-2 mb-1"
                     style={{ backgroundColor: 'rgba(0,132,255,0.1)' }}
                   >
                     <Text className="text-xs text-[#0084ff]">{t.name}</Text>
-                  </View>
+                  </Pressable>
                 ))}
               </View>
             )}

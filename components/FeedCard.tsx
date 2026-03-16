@@ -46,6 +46,24 @@ export const FeedCard = ({ item }: { item: any }) => {
           {item.author.name}
         </Text>
       </Pressable>
+        
+      {/* 话题标签 */}
+      {item.topics && item.topics.length > 0 && (
+        <View className="flex-row flex-wrap mb-2 bg-transparent">
+          {item.topics.map((topic: any) => (
+            <Pressable
+              key={topic.id}
+              onPress={() => router.push(`/topic/${topic.id}` as any)}
+              className="px-2 py-0.5 rounded-sm mr-2 mb-1"
+              style={{ backgroundColor: 'rgba(0,0,132,0.05)' }}
+            >
+              <Text className="text-[11px] text-tertiary dark:text-tertiary-dark">
+                {topic.name}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
 
       {/* 热区2：点击标题 -> 详情页 */}
       {item.title ? (

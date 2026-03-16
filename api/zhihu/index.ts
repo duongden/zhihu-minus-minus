@@ -11,4 +11,5 @@ export * from './notification';
 export * from './pin';
 export * from './question';
 export * from './search';
+export * from './topic';
 export * from './voters';
