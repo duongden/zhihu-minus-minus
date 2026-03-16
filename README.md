@@ -58,6 +58,19 @@
   </table>
 
 
+## 📦 下载与安装
+
+### 🤖 Android
+你可以直接前往 [GitHub Releases](https://github.com/huamurui/zhihu-minus-minus/releases) 下载最新的 APK 文件进行安装。
+> [!NOTE]
+> 注意 apk 名称，目前提供的 20mb 左右的 APK 只能在 `arm64` 的安卓设备上运行。
+
+### 🍎 iOS
+由于 iOS 平台的限制，目前未在 App Store 上架。你需要：
+1. `git clone` 本仓库。
+2. 安装环境（参考下方的 **快速开始**）。
+3. 使用自己的 Apple ID 在 Xcode 中进行签名并编译到真机。
+
 ## 🚀 快速开始
 
 本项目涉及到一些原生库，推荐使用 **Development Build** 进行开发。
@@ -91,19 +104,22 @@ npm run ios
 
 ## 🚧 开发计划 (Roadmap)
 
-- [x] 知乎日报免登录集成 (Daily Feed)
-- [x] 全站统一水平滑动交互 (Unified Linear Navigation)
-- [x] 毛玻璃悬浮底栏与动态指示器 (Modern TabBar)
-- [x] 高性能回答/文章阅读引擎
-- [x] 二级架构评论系统 (Clickable User Profiles)
+- [x] 知乎日报 (Daily Feed)
+- [x] 二级评论系统 (Clickable User Profiles)
 - [x] 个人中心与历史记录 (History)
-- [x] 自动签名算法 (X-ZSE-96)
 - [x] 发布界面 (New Publish UI)
-- [x] 深度搜索功能 (Search & Local History)
-- [x] 互动式内容引擎 (Paragraph interaction & Stat popovers)
-- [x] 共享元素导航动画 (Shared Transitions)
+- [x] 搜索 (Search & Local History)
+- [x] 消息 (Message)
+- [x] 关注
+- [x] 收藏
+- [x] 话题 (Topics)
 - [ ] 动态发表功能完整实现
-- [ ] 图片/视频全屏预览优化
+
+- [x] 互动式内容 (Paragraph interaction & Stat popovers)
+- [x] 导航动画 (Shared Transitions)
+- [x] 水平滑动交互 (Unified Linear Navigation)
+- [x] 悬浮底栏与动态指示器 (Modern TabBar)
+- [x] 回答/文章阅读引擎
 
 ---
 
