@@ -1,7 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -9,6 +12,7 @@ import {
   TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { createQuestion } from '@/api/zhihu';
 import { Text, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
@@ -17,6 +21,7 @@ export default function PublishQuestionScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const colorScheme = useColorScheme();
+  const queryClient = useQueryClient();
   const tintColor = Colors[colorScheme].tint;
   const textColor = Colors[colorScheme].text;
   const secondaryColor = Colors[colorScheme].textSecondary;
@@ -25,7 +30,28 @@ export default function PublishQuestionScreen() {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
 
-  const isPublishEnabled = title.trim().length > 5;
+  const mutation = useMutation({
+    mutationFn: () => createQuestion(title.trim(), content.trim()),
+    onSuccess: () => {
+      Alert.alert('发布成功', '您的问题已发布！');
+      queryClient.invalidateQueries({ queryKey: ['feeds'] });
+      router.back();
+    },
+    onError: (err: any) => {
+      console.error(err);
+      Alert.alert('发布失败', err.response?.data?.error?.message || '未知错误');
+    },
+  });
+
+  const handlePublish = () => {
+    if (!title.trim()) {
+      Alert.alert('提示', '请输入问题标题');
+      return;
+    }
+    mutation.mutate();
+  };
+
+  const isPublishEnabled = title.trim().length > 5 && !mutation.isPending;
 
   return (
     <View className="flex-1">
@@ -36,25 +62,26 @@ export default function PublishQuestionScreen() {
         <Pressable onPress={() => router.back()} className="p-1">
           <Ionicons name="close" size={28} color={textColor} />
         </Pressable>
-        <Text className="text-lg font-bold">提问题</Text>
+        <Text className="text-lg font-bold">提问题(WIP)</Text>
         <Pressable
           disabled={!isPublishEnabled}
-          onPress={() => {
-            console.log('Publish Question:', title, content);
-            router.back();
-          }}
-          className="px-5 py-2 rounded-full"
+          onPress={handlePublish}
+          className="px-5 py-2 rounded-full min-w-[80px] items-center justify-center"
           style={({ pressed }) => [
             { backgroundColor: isPublishEnabled ? tintColor : borderCol },
             pressed && { opacity: 0.8 },
           ]}
         >
-          <Text
-            className="text-sm font-bold"
-            style={{ color: isPublishEnabled ? 'white' : secondaryColor }}
-          >
-            发布
-          </Text>
+          {mutation.isPending ? (
+            <ActivityIndicator size="small" color="white" />
+          ) : (
+            <Text
+              className="text-sm font-bold"
+              style={{ color: isPublishEnabled ? 'white' : secondaryColor }}
+            >
+              发布
+            </Text>
+          )}
         </Pressable>
       </View>
 
@@ -63,29 +90,21 @@ export default function PublishQuestionScreen() {
         style={{ flex: 1 }}
       >
         <ScrollView
-          className="flex-1 px-6 pt-3"
+          className="flex-1 px-5"
           keyboardShouldPersistTaps="handled"
         >
           <TextInput
-            autoFocus
-            placeholder="写下你的问题，以问号结尾..."
+            className="text-xl font-bold py-4 border-b"
+            style={{ color: textColor, borderBottomColor: borderCol }}
+            placeholder="输入问题并以问号结尾"
             placeholderTextColor={secondaryColor}
-            className="text-xl font-extrabold py-4 leading-7"
-            style={{ color: textColor }}
+            multiline
             value={title}
             onChangeText={setTitle}
-            multiline
-            maxLength={100}
-          />
-          <View
-            className="my-1"
-            style={{ height: 0.5, backgroundColor: borderCol }}
+            autoFocus
           />
           <TextInput
-            multiline
-            placeholder="对问题进行补充说明（可选）"
-            placeholderTextColor={secondaryColor}
-            className="text-base leading-6 min-h-[200px] py-4"
+            className="text-lg py-4 min-h-[300px]"
             style={{ color: textColor, textAlignVertical: 'top' }}
             value={content}
             onChangeText={setContent}

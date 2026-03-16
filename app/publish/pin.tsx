@@ -1,7 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -9,6 +12,7 @@ import {
   TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { createPin } from '@/api/zhihu';
 import { Text, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
@@ -17,6 +21,7 @@ export default function PublishPinScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const colorScheme = useColorScheme();
+  const queryClient = useQueryClient();
   const tintColor = Colors[colorScheme].tint;
   const textColor = Colors[colorScheme].text;
   const secondaryColor = Colors[colorScheme].textSecondary;
@@ -24,7 +29,28 @@ export default function PublishPinScreen() {
 
   const [content, setContent] = useState('');
 
-  const isPublishEnabled = content.trim().length > 0;
+  const mutation = useMutation({
+    mutationFn: () => createPin(content.trim()),
+    onSuccess: () => {
+      Alert.alert('发布成功', '您的想法已发布！');
+      queryClient.invalidateQueries({ queryKey: ['feeds'] });
+      router.back();
+    },
+    onError: (err: any) => {
+      console.error(err);
+      Alert.alert('发布失败', err.response?.data?.error?.message || '未知错误');
+    },
+  });
+
+  const handlePublish = () => {
+    if (!content.trim()) {
+      Alert.alert('提示', '请输入想法内容');
+      return;
+    }
+    mutation.mutate();
+  };
+
+  const isPublishEnabled = content.trim().length > 0 && !mutation.isPending;
 
   return (
     <View className="flex-1">
@@ -38,22 +64,23 @@ export default function PublishPinScreen() {
         <Text className="text-lg font-bold">发想法</Text>
         <Pressable
           disabled={!isPublishEnabled}
-          onPress={() => {
-            console.log('Publish Pin:', content);
-            router.back();
-          }}
-          className="px-5 py-2 rounded-full"
+          onPress={handlePublish}
+          className="px-5 py-2 rounded-full min-w-[80px] items-center justify-center"
           style={({ pressed }) => [
             { backgroundColor: isPublishEnabled ? tintColor : borderCol },
             pressed && { opacity: 0.8 },
           ]}
         >
-          <Text
-            className="text-sm font-bold"
-            style={{ color: isPublishEnabled ? 'white' : secondaryColor }}
-          >
-            发布
-          </Text>
+          {mutation.isPending ? (
+            <ActivityIndicator size="small" color="white" />
+          ) : (
+            <Text
+              className="text-sm font-bold"
+              style={{ color: isPublishEnabled ? 'white' : secondaryColor }}
+            >
+              发布
+            </Text>
+          )}
         </Pressable>
       </View>
 
@@ -62,46 +89,41 @@ export default function PublishPinScreen() {
         style={{ flex: 1 }}
       >
         <ScrollView
-          className="flex-1 px-5 pt-5"
+          className="flex-1 px-5 pt-4"
           keyboardShouldPersistTaps="handled"
         >
           <TextInput
             multiline
             autoFocus
-            placeholder="分享你现在的想法..."
+            placeholder="这一刻的想法..."
             placeholderTextColor={secondaryColor}
             className="text-lg leading-7 min-h-[200px]"
             style={{ color: textColor, textAlignVertical: 'top' }}
             value={content}
             onChangeText={setContent}
-            maxLength={1000}
           />
         </ScrollView>
 
         <View
-          className="flex-row px-5 py-3"
+          className="flex-row px-5 py-3 justify-around bg-transparent"
           style={{
             paddingBottom: insets.bottom + 20,
             borderTopWidth: 0.5,
             borderTopColor: borderCol,
           }}
         >
-          {[
-            { icon: 'image-outline', label: '图片' },
-            { icon: 'videocam-outline', label: '视频' },
-            { icon: 'at-outline', label: '提到' },
-            { icon: 'chatbubble-outline', label: '话题' },
-          ].map((tool) => (
-            <Pressable key={tool.icon} className="flex-row items-center mr-6">
-              <Ionicons name={tool.icon as any} size={24} color={tintColor} />
-              <Text
-                className="text-sm ml-1 font-medium"
-                style={{ color: tintColor }}
-              >
-                {tool.label}
-              </Text>
-            </Pressable>
-          ))}
+          <Pressable className="p-2">
+            <Ionicons name="image-outline" size={24} color={tintColor} />
+          </Pressable>
+          <Pressable className="p-2">
+            <Ionicons name="videocam-outline" size={24} color={tintColor} />
+          </Pressable>
+          <Pressable className="p-2">
+            <Ionicons name="at-outline" size={24} color={tintColor} />
+          </Pressable>
+          <Pressable className="p-2">
+            <Ionicons name="happy-outline" size={24} color={tintColor} />
+          </Pressable>
         </View>
       </KeyboardAvoidingView>
     </View>

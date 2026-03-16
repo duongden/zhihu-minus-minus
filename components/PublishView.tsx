@@ -17,7 +17,7 @@ const PUBLISH_OPTIONS = [
   },
   {
     id: 'article',
-    title: '写文章',
+    title: '写文章(WIP)',
     subtitle: '记录生活点滴',
     icon: 'document-text-outline',
     color: '#ff9607',
@@ -31,7 +31,7 @@ const PUBLISH_OPTIONS = [
   },
   {
     id: 'question',
-    title: '提问题',
+    title: '提问题(WIP)',
     subtitle: '向世界发问',
     icon: 'help-circle-outline',
     color: '#e74c3c',

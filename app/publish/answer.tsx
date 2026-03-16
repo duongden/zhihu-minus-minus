@@ -1,14 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  KeyboardAvoidingView,
-  Platform,
+  ActivityIndicator,
+  FlatList,
   Pressable,
   ScrollView,
+  StyleSheet,
   TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { searchCreatorQuestions, getInvitedQuestions } from '@/api/zhihu';
 import { Text, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
@@ -21,15 +24,83 @@ export default function PublishAnswerScreen() {
   const textColor = Colors[colorScheme].text;
   const secondaryColor = Colors[colorScheme].textSecondary;
   const borderCol = Colors[colorScheme].border;
+  const backgroundColor = Colors[colorScheme].background;
 
-  const [question, setQuestion] = useState('');
-  const [content, setContent] = useState('');
+  const [activeTab, setActiveTab] = useState<'search' | 'invite'>('search');
+  const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
 
-  const isPublishEnabled =
-    question.trim().length > 0 && content.trim().length > 0;
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedQuery(query), 500);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const { data: searchResults, isLoading: isSearching } = useQuery({
+    queryKey: ['creator-search', debouncedQuery],
+    queryFn: () => searchCreatorQuestions(debouncedQuery),
+    enabled: debouncedQuery.length > 0 && activeTab === 'search',
+  });
+
+  const { data: invitedResults, isLoading: isInvitedLoading } = useQuery({
+    queryKey: ['invited-questions'],
+    queryFn: () => getInvitedQuestions(),
+    enabled: activeTab === 'invite',
+  });
+
+  const renderQuestionItem = ({ item }: { item: any }) => {
+    // Check if it's an invitation item
+    if (item.content && item.content.text) {
+      const { title: inviter, sub_title: inviteMsg, text: qTitle, target_link } = item.content;
+      const questionId = target_link?.split('/').pop();
+
+      return (
+        <Pressable
+          onPress={() => router.push(`/question/write/${questionId}`)}
+          className="px-5 py-4 border-b"
+          style={{ borderBottomColor: borderCol }}
+        >
+          <View className="flex-row items-center mb-1 bg-transparent">
+            <Text className="text-xs font-bold" style={{ color: tintColor }}>
+              {inviter}
+            </Text>
+            <Text className="text-xs ml-1" style={{ color: secondaryColor }}>
+              {inviteMsg}
+            </Text>
+          </View>
+          <Text className="text-base font-bold mb-2 leading-6" style={{ color: textColor }}>
+            {qTitle}
+          </Text>
+        </Pressable>
+      );
+    }
+
+    const question = item.question || item.target || item.extra?.data;
+    if (!question) return null;
+
+    const reaction = item.reaction || {};
+    const subText = reaction.pv 
+      ? `${reaction.pv} 浏览 · ${reaction.follow_num} 关注 · ${reaction.answer_num} 回答`
+      : item.target_source?.sub_text || `${question.follow_num || 0} 关注`;
+
+    return (
+      <Pressable
+        onPress={() => router.push(`/question/write/${question.id}`)}
+        className="px-5 py-4 border-b"
+        style={{ borderBottomColor: borderCol }}
+      >
+        <Text className="text-base font-bold mb-2 leading-6" style={{ color: textColor }}>
+          {question.title}
+        </Text>
+        <Text className="text-xs" style={{ color: secondaryColor }}>
+          {subText}
+        </Text>
+      </Pressable>
+    );
+  };
 
   return (
     <View className="flex-1">
+      {/* Header */}
       <View
         className="flex-row items-center justify-between px-4 pb-3"
         style={{ paddingTop: insets.top + 10 }}
@@ -38,82 +109,88 @@ export default function PublishAnswerScreen() {
           <Ionicons name="close" size={28} color={textColor} />
         </Pressable>
         <Text className="text-lg font-bold">写回答</Text>
+        <View className="w-10" />
+      </View>
+
+      {/* Tabs */}
+      <View className="flex-row px-5 border-b" style={{ borderBottomColor: borderCol }}>
         <Pressable
-          disabled={!isPublishEnabled}
-          onPress={() => {
-            console.log('Publish Answer:', question, content);
-            router.back();
-          }}
-          className="px-5 py-2 rounded-full"
-          style={({ pressed }) => [
-            { backgroundColor: isPublishEnabled ? tintColor : borderCol },
-            pressed && { opacity: 0.8 },
-          ]}
+          onPress={() => setActiveTab('search')}
+          className="py-3 mr-6"
+          style={{ borderBottomWidth: 2, borderBottomColor: activeTab === 'search' ? tintColor : 'transparent' }}
         >
-          <Text
-            className="text-sm font-bold"
-            style={{ color: isPublishEnabled ? 'white' : secondaryColor }}
-          >
-            发布
+          <Text style={{ color: activeTab === 'search' ? tintColor : secondaryColor, fontWeight: activeTab === 'search' ? 'bold' : 'normal' }}>
+            搜索问题
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => setActiveTab('invite')}
+          className="py-3"
+          style={{ borderBottomWidth: 2, borderBottomColor: activeTab === 'invite' ? tintColor : 'transparent' }}
+        >
+          <Text style={{ color: activeTab === 'invite' ? tintColor : secondaryColor, fontWeight: activeTab === 'invite' ? 'bold' : 'normal' }}>
+            邀请回答
           </Text>
         </Pressable>
       </View>
 
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={{ flex: 1 }}
-      >
-        <ScrollView
-          className="flex-1 px-5 pt-3"
-          keyboardShouldPersistTaps="handled"
-        >
-          <View
-            className="flex-row items-center px-3 py-2.5 rounded-xl mb-5"
-            style={{ backgroundColor: borderCol + '30' }}
-          >
-            <Ionicons name="search" size={18} color={secondaryColor} />
-            <TextInput
-              placeholder="搜索你感兴趣的问题..."
-              placeholderTextColor={secondaryColor}
-              className="flex-1 text-base ml-2"
-              style={{ color: textColor }}
-              value={question}
-              onChangeText={setQuestion}
-            />
+      {activeTab === 'search' ? (
+        <View className="flex-1">
+          <View className="px-5 py-3">
+            <View
+              className="flex-row items-center px-3 py-2.5 rounded-xl"
+              style={{ backgroundColor: borderCol + '30' }}
+            >
+              <Ionicons name="search" size={18} color={secondaryColor} />
+              <TextInput
+                placeholder="搜索你想回答的问题..."
+                placeholderTextColor={secondaryColor}
+                className="flex-1 text-base ml-2"
+                style={{ color: textColor }}
+                value={query}
+                onChangeText={setQuery}
+                autoFocus
+              />
+              {isSearching && <ActivityIndicator size="small" color={tintColor} className="ml-2" />}
+            </View>
           </View>
-          <TextInput
-            multiline
-            placeholder="写下你的专业回答..."
-            placeholderTextColor={secondaryColor}
-            className="text-lg leading-7 min-h-[400px]"
-            style={{ color: textColor, textAlignVertical: 'top' }}
-            value={content}
-            onChangeText={setContent}
+          <FlatList
+            data={searchResults?.data || []}
+            renderItem={renderQuestionItem}
+            keyExtractor={(item, index) => index.toString()}
+            ListEmptyComponent={() => (
+              <View className="flex-1 justify-center items-center mt-20 px-10">
+                <Ionicons name="search-outline" size={64} color={borderCol} />
+                <Text className="text-center mt-4" style={{ color: secondaryColor }}>
+                  {query.trim() ? "没有找到相关问题喵" : "试着搜索一些你感兴趣的话题吧"}
+                </Text>
+              </View>
+            )}
           />
-        </ScrollView>
-
-        <View
-          className="flex-row px-5 py-3 justify-around"
-          style={{
-            paddingBottom: insets.bottom + 20,
-            borderTopWidth: 0.5,
-            borderTopColor: borderCol,
-          }}
-        >
-          <Pressable className="p-2">
-            <Ionicons name="image-outline" size={24} color={tintColor} />
-          </Pressable>
-          <Pressable className="p-2">
-            <Ionicons name="videocam-outline" size={24} color={tintColor} />
-          </Pressable>
-          <Pressable className="p-2">
-            <Ionicons name="list-outline" size={24} color={tintColor} />
-          </Pressable>
-          <Pressable className="p-2">
-            <Ionicons name="text-outline" size={24} color={tintColor} />
-          </Pressable>
         </View>
-      </KeyboardAvoidingView>
+      ) : (
+        <View className="flex-1">
+          {isInvitedLoading ? (
+            <View className="flex-1 justify-center items-center">
+              <ActivityIndicator size="large" color={tintColor} />
+            </View>
+          ) : (
+            <FlatList
+              data={invitedResults?.data || []}
+              renderItem={renderQuestionItem}
+              keyExtractor={(item, index) => index.toString()}
+              ListEmptyComponent={() => (
+                <View className="flex-1 justify-center items-center mt-20 px-10">
+                  <Ionicons name="mail-outline" size={64} color={borderCol} />
+                  <Text className="text-center mt-4" style={{ color: secondaryColor }}>
+                    暂时没有收到回答邀请喵
+                  </Text>
+                </View>
+              )}
+            />
+          )}
+        </View>
+      )}
     </View>
   );
 }

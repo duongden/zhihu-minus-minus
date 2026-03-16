@@ -1,7 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -9,6 +12,7 @@ import {
   TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { createArticle } from '@/api/zhihu';
 import { Text, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
@@ -17,6 +21,7 @@ export default function PublishArticleScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const colorScheme = useColorScheme();
+  const queryClient = useQueryClient();
   const tintColor = Colors[colorScheme].tint;
   const textColor = Colors[colorScheme].text;
   const secondaryColor = Colors[colorScheme].textSecondary;
@@ -25,7 +30,33 @@ export default function PublishArticleScreen() {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
 
-  const isPublishEnabled = title.trim().length > 0 && content.trim().length > 0;
+  const mutation = useMutation({
+    mutationFn: () => createArticle(title.trim(), content.trim()),
+    onSuccess: () => {
+      Alert.alert('发布成功', '您的文章已发布！');
+      queryClient.invalidateQueries({ queryKey: ['feeds'] });
+      router.back();
+    },
+    onError: (err: any) => {
+      console.error(err);
+      Alert.alert('发布失败', err.response?.data?.error?.message || '未知错误');
+    },
+  });
+
+  const handlePublish = () => {
+    if (!title.trim()) {
+      Alert.alert('提示', '请输入文章标题');
+      return;
+    }
+    if (!content.trim()) {
+      Alert.alert('提示', '请输入文章内容');
+      return;
+    }
+    mutation.mutate();
+  };
+
+  const isPublishEnabled =
+    title.trim().length > 0 && content.trim().length > 0 && !mutation.isPending;
 
   return (
     <View className="flex-1">
@@ -36,25 +67,26 @@ export default function PublishArticleScreen() {
         <Pressable onPress={() => router.back()} className="p-1">
           <Ionicons name="close" size={28} color={textColor} />
         </Pressable>
-        <Text className="text-lg font-bold">写文章</Text>
+        <Text className="text-lg font-bold">写文章(WIP)</Text>
         <Pressable
           disabled={!isPublishEnabled}
-          onPress={() => {
-            console.log('Publish Article:', title, content);
-            router.back();
-          }}
-          className="px-5 py-2 rounded-full"
+          onPress={handlePublish}
+          className="px-5 py-2 rounded-full min-w-[80px] items-center justify-center"
           style={({ pressed }) => [
             { backgroundColor: isPublishEnabled ? tintColor : borderCol },
             pressed && { opacity: 0.8 },
           ]}
         >
-          <Text
-            className="text-sm font-bold"
-            style={{ color: isPublishEnabled ? 'white' : secondaryColor }}
-          >
-            发布
-          </Text>
+          {mutation.isPending ? (
+            <ActivityIndicator size="small" color="white" />
+          ) : (
+            <Text
+              className="text-sm font-bold"
+              style={{ color: isPublishEnabled ? 'white' : secondaryColor }}
+            >
+              发布
+            </Text>
+          )}
         </Pressable>
       </View>
 
@@ -63,59 +95,29 @@ export default function PublishArticleScreen() {
         style={{ flex: 1 }}
       >
         <ScrollView
-          className="flex-1 px-6 pt-3"
+          className="flex-1 px-5"
           keyboardShouldPersistTaps="handled"
         >
           <TextInput
-            autoFocus
-            placeholder="请输入文章标题"
+            className="text-2xl font-bold py-6 border-b"
+            style={{ color: textColor, borderBottomColor: borderCol }}
+            placeholder="请输入标题"
             placeholderTextColor={secondaryColor}
-            className="text-[22px] font-extrabold py-4 mb-5"
-            style={{
-              color: textColor,
-              borderBottomWidth: 0.5,
-              borderBottomColor: borderCol,
-            }}
+            multiline
             value={title}
             onChangeText={setTitle}
-            maxLength={100}
+            autoFocus
           />
           <TextInput
-            multiline
-            placeholder="这一刻的想法..."
-            placeholderTextColor={secondaryColor}
-            className="text-lg leading-7 min-h-[400px]"
+            className="text-lg py-4 min-h-[400px]"
             style={{ color: textColor, textAlignVertical: 'top' }}
+            placeholder="正文内容"
+            placeholderTextColor={secondaryColor}
+            multiline
             value={content}
             onChangeText={setContent}
           />
         </ScrollView>
-
-        <View
-          className="flex-row px-5 py-3"
-          style={{
-            paddingBottom: insets.bottom + 20,
-            borderTopWidth: 0.5,
-            borderTopColor: borderCol,
-          }}
-        >
-          {[
-            { icon: 'image-outline', label: '插图' },
-            { icon: 'text-outline', label: '排版' },
-            { icon: 'at-outline', label: '提到' },
-            { icon: 'settings-outline', label: '设置' },
-          ].map((tool) => (
-            <Pressable key={tool.icon} className="flex-row items-center mr-6">
-              <Ionicons name={tool.icon as any} size={24} color={tintColor} />
-              <Text
-                className="text-sm ml-1 font-medium"
-                style={{ color: tintColor }}
-              >
-                {tool.label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
       </KeyboardAvoidingView>
     </View>
   );

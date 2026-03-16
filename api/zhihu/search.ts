@@ -39,3 +39,17 @@ export const searchContent = async (
   const res = await apiClient.get(`/search_v3?${params.toString()}`);
   return res.data;
 };
+
+export const searchCreatorQuestions = async (query: string) => {
+  const res = await apiClient.get(
+    `/creators/search/query?query=${encodeURIComponent(query)}`,
+  );
+  return res.data;
+};
+
+export const getInvitedQuestions = async (offset = 0, limit = 20) => {
+  const res = await apiClient.get(
+    `/notifications/v3/timeline/entry/invite?invite_with_time_slice=1&limit=${limit}&offset=${offset}&invite_domain_score_ab=1`,
+  );
+  return res.data;
+};

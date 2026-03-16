@@ -51,7 +51,7 @@ export default function PublishScreen() {
         className="mb-10 items-center"
         style={{ paddingTop: insets.top + 40 }}
       >
-        <Text className="text-[28px] font-extrabold mb-2">发布内容(WIP)</Text>
+        <Text className="text-[28px] font-extrabold mb-2">发布内容</Text>
         <Text className="text-base opacity-70" type="secondary">
           让世界看到你的思考
         </Text>
