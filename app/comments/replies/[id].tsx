@@ -111,7 +111,7 @@ export default function ReplyDetailScreen() {
                   onPress={() =>
                     goToProfile(
                       item.reply_to_author.member.url_token ||
-                        item.reply_to_author.member.id,
+                      item.reply_to_author.member.id,
                     )
                   }
                 >
@@ -189,7 +189,7 @@ export default function ReplyDetailScreen() {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
         style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 }}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        keyboardVerticalOffset={90}
         pointerEvents="box-none"
       >
         <View

@@ -237,7 +237,7 @@ export default function CommentScreen() {
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
         style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        keyboardVerticalOffset={90}
         pointerEvents="box-none"
       >
         <View
