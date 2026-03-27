@@ -2,7 +2,7 @@ import apiClient from '../client';
 
 export const getAnswer = async (id: string | number, include?: string) => {
   const defaultInclude =
-    'content,voteup_count,comment_count,author.headline,author.follower_count,author.badge,author.is_following,question.title,relationship.voting,relationship.is_author,created_time,updated_time,segment_infos';
+    'content,paid_info,can_comment,excerpt,thanks_count,voteup_count,comment_count,visited_count,reaction,ip_info,question.topics,reaction.relation.voting,segment_infos';
   const res = await apiClient.get(
     `/answers/${id}?include=${include || defaultInclude}`,
   );

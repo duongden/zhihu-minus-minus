@@ -194,6 +194,12 @@ export default function AnswerDetailScreen() {
 
       <ScrollView
         className="flex-1"
+        style={{
+          backgroundColor:
+            colorScheme === 'dark'
+              ? 'rgba(34, 34, 34, 0.85)'
+              : 'rgba(255,255,255,0.9)',
+        }}
         scrollEventThrottle={16}
         onScroll={handleScroll}
         contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
@@ -257,10 +263,10 @@ export default function AnswerDetailScreen() {
                   !answer?.author?.is_following
                     ? { backgroundColor: '#0084ff15' }
                     : {
-                        backgroundColor: 'transparent',
-                        borderWidth: 1,
-                        borderColor: '#eee',
-                      },
+                      backgroundColor: 'transparent',
+                      borderWidth: 1,
+                      borderColor: '#eee',
+                    },
                 ]}
                 onPress={() => followMutation.mutate()}
                 disabled={followMutation.isPending}
@@ -323,7 +329,8 @@ export default function AnswerDetailScreen() {
               <LikeButton
                 id={answer?.id}
                 count={answer?.voteup_count || '-'}
-                voted={answer?.relationship?.voting}
+                // voted={answer?.relationship?.voting}
+                voted={answer?.reaction?.relation?.vote === 'UP' ? 1 : 0}
                 variant="minimal"
               />
               <View className="w-2.5 bg-transparent" />
