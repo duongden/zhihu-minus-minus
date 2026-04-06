@@ -1,6 +1,7 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useVerificationStore } from '@/store/useVerificationStore';
 import { signRequest96, ZSE_VERSION } from './zse96/index';
 
 const apiClient = axios.create({
@@ -57,6 +58,13 @@ apiClient.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       console.warn('请登陆后再尝试');
+    }
+    // 处理人机验证 40352
+    if (error.response?.data?.error?.code === 40352) {
+      const redirectUrl = error.response.data.error.redirect;
+      if (redirectUrl) {
+        useVerificationStore.getState().setVerification(redirectUrl);
+      }
     }
     console.error(
       'API 请求错误:',

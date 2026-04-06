@@ -12,6 +12,7 @@ import Constants from 'expo-constants';
 import { useEffect } from 'react';
 import { RootSiblingParent } from 'react-native-root-siblings';
 import { UpdateChecker } from '@/components/UpdateChecker';
+import { VerificationModal } from '@/components/VerificationModal';
 import { useColorScheme } from '@/components/useColorScheme';
 import {
   useSyncThemeWithNativeWind,
@@ -137,6 +138,9 @@ function RootLayout() {
 
           {/* 全局状态栏控制 */}
           <StatusBar style={isDark ? 'light' : 'dark'} />
+          
+          {/* 人机验证弹窗 */}
+          <VerificationModal />
         </ThemeProvider>
       </RootSiblingParent>
     </QueryClientProvider>
