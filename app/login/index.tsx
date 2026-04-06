@@ -107,6 +107,7 @@ export default function LoginScreen() {
         ref={webViewRef}
         source={{ uri: 'https://www.zhihu.com/signin' }}
         sharedCookiesEnabled={true}
+        incognito={true}
         onMessage={(event) => {
           handleCookies(event.nativeEvent.data);
         }}

@@ -61,8 +61,8 @@ export default function ProfileScreen() {
     refetch: refetchMember,
   } = useQuery({
     queryKey: ['me-detail', me?.url_token || me?.id],
-    queryFn: () => getMember(me?.url_token || me?.id || 'me'),
-    enabled: !!me,
+    queryFn: () => getMember((me?.url_token || me?.id) as string),
+    enabled: !!(me?.url_token || me?.id),
   });
 
   const profile = member || me;
@@ -134,14 +134,15 @@ export default function ProfileScreen() {
     }
 
     switchAccount(index);
-    queryClient.invalidateQueries();
+    queryClient.clear(); // 核心：彻底清空缓存，防止使用旧账号 ID 和新 Cookie 组合导致的 403
     setAccountModalVisible(false);
   };
 
-  const handleAddAccount = () => {
+  const handleAddAccount = async () => {
     setAccountModalVisible(false);
     // When adding account, we don't clear current store yet,
     // just navigate to login. Login will overwrite cookies.
+    await CookieManager.clearAll();
     router.push('/login');
   };
 

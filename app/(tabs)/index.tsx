@@ -23,8 +23,8 @@ import { FEED_URLS, getFeed } from '@/api/zhihu';
 import { DailyList } from '@/components/DailyList';
 import { FeedCard } from '@/components/FeedCard';
 import { HotCard, HotItem } from '@/components/HotCard';
-import { ProfileView } from '@/components/ProfileView';
-import { PublishView } from '@/components/PublishView';
+import ProfileScreen from './profile';
+import PublishScreen from './publish';
 import { Text, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
@@ -234,9 +234,9 @@ export default function HomeScreen() {
               {index === 3 ? (
                 <DailyList insets={insets} />
               ) : index === 4 ? (
-                <PublishView />
+                <PublishScreen />
               ) : index === 5 ? (
-                <ProfileView />
+                <ProfileScreen />
               ) : !cookies ? (
                 <View style={styles.loginPrompt}>
                   <Text style={styles.loginText} type="secondary">

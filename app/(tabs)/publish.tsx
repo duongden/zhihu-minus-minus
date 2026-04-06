@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { Dimensions, Pressable, StyleSheet } from 'react-native';
+import { Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -17,7 +17,7 @@ const PUBLISH_OPTIONS = [
   },
   {
     id: 'article',
-    title: '写文章',
+    title: '写文章(WIP)',
     subtitle: '记录生活点滴',
     icon: 'document-text-outline',
     color: '#ff9607',
@@ -31,51 +31,46 @@ const PUBLISH_OPTIONS = [
   },
   {
     id: 'question',
-    title: '提问题',
+    title: '提问题(WIP)',
     subtitle: '向世界发问',
     icon: 'help-circle-outline',
     color: '#e74c3c',
   },
 ];
 
-export default function PublishScreen() {
+export default function PublishView() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const colorScheme = useColorScheme();
   const secondaryColor = Colors[colorScheme].textSecondary;
-  const cardBg = Colors[colorScheme].surface;
+
+  const handlePublish = (id: string) => {
+    router.push(`/publish/${id}` as any);
+  };
 
   return (
     <View className="flex-1 px-6">
       <View
         className="mb-10 items-center"
-        style={{ paddingTop: insets.top + 40 }}
+        style={{ paddingTop: insets.top + 60 }}
       >
-        <Text className="text-[28px] font-extrabold mb-2">发布内容</Text>
-        <Text className="text-base opacity-70" type="secondary">
+        <Text className="text-[28px] font-extrabold mb-2 text-foreground dark:text-foreground-dark">
+          发布内容
+        </Text>
+        <Text type="secondary" className="text-base opacity-70">
           让世界看到你的思考
         </Text>
       </View>
 
-      <View className="w-full">
+      <View className="w-full bg-transparent">
         {PUBLISH_OPTIONS.map((item) => (
           <Pressable
             key={item.id}
-            className="flex-row items-center p-5 rounded-[20px] mb-4"
-            style={({ pressed }) => [
-              {
-                backgroundColor: cardBg,
-                borderWidth: 1,
-                borderColor: colorScheme === 'dark' ? '#333' : '#f0f0f0',
-                shadowColor: '#000',
-                shadowOffset: { width: 0, height: 4 },
-                shadowOpacity: 0.05,
-                shadowRadius: 10,
-                elevation: 2,
-              },
-              pressed && ({ opacity: 0.8 } as any),
+            className="flex-row items-center p-5 rounded-[20px] mb-4 border bg-surface dark:bg-surface-dark active:opacity-80"
+            style={[
+              { borderColor: colorScheme === 'dark' ? '#333' : '#f0f0f0' },
             ]}
-            onPress={() => router.push(`/publish/${item.id}` as any)}
+            onPress={() => handlePublish(item.id)}
           >
             <View
               className="w-14 h-14 rounded-2xl justify-center items-center mr-4"
@@ -83,11 +78,15 @@ export default function PublishScreen() {
             >
               <Ionicons name={item.icon as any} size={32} color={item.color} />
             </View>
-            <View className="flex-1">
-              <Text className="text-lg font-bold mb-1">{item.title}</Text>
-              <Text className="text-[13px] opacity-60">{item.subtitle}</Text>
+            <View className="flex-1 bg-transparent">
+              <Text className="text-lg font-bold mb-1 text-foreground dark:text-foreground-dark">
+                {item.title}
+              </Text>
+              <Text className="text-[13px] opacity-60 text-foreground dark:text-foreground-dark">
+                {item.subtitle}
+              </Text>
             </View>
-            <View className="ml-2">
+            <View className="ml-2 bg-transparent">
               <Ionicons
                 name="chevron-forward"
                 size={18}

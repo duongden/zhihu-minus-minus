@@ -43,6 +43,8 @@ export default function AppearanceSettings() {
 
   const toggleTab = (tab: TabKey) => {
     if (visibleTabs.includes(tab)) {
+      // 核心：禁止隐藏“我的”页面，防止进入赛博灯泡困境
+      if (tab === 'profile') return;
       if (visibleTabs.length > 1) {
         updateSettings({ visibleTabs: visibleTabs.filter(t => t !== tab) });
       }
@@ -131,6 +133,7 @@ export default function AppearanceSettings() {
                 value={visibleTabs.includes(tab)}
                 onValueChange={() => toggleTab(tab)}
                 trackColor={{ true: tintColor }}
+                disabled={tab === 'profile'}
               />
             </SettingItem>
           ))}

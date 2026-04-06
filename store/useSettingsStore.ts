@@ -37,7 +37,14 @@ export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
       ...DEFAULT_SETTINGS,
-      updateSettings: (newSettings) => set((state) => ({ ...state, ...newSettings })),
+      updateSettings: (newSettings) => set((state) => {
+        const nextSettings = { ...state, ...newSettings };
+        // 兜底：确保“我的”页面始终可见
+        if (nextSettings.visibleTabs && !nextSettings.visibleTabs.includes('profile')) {
+          nextSettings.visibleTabs = [...nextSettings.visibleTabs, 'profile'];
+        }
+        return nextSettings;
+      }),
       resetSettings: () => set(DEFAULT_SETTINGS),
     }),
     {

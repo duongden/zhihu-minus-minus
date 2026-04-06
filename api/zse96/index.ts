@@ -22,8 +22,9 @@ export async function signRequest96(
   const dc0 = getDc0(cookie);
 
   // 解析路径名: "/" + url.substringAfter("//").substringAfter('/')
-  const urlObj = new URL(url);
-  const pathname = urlObj.pathname;
+  // 核心：Zhihu 签名需要包含 query string (search params)
+  const urlObj = new URL(url, 'https://www.zhihu.com');
+  const pathname = urlObj.pathname + urlObj.search;
 
   // 拼接签名源字符串
   // Kotlin: listOfNotNull(ZSE_VERSION, pathname, dc0, body).joinToString("+")
