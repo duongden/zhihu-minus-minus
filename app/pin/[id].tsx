@@ -18,6 +18,7 @@ import { LikeButton } from '@/components/LikeButton';
 import { Text, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { ShareMenu } from '@/components/ShareMenu';
 
 export default function PinDetailScreen() {
   const colorScheme = useColorScheme();
@@ -29,6 +30,8 @@ export default function PinDetailScreen() {
   const textColor = Colors[colorScheme].text;
   const borderColor = Colors[colorScheme].border;
   const backgroundColor = Colors[colorScheme].background;
+
+  const [isSharing, setIsSharing] = React.useState(false);
 
   const { data: pin, isLoading } = useQuery({
     queryKey: ['pin-detail', id],
@@ -63,6 +66,18 @@ export default function PinDetailScreen() {
   return (
     <View type="default" className="flex-1">
       <Stack.Screen options={{ headerShown: false }} />
+
+      <ShareMenu
+        visible={isSharing}
+        onClose={() => setIsSharing(false)}
+        type="pin"
+        data={pin ? {
+          id: pin.id,
+          author: pin.author?.name,
+          authorHeadline: pin.author?.headline,
+          url: `https://www.zhihu.com/pin/${id}`
+        } : null}
+      />
 
       {/* Header */}
       <View
@@ -196,7 +211,10 @@ export default function PinDetailScreen() {
               {pin?.comment_count}
             </Text>
           </Pressable>
-          <Pressable className="items-center ml-[22px] flex-row">
+          <Pressable 
+            className="items-center ml-[22px] flex-row"
+            onPress={() => setIsSharing(true)}
+          >
             <Ionicons name="share-social-outline" size={22} color="#888" />
           </Pressable>
         </View>

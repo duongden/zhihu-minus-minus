@@ -355,7 +355,7 @@ export default function ProfileScreen() {
             ) : undefined
           }
         />
-        <MenuItem
+        {/* <MenuItem
           icon="people-outline"
           title="切换账号"
           onPress={() => setAccountModalVisible(true)}
@@ -367,7 +367,7 @@ export default function ProfileScreen() {
               <Ionicons name="chevron-forward" size={16} color="#ccc" />
             </View>
           }
-        />
+        /> */}
         <MenuItem
           icon="help-circle-outline"
           title="反馈与建议"

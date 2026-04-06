@@ -15,6 +15,7 @@ import { Text, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import { ZhihuContent } from '@/components/ZhihuContent';
 import Colors from '@/constants/Colors';
+import { ShareMenu } from '@/components/ShareMenu';
 
 export default function ArticleDetail() {
   const colorScheme = useColorScheme();
@@ -22,6 +23,8 @@ export default function ArticleDetail() {
   const { width } = useWindowDimensions();
   const surfaceColor = Colors[colorScheme].surface;
   const router = useRouter();
+
+  const [isSharing, setIsSharing] = React.useState(false);
 
   // 1. 获取日报详情
   const { data: dailyData, isLoading: dailyLoading } = useQuery({
@@ -59,7 +62,27 @@ export default function ArticleDetail() {
 
   return (
     <ScrollView className="flex-1">
-      <Stack.Screen options={{ title: isDaily ? '知乎日报' : '文章' }} />
+      <Stack.Screen options={{ 
+        title: isDaily ? '知乎日报' : '文章',
+        headerRight: () => (
+          <Pressable onPress={() => setIsSharing(true)} style={{ marginRight: 10 }}>
+            <Ionicons name="share-outline" size={24} color={Colors[colorScheme].text} />
+          </Pressable>
+        )
+      }} />
+
+      <ShareMenu
+        visible={isSharing}
+        onClose={() => setIsSharing(false)}
+        type="article"
+        data={data ? {
+          id: id as string,
+          title: data.title,
+          author: data.author?.name,
+          authorHeadline: data.author?.headline,
+          url: isDaily ? undefined : `https://zhuanlan.zhihu.com/p/${id}`
+        } : null}
+      />
 
       {/* 顶部展示模块 */}
       {isDaily ? (

@@ -67,7 +67,7 @@ todo v3:
 
 **v0.0.5 (2026-03-14)**  
 我在尝试从 Stylesheet 转向 Tailwind...  
-感觉 ai 在一遍干活一遍浇我...  
+感觉 ai 在一边干活一边浇我...  
 
 分析现有组件情况，  
 写批量转换的脚本，  
@@ -80,3 +80,8 @@ todo v3:
 - topics, content publish page implementation a bit
 - sentry and github release notification
 - 优化了部分 UI 细节
+
+**v0.0.7 (2026-04-06)**
+- 分享功能
+- 个性化设置功能 init（新建文件夹）
+- 优化了部分 UI 交互细节

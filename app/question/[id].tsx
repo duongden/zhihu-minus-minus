@@ -3,6 +3,7 @@ import { FlashList } from '@shopify/flash-list';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BlurView } from 'expo-blur';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { ShareMenu } from '@/components/ShareMenu';
 import React, {
   forwardRef,
   useCallback,
@@ -342,45 +343,6 @@ export default function QuestionDetail() {
     return `https://www.zhihu.com/question/${id}/answer/${aid}`;
   };
 
-  const onNativeShare = async () => {
-    if (!selectedAnswer) return;
-    try {
-      const link = getShareLink(selectedAnswer);
-      await Share.share({
-        message: link,
-        url: link,
-        title: question?.title || '知乎回答',
-      });
-      setMenuVisible(false);
-    } catch (error) {
-      showToast('分享失败');
-    }
-  };
-
-  const onCopyLink = async () => {
-    if (!selectedAnswer) return;
-    const link = getShareLink(selectedAnswer);
-    const success = await copyToClipboard(link);
-    if (success) {
-      showToast('链接已复制');
-      setMenuVisible(false);
-    }
-  };
-
-  const onCopyInfo = async () => {
-    if (!selectedAnswer) return;
-    const link = getShareLink(selectedAnswer);
-    const qTitle = question?.title || '';
-    const author = selectedAnswer?.author?.name || '知乎用户';
-    const headline = selectedAnswer?.author?.headline || '';
-    const text = `${qTitle}\n${author}${headline ? `（${headline}）` : ''}的回答\n${link}`;
-
-    const success = await copyToClipboard(text);
-    if (success) {
-      showToast('信息及链接已复制');
-      setMenuVisible(false);
-    }
-  };
 
 
 
@@ -680,6 +642,22 @@ export default function QuestionDetail() {
     <View type="default" className="flex-1">
       <Stack.Screen options={{ headerShown: false }} />
 
+      <ShareMenu
+        visible={isSharing}
+        onClose={() => {
+          setIsSharing(false);
+          setSelectedAnswer(null);
+        }}
+        type="answer"
+        data={selectedAnswer ? {
+          id: selectedAnswer.id,
+          title: question?.title,
+          author: selectedAnswer.author?.name,
+          authorHeadline: selectedAnswer.author?.headline,
+          url: getShareLink(selectedAnswer)
+        } : null}
+      />
+
       {/* 顶部标题栏 */}
       <Animated.View
         className="absolute left-0 right-0 z-10"
@@ -735,7 +713,7 @@ export default function QuestionDetail() {
             onToggle={toggleExpand}
             onShare={(ans) => {
               setSelectedAnswer(ans);
-              setMenuVisible(true);
+              setIsSharing(true);
             }}
           />
 
@@ -855,88 +833,6 @@ export default function QuestionDetail() {
           </View>
         </BlurView>
       </Animated.View>
-      <Modal
-        visible={menuVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          setMenuVisible(false);
-          setTimeout(() => setIsSharing(false), 300);
-        }}
-      >
-        <Pressable
-          className="flex-1 justify-end bg-black/40"
-          onPress={() => {
-            setMenuVisible(false);
-            setTimeout(() => setIsSharing(false), 300);
-          }}
-        >
-          <View
-            className="rounded-t-[24px] px-5 pt-2.5"
-            style={{
-              backgroundColor: Colors[colorScheme].surface,
-              paddingBottom: insets.bottom + 20,
-            }}
-          >
-            <View className="items-center py-2.5 bg-transparent">
-              <View className="w-10 h-1.5 rounded-[3px] bg-[#ddd]" />
-            </View>
-
-            {isSharing ? (
-              <View className="py-2.5 bg-transparent">
-                <View className="flex-row items-center mb-4 px-2.5 bg-transparent">
-                  <Pressable
-                    onPress={() => setIsSharing(false)}
-                    className="mr-3"
-                  >
-                    <Ionicons name="arrow-back" size={24} color={Colors[colorScheme].text} />
-                  </Pressable>
-                  <Text className="text-xl font-bold">分享回答</Text>
-                </View>
-
-                <MenuOption
-                  icon="share-outline"
-                  label="系统分享"
-                  onPress={onNativeShare}
-                />
-                <MenuOption
-                  icon="link-outline"
-                  label="仅复制链接"
-                  onPress={onCopyLink}
-                />
-                <MenuOption
-                  icon="copy-outline"
-                  label="复制描述及链接"
-                  onPress={onCopyInfo}
-                />
-              </View>
-            ) : (
-              <View className="py-2.5 bg-transparent">
-                <View className="px-2.5 mb-4 bg-transparent">
-                   <Text className="text-sm font-bold text-gray-500" numberOfLines={1}>
-                     分享来自「{selectedAnswer?.author?.name}」的回答
-                   </Text>
-                </View>
-                <MenuOption
-                  icon="share-social-outline"
-                  label="分享回答"
-                  onPress={() => setIsSharing(true)}
-                />
-              </View>
-            )}
-
-            <Pressable
-              className="py-[18px] mt-2.5 items-center"
-              onPress={() => {
-                setMenuVisible(false);
-                setTimeout(() => setIsSharing(false), 300);
-              }}
-            >
-              <Text className="text-base font-bold">取消</Text>
-            </Pressable>
-          </View>
-        </Pressable>
-      </Modal>
     </View>
   );
 }
