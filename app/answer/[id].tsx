@@ -12,9 +12,12 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
+import { copyToClipboard } from '@/utils/clipboard';
+
 import Reanimated, { SharedTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { deleteAnswer, getAnswer } from '@/api/zhihu';
@@ -29,7 +32,9 @@ import { LikeButton } from '@/components/LikeButton';
 import { Text, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import { ZhihuContent } from '@/components/ZhihuContent';
+import { MenuOption } from '@/components/MenuOption';
 import Colors from '@/constants/Colors';
+
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
 import { useScrollHeaderAnim } from '@/hooks/useScrollAnimation';
 import { showToast } from '@/utils/toast';
@@ -56,6 +61,8 @@ export default function AnswerDetailScreen() {
 
   const [isLiked, setIsLiked] = React.useState(false);
   const [menuVisible, setMenuVisible] = React.useState(false);
+  const [isSharing, setIsSharing] = React.useState(false);
+
 
   const handleScroll = (event: any) => {
     baseHandleScroll(event, (currentY) => {
@@ -143,6 +150,50 @@ export default function AnswerDetailScreen() {
     if (token) router.push(`/user/${token}`);
   };
 
+  const getShareLink = () => {
+    const qid = answer?.question?.id || questionId;
+    return `https://www.zhihu.com/question/${qid}/answer/${id}`;
+  };
+
+  const onNativeShare = async () => {
+    try {
+      const link = getShareLink();
+      await Share.share({
+        message: link,
+        url: link, // iOS only
+        title: answer?.question?.title || '知乎回答',
+      });
+      setMenuVisible(false);
+    } catch (error) {
+      showToast('分享失败');
+    }
+  };
+
+  const onCopyLink = async () => {
+    const link = getShareLink();
+    const success = await copyToClipboard(link);
+    if (success) {
+      showToast('链接已复制到剪贴板');
+      setMenuVisible(false);
+    }
+  };
+
+  const onCopyInfo = async () => {
+    const link = getShareLink();
+    const title = answer?.question?.title || '';
+    const author = answer?.author?.name || '知乎用户';
+    const headline = answer?.author?.headline || '';
+    const text = `${title}\n${author}${headline ? `（${headline}）` : ''}的回答\n${link}`;
+
+    const success = await copyToClipboard(text);
+    if (success) {
+      showToast('信息及链接已复制');
+      setMenuVisible(false);
+    }
+  };
+
+
+
   return (
     <View className="flex-1">
       <Stack.Screen options={{ headerShown: false }} />
@@ -191,6 +242,18 @@ export default function AnswerDetailScreen() {
       >
         <Ionicons name="chevron-back" size={28} color={textColor} />
       </Pressable>
+
+      <Pressable
+        onPress={() => {
+          setMenuVisible(true);
+          setIsSharing(true);
+        }}
+        className="absolute right-2.5 z-[100] w-10 h-10 justify-center items-center"
+        style={{ top: insets.top + 8 }}
+      >
+        <Ionicons name="share-outline" size={24} color={textColor} />
+      </Pressable>
+
 
       <ScrollView
         className="flex-1"
@@ -374,7 +437,10 @@ export default function AnswerDetailScreen() {
       >
         <Pressable
           className="flex-1 justify-end bg-black/40"
-          onPress={() => setMenuVisible(false)}
+          onPress={() => {
+            setMenuVisible(false);
+            setTimeout(() => setIsSharing(false), 300);
+          }}
         >
           <View
             className="rounded-t-[24px] px-5 pt-2.5"
@@ -386,7 +452,38 @@ export default function AnswerDetailScreen() {
             <View className="items-center py-2.5 bg-transparent">
               <View className="w-10 h-1.5 rounded-[3px] bg-[#ddd]" />
             </View>
-            <View className="py-2.5 bg-transparent">
+
+            {isSharing ? (
+              <View className="py-2.5 bg-transparent">
+                <View className="flex-row items-center mb-4 px-2.5 bg-transparent">
+                  <Pressable
+                    onPress={() => setIsSharing(false)}
+                    className="mr-3"
+                  >
+                    <Ionicons name="arrow-back" size={24} color={textColor} />
+                  </Pressable>
+                  <Text className="text-xl font-bold">分享回答</Text>
+                </View>
+
+                <MenuOption
+                  icon="share-outline"
+                  label="系统分享"
+                  onPress={onNativeShare}
+                />
+                <MenuOption
+                  icon="link-outline"
+                  label="仅复制链接"
+                  onPress={onCopyLink}
+                />
+                <MenuOption
+                  icon="copy-outline"
+                  label="复制描述及链接"
+                  onPress={onCopyInfo}
+                />
+              </View>
+            ) : (
+              <View className="py-2.5 bg-transparent">
+
               <MenuOption
                 icon={isLiked ? 'heart' : 'heart-outline'}
                 label={isLiked ? '取消喜欢' : '加入喜欢'}
@@ -405,27 +502,29 @@ export default function AnswerDetailScreen() {
                   setMenuVisible(false);
                 }}
               />
-              <MenuOption
-                icon="share-social-outline"
-                label="分享回答"
-                onPress={() => setMenuVisible(false)}
-              />
-              {answer?.relationship?.is_author && (
-                <View className="h-px my-1.5 bg-[rgba(150,150,150,0.15)]" />
-              )}
-              {answer?.relationship?.is_author && (
                 <MenuOption
-                  icon="trash-outline"
-                  label="删除回答"
-                  color="#ff4d4f"
-                  onPress={() => {
-                    handleDelete();
-                    setMenuVisible(false);
-                  }}
+                  icon="share-social-outline"
+                  label="分享回答"
+                  onPress={() => setIsSharing(true)}
                 />
-              )}
-            </View>
+                {answer?.relationship?.is_author && (
+                  <View className="h-px my-1.5 bg-[rgba(150,150,150,0.15)]" />
+                )}
+                {answer?.relationship?.is_author && (
+                  <MenuOption
+                    icon="trash-outline"
+                    label="删除回答"
+                    color="#ff4d4f"
+                    onPress={() => {
+                      handleDelete();
+                      setMenuVisible(false);
+                    }}
+                  />
+                )}
+              </View>
+            )}
             <Pressable
+
               className="py-[18px] mt-2.5 items-center"
               onPress={() => setMenuVisible(false)}
             >
@@ -435,23 +534,5 @@ export default function AnswerDetailScreen() {
         </Pressable>
       </Modal>
     </View>
-  );
-}
-
-function MenuOption({ icon, label, onPress, color }: any) {
-  const colorScheme = useColorScheme();
-  const textColor = Colors[colorScheme].text;
-  return (
-    <Pressable
-      className="flex-row items-center py-[15px] px-2.5"
-      onPress={onPress}
-    >
-      <View className="w-10 h-10 rounded-[20px] bg-[rgba(150,150,150,0.08)] justify-center items-center mr-[15px]">
-        <Ionicons name={icon} size={26} color={color || textColor} />
-      </View>
-      <Text className="text-base font-medium" style={{ color: textColor }}>
-        {label}
-      </Text>
-    </Pressable>
   );
 }
