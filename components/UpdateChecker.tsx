@@ -1,21 +1,28 @@
 import Constants from 'expo-constants';
 import * as FileSystem from 'expo-file-system';
+import { Paths, File, Directory } from 'expo-file-system';
+import { getContentUriAsync, createDownloadResumable } from 'expo-file-system/legacy';
 import * as IntentLauncher from 'expo-intent-launcher';
 import * as SecureStore from 'expo-secure-store';
 import * as Sharing from 'expo-sharing';
 import * as WebBrowser from 'expo-web-browser';
 import type React from 'react';
-import { useEffect } from 'react';
-import { Alert, Linking, Platform } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Alert, Linking, Platform, Modal, View, StyleSheet } from 'react-native';
 import { showToast } from '@/utils/toast';
+import { Text } from '@/components/Themed';
+import Colors from '@/constants/Colors';
+import { useColorScheme } from '@/components/useColorScheme';
 
 const GITHUB_RELEASE_API =
   'https://api.github.com/repos/huamurui/zhihu-minus-minus/releases/latest';
 const IGNORED_VERSION_KEY = 'ignored_version_tag';
 
-export const useCheckUpdate = () => {
+export const useCheckUpdate = (onUpdate?: (url: string, version: string) => void) => {
   useEffect(() => {
     const checkUpdate = async () => {
+      // 延迟检查，避免干扰首屏路由
+      await new Promise(resolve => setTimeout(resolve, 2000));
       try {
         const response = await fetch(GITHUB_RELEASE_API);
         const data = await response.json();
@@ -24,6 +31,7 @@ export const useCheckUpdate = () => {
           const latestVersionTag = data.tag_name;
           const latestVersion = latestVersionTag.replace('v', '');
           const currentVersion = Constants.expoConfig?.version || '0.0.0';
+          // const currentVersion = '0.0.0'; // Debug spoof
 
           // 检查是否已经忽略了此版本
           const ignoredVersion =
@@ -55,11 +63,16 @@ export const useCheckUpdate = () => {
             if (Platform.OS === 'android' && apkAsset) {
               buttons.push({
                 text: '直接更新',
-                onPress: () =>
-                  downloadAndInstallApk(
-                    apkAsset.browser_download_url,
-                    latestVersionTag,
-                  ),
+                onPress: () => {
+                  if (onUpdate) {
+                    onUpdate(apkAsset.browser_download_url, latestVersionTag);
+                  } else {
+                    downloadAndInstallApk(
+                      apkAsset.browser_download_url,
+                      latestVersionTag,
+                    );
+                  }
+                },
               });
             }
 
@@ -94,16 +107,47 @@ export const useCheckUpdate = () => {
 /**
  * Android APK Download & Install
  */
-async function downloadAndInstallApk(url: string, version: string) {
+async function downloadAndInstallApk(
+  url: string,
+  version: string,
+  onProgress?: (progress: number) => void,
+  onStatusChange?: (isDownloading: boolean) => void,
+) {
   try {
+    onStatusChange?.(true);
+    onProgress?.(0);
     const filename = `zhihu--_${version}.apk`;
-    const documentDirectory = FileSystem.documentDirectory;
-    if (!documentDirectory) throw new Error('Document directory not found');
-    const fileUri = `${documentDirectory}${filename}`;
+
+    // Modern API v55: Use Paths class
+    const cacheDir = Paths.cache?.uri;
+    const docDir = Paths.document?.uri;
+    const baseDir = cacheDir || docDir;
+
+    if (!baseDir) {
+      console.error('[Update] Paths.cache.uri and Paths.document.uri are both empty');
+      throw new Error('Storage directory not found');
+    }
+
+    const fileUri = (baseDir.endsWith('/') ? baseDir : `${baseDir}/`) + filename;
+    console.log('[Update] target path:', fileUri);
+
+    // Modern API v55: Delete if exists to avoid "Destination already exists"
+    try {
+      const targetFile = new File(fileUri);
+      if (typeof (targetFile as any).delete === 'function') {
+        await (targetFile as any).delete();
+      } else {
+        await (FileSystem as any).deleteAsync(fileUri, { idempotent: true });
+      }
+    } catch (e) { }
 
     showToast('开始下载更新...');
 
-    const downloadResumable = FileSystem.createDownloadResumable(
+    let downloadedUri = '';
+
+    // Always use legacy createDownloadResumable for progress support
+    console.log('[Update] Using legacy createDownloadResumable for progress');
+    const downloadResumable = createDownloadResumable(
       url,
       fileUri,
       {},
@@ -111,33 +155,47 @@ async function downloadAndInstallApk(url: string, version: string) {
         const progress =
           downloadProgress.totalBytesWritten /
           downloadProgress.totalBytesExpectedToWrite;
-        if (progress === 1) {
-          showToast('下载完成，准备安装');
-        }
+        onProgress?.(progress);
       },
     );
-
     const result = await downloadResumable.downloadAsync();
+    downloadedUri = result?.uri || '';
 
-    if (result && result.uri) {
+    if (downloadedUri) {
+      onProgress?.(1);
       if (Platform.OS === 'android') {
-        const cUri = await FileSystem.getContentUriAsync(result.uri);
-        IntentLauncher.startActivityAsync(
-          'android.intent.action.INSTALL_PACKAGE',
-          {
-            data: cUri,
-            flags: 1, // Intent.FLAG_GRANT_READ_URI_PERMISSION
-            type: 'application/vnd.android.package-archive',
-          },
-        );
+        try {
+          const cUri = await getContentUriAsync(downloadedUri);
+          console.log('[Update] Content URI:', cUri);
+
+          onStatusChange?.(false); // Hide progress before launching intent
+          await IntentLauncher.startActivityAsync(
+            'android.intent.action.INSTALL_PACKAGE',
+            {
+              data: cUri,
+              flags: 1, // Intent.FLAG_GRANT_READ_URI_PERMISSION
+              type: 'application/vnd.android.package-archive',
+            },
+          );
+        } catch (intentError) {
+          console.error('[Update] Intent failed, trying fallback sharing:', intentError);
+          onStatusChange?.(false);
+          await Sharing.shareAsync(downloadedUri, {
+            mimeType: 'application/vnd.android.package-archive',
+            dialogTitle: '安装更新',
+          });
+        }
       } else {
-        // iOS or others: share file
-        await Sharing.shareAsync(result.uri);
+        onStatusChange?.(false);
+        await Sharing.shareAsync(downloadedUri);
       }
+    } else {
+      onStatusChange?.(false);
     }
-  } catch (e) {
-    console.error('Download/Install error:', e);
-    showToast('更新失败，请尝试手动下载');
+  } catch (e: any) {
+    onStatusChange?.(false);
+    console.error('[Update] Error details:', e);
+    showToast(`更新失败: ${e.message || '未知错误'}`);
   }
 }
 
@@ -163,6 +221,85 @@ function isVersionNewer(latest: string, current: string): boolean {
 }
 
 export const UpdateChecker: React.FC = () => {
-  useCheckUpdate();
-  return null;
+  const [downloadProgress, setDownloadProgress] = useState(0);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const colorScheme = useColorScheme();
+
+  useCheckUpdate((url, version) => {
+    downloadAndInstallApk(url, version, setDownloadProgress, setIsDownloading);
+  });
+
+  if (!isDownloading) return null;
+
+  return (
+    <Modal transparent visible={isDownloading} animationType="fade">
+      <View style={styles.modalBg}>
+        <View
+          style={[
+            styles.container,
+            { backgroundColor: Colors[colorScheme].background },
+          ]}
+        >
+          <Text style={styles.title}>正在下载更新</Text>
+          <View style={styles.progressTrack}>
+            <View
+              style={[
+                styles.progressBar,
+                {
+                  width: `${downloadProgress * 100}%`,
+                  backgroundColor: Colors[colorScheme].primary,
+                },
+              ]}
+            />
+          </View>
+          <Text style={styles.percentText}>
+            {(downloadProgress * 100).toFixed(1)}%
+          </Text>
+          <Text type="secondary" style={styles.hint}>
+            下载完成后将自动启动安装
+          </Text>
+        </View>
+      </View>
+    </Modal>
+  );
 };
+
+const styles = StyleSheet.create({
+  modalBg: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  container: {
+    width: '80%',
+    padding: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 20,
+  },
+  progressTrack: {
+    width: '100%',
+    height: 6,
+    backgroundColor: 'rgba(128,128,128,0.2)',
+    borderRadius: 3,
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  progressBar: {
+    height: '100%',
+    borderRadius: 3,
+  },
+  percentText: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 15,
+  },
+  hint: {
+    fontSize: 13,
+  },
+});

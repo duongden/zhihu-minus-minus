@@ -63,6 +63,10 @@ function RootLayout() {
   useEffect(() => {
     const handleUrl = (url: string | null) => {
       if (!url) return;
+      // Skip internal Expo URLs
+      if (url.includes('expo-development-client') || url.includes('expo-auth-session')) {
+        return;
+      }
       try {
         let path = '';
         if (url.includes('://')) {
