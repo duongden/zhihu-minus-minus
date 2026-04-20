@@ -41,10 +41,27 @@
   - `article`: 跳转路径 `https://zhuanlan.zhihu.com/p/[id]`
 - **核心规则**: 始终优先通过 `target.question.id` 进行跳转，防止 404 失效 ID。
 
+### 📡 深度链接智能路由 (Deep Linking)
+- **机制**: 在 `app/_layout.tsx` 中集成手动 `Linking` 监听器，作为外部 Intent 唤起的统一分发枢纽。
+- **清洗策略**:
+  - **路径归一化**: 自动剔除 `/oia/` 前缀，将 `/questions/` 和 `/answers/` 还原为单数路径。
+  - **参数剥离**: 强制清除所有 Web 端的查询参数，确保内部路由匹配纯净。
+- **智能启发式识别**:
+  - **19位 ID 以 `19` 开头**: 智能识别为问题 (Question)。
+  - **19位 ID 以 `20` 开头**: 智能识别为回答 (Answer)。
+
 ---
 
 ## 🏛️ 项目演进里程碑 (Changelog)
 
+- **v0.0.8**:
+  - **深度链接系统**: 实现支持多种 Zhihu 协议、智能归一化与 ID 识别的外部唤起系统。
+  - **路由健壮性**: 修复了路由名称冲突（question 目录化），并增加了 plural 路径兼容性。
+  - **日志调优**: 开发模式下彻底静默 Sentry 内部日志。
+- **v0.0.7**:
+  - **分享功能**
+  - **个性化设置功能 init（新建文件夹）**
+  - **优化了部分 UI 交互细节**
 - **v0.0.2**:
   - **添加、修复链接跳转与 api**: 热榜，个人页面信息跳转
   - **添加反馈页面**
@@ -73,5 +90,5 @@
 2. **FlashList Layout**: 如果列表底部留白异常，检查 `contentContainerStyle` 与 `paddingBottom`。
 3. **Cookie Sync**: `WebView` 与 `Axios` 的 Cookie 同步在部分 Android 版本上有延迟，建议手动触发一次 `SecureStore` 重刷。
 
-**Status**: 🏗️ 持续开发中 (v0.0.6) - 核心功能与基础架构迭代中  
-**Last Updated**: 2026-03-16
+**Status**: 🏗️ 持续开发中 (v0.0.8) - 核心功能与基础架构迭代中  
+**Last Updated**: 2026-04-20

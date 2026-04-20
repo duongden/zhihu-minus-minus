@@ -10,8 +10,11 @@ export function useViewableItems<TItem extends { id: string | number }>() {
 
   const onViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: Array<{ item: TItem }> }) => {
-      viewableIdsRef.current = viewableItems.map((v) => v.item.id.toString());
-      const candidate = viewableItems[0]?.item;
+      viewableIdsRef.current = viewableItems
+        .filter((v) => v.item && v.item.id)
+        .map((v) => v.item.id.toString());
+        
+      const candidate = viewableItems.find(v => v.item && v.item.id)?.item;
       if (candidate && candidate.id !== activeItem?.id) {
         setActiveItem(candidate);
       }

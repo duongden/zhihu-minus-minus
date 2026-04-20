@@ -67,12 +67,13 @@ function RootLayout() {
         let path = '';
         if (url.includes('://')) {
           const parts = url.split('://');
-          const rest = parts[1] || parts[0];
+          const rest = parts[1] !== undefined ? parts[1] : '';
+          
           if (url.startsWith('http')) {
             const match = rest.match(/^[^\/]+(\/.*)$/);
             path = match ? match[1] : '/';
           } else {
-            path = rest.includes('/') ? (rest.startsWith('/') ? rest : '/' + rest) : '/' + rest;
+            path = rest.startsWith('/') ? rest : '/' + rest;
           }
         } else {
           path = url.startsWith('/') ? url : '/' + url;
@@ -82,12 +83,16 @@ function RootLayout() {
         path = path.replace(/^\/oia\//, '/');
         path = path.replace(/^\/questions\//, '/question/');
         path = path.replace(/^\/answers\//, '/answer/');
+        path = path.replace(/^\/people\//, '/user/');
+        path = path.replace(/^\/p\//, '/article/');
         
         // 2. Clean URL: remove ALL query parameters
         const cleanPath = path.split('?')[0];
+        console.log('[Deep Link Builder] Clean Path:', cleanPath);
 
-        if (!cleanPath || cleanPath === '/' || cleanPath === '/oia') {
-          router.push('/(tabs)');
+        if (!cleanPath || cleanPath === '/' || cleanPath === '/oia' || cleanPath === '/feed' || cleanPath === '/home') {
+          console.log('[Deep Link] Homepage detected, replacing with /');
+          router.replace('/');
           return;
         }
 
@@ -102,9 +107,13 @@ function RootLayout() {
           finalPath = `/question/${cleanPath.substring(1)}`;
         }
 
-        console.log('[Deep Link] Go ->', finalPath);
+        console.log('[Deep Link] Navigating to:', finalPath);
         setTimeout(() => {
-          router.push(finalPath as any);
+          try {
+            router.push(finalPath as any);
+          } catch (e) {
+            console.error('[Deep Link] Navigation failed for:', finalPath, e);
+          }
         }, 500);
       } catch (err) {
         // Silently ignore errors in production

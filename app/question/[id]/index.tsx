@@ -76,7 +76,7 @@ const AnswerItem = forwardRef(
 
     useImperativeHandle(ref, () => ({
       measureFooter: (cb: any) => footerRef.current?.measureInWindow(cb),
-      id: item.id.toString(),
+      id: item?.id?.toString() || Math.random().toString(),
     }));
 
     const rawText = item.content?.replace(/<[^>]+>/g, '') || '';
@@ -85,7 +85,8 @@ const AnswerItem = forwardRef(
 
     const followMutation = useOptimisticToggle({
       mutationFn: async () => {
-        const pid = item.author.url_token || item.author.id;
+        const pid = item.author?.url_token || item.author?.id;
+        if (!pid) return;
         if (item.author?.is_following) return unfollowMember(pid);
         return followMember(pid);
       },
@@ -178,7 +179,7 @@ const AnswerItem = forwardRef(
               />
               {isLongContent && (
                 <Pressable
-                  onPress={() => onToggle(item.id.toString(), false)}
+                  onPress={() => item?.id && onToggle(item.id.toString(), false)}
                   className="flex-row items-center justify-center py-2.5 mt-1 bg-transparent"
                 >
                   <Text
@@ -198,7 +199,7 @@ const AnswerItem = forwardRef(
             </View>
           ) : (
             <Pressable
-              onPress={() => onToggle(item.id.toString(), true)}
+              onPress={() => item?.id && onToggle(item.id.toString(), true)}
               className="flex-row flex-1"
             >
               <Text
@@ -386,6 +387,7 @@ export default function QuestionDetail() {
         const shouldShow =
           !anyFooterVisible &&
           activeItem &&
+          activeItem.id &&
           expandedIds.has(activeItem.id.toString()) &&
           currentY > 300;
 
@@ -705,12 +707,12 @@ export default function QuestionDetail() {
         renderItem={({ item }) => (
           <AnswerItem
             ref={(r) => {
-              r
+              item?.id
                 ? itemRefs.current.set(item.id.toString(), r)
-                : itemRefs.current.delete(item.id.toString());
+                : itemRefs.current.delete(item.id?.toString() || '');
             }}
             item={item}
-            isExpanded={expandedIds.has(item.id.toString())}
+            isExpanded={item?.id ? expandedIds.has(item.id.toString()) : false}
             onToggle={toggleExpand}
             onShare={(ans) => {
               setSelectedAnswer(ans);
@@ -719,7 +721,7 @@ export default function QuestionDetail() {
           />
 
         )}
-        keyExtractor={(item: any) => item.id.toString()}
+        keyExtractor={(item: any) => item?.id?.toString() || Math.random().toString()}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
         onEndReached={() =>

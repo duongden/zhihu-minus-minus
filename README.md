@@ -21,7 +21,8 @@
   - **搜索**: 深度集成知乎搜索，支持联想词、综合搜索、用户搜索及关键词高亮。
   - **日报**: 完整集成知乎日报。
   - **详情**: 优雅的问题展示、回答/文章详情、评论交互（支持二级回复）。
-  - **个人**: 我的主页、个人点赞/收藏、浏览历史记录、粉丝/关注列表。
+- **深度链接 (Deep Linking)**: 全面支持 `zhihu.com` 网页链接唤起。
+- **个人**: 我的主页、个人点赞/收藏、浏览历史记录、粉丝/关注列表。
 - **现代化架构**: 全面拥抱 Expo Router、TanStack Query V5、Tailwind CSS (NativeWind)(todo，这个还没有拥抱) 和 Zustand。
 
 ## 📸 界面预览
@@ -130,4 +131,4 @@ npm run ios
 
 ---
 **Author**: [huamurui](https://github.com/huamurui) & [Antigravity Agent] 🐱
-**Version**: v0.0.6 | **Last Updated**: 2026-03-16
+**Version**: v0.0.8 | **Last Updated**: 2026-04-20
