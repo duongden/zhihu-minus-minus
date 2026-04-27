@@ -26,6 +26,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { showToast } from '@/utils/toast';
 import { Text, View } from './Themed';
+import { LaTeXRenderer } from './LaTeXRenderer';
 
 interface SegmentInfo {
   pid: string;
@@ -176,11 +177,16 @@ const P_Renderer: CustomBlockRenderer = ({ TDefaultRenderer, ...props }) => {
 };
 
 const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
-  const { src, width: attrWidth, height: attrHeight } = tnode.attributes;
+  const {
+    src,
+    width: attrWidth,
+    height: attrHeight,
+    eeimg,
+  } = tnode.attributes;
   const rendererProps = useRendererProps('img');
 
   if (!rendererProps) return null;
-  const { onPress, width: contentWidth } = rendererProps as any;
+  const { onPress, width: contentWidth, colorScheme } = rendererProps as any;
 
   const originalWidth = parseInt(attrWidth as string) || 0;
   const originalHeight = parseInt(attrHeight as string) || 0;
@@ -189,22 +195,74 @@ const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
     return null;
   }
 
+  const isFormula =
+    src.includes('zhihu.com/equation') || eeimg === '1' || eeimg === '2';
+  const alt = tnode.attributes.alt || '';
+
+  // 优先级：eeimg=2 为块级，eeimg=1 为行内；如果缺失则根据源码内容启发式判断
+  const isBlockFormula = eeimg === '2' || (!eeimg && (alt.includes('\\begin') || alt.includes('\\\\')));
+
   let displayHeight = 200;
+  let displayWidth: number | string = contentWidth;
+
   if (originalWidth > 0 && originalHeight > 0) {
-    displayHeight = (contentWidth * originalHeight) / originalWidth;
+    if (isFormula && originalHeight < 100 && originalWidth < contentWidth) {
+      // 小公式保持原比例，不拉伸到全屏
+      displayWidth = originalWidth;
+      displayHeight = originalHeight;
+    } else {
+      displayHeight = (contentWidth * originalHeight) / originalWidth;
+    }
+  } else if (isFormula) {
+    // 默认高度估计
+    displayHeight = isBlockFormula ? 60 : 22;
+    displayWidth = contentWidth;
+  }
+
+  const imageStyle: any = {
+    width: displayWidth,
+    height: displayHeight,
+  };
+
+  // 确保 src 有协议
+  const finalSrc = src.startsWith('//') ? `https:${src}` : src;
+
+  // 如果有 LaTeX 源码，尝试渲染源码
+  if (isFormula && alt) {
+    return (
+      <View
+        className={
+          isFormula
+            ? `my-1.5 items-center bg-transparent ${isBlockFormula ? 'w-full' : ''}`
+            : 'my-2.5 items-center w-full bg-transparent'
+        }
+      >
+        <Pressable onPress={() => onPress(finalSrc)} className="bg-transparent w-full">
+          <LaTeXRenderer
+            tex={alt}
+            inline={!isBlockFormula}
+            colorScheme={colorScheme}
+            width={contentWidth}
+          />
+        </Pressable>
+      </View>
+    );
   }
 
   return (
-    <View className="my-2.5 items-center w-full bg-transparent">
-      <Pressable onPress={() => onPress(src)}>
+    <View
+      className={
+        isFormula
+          ? `my-1.5 items-center bg-transparent ${isBlockFormula ? 'w-full' : ''}`
+          : 'my-2.5 items-center w-full bg-transparent'
+      }
+    >
+      <Pressable onPress={() => onPress(finalSrc)} className="bg-transparent">
         <Image
-          source={{ uri: src }}
-          className="rounded-xl bg-[rgba(150,150,150,0.1)]"
-          style={{
-            width: contentWidth,
-            height: displayHeight,
-          }}
-          resizeMode="cover"
+          source={{ uri: finalSrc }}
+          className={isFormula ? '' : 'rounded-xl bg-[rgba(150,150,150,0.1)]'}
+          style={imageStyle}
+          resizeMode="contain"
         />
       </Pressable>
     </View>
@@ -380,15 +438,14 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
         onElement: (element: any) => {
           if (element.name === 'img') {
             const { attribs } = element;
-            const actualSrc =
+            const actualSrc = (
               attribs['data-actualsrc'] ||
               attribs['data-original'] ||
-              attribs.src;
-            if (
-              actualSrc &&
-              (attribs.src?.startsWith('data:image') || !attribs.src)
-            ) {
-              attribs.src = actualSrc;
+              attribs.src || ''
+            ).trim();
+            if (actualSrc) {
+              // 确保有协议
+              attribs.src = actualSrc.startsWith('//') ? `https:${actualSrc}` : actualSrc;
             }
             if (attribs['data-rawwidth'])
               attribs.width = attribs['data-rawwidth'];
@@ -439,6 +496,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
             setViewerVisible(true);
           },
           width: width - 40,
+          colorScheme,
         },
       }),
       [
