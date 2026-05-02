@@ -354,6 +354,38 @@ export default function QuestionDetail() {
     onViewableItemsChanged,
   } = useViewableItems<any>();
 
+  const {
+    data: answersData,
+    isLoading: aLoading,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    refetch,
+    isRefetching,
+  } = useZhihuInfiniteQuery({
+    queryKey: ['question-answers', id, sortBy],
+    queryFn: async ({ pageParam = 0 }) => {
+      const include =
+        'data[*].content,voteup_count,comment_count,author.name,author.avatar_url,author.headline,author.is_following,relationship.voting,relationship.is_author,created_time,segment_infos';
+      const res = await client.get(
+        `/questions/${id}/answers?include=${include}&limit=20&offset=${pageParam}&sort_by=${sortBy}`,
+      );
+      return res.data;
+    },
+    initialPageParam: 0,
+  });
+
+  const answers = useMemo(() => {
+    const all = answersData?.pages.flatMap((p: any) => p.data) || [];
+    const seen = new Set();
+    return all.filter((item: any) => {
+      const id = item?.id?.toString();
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  }, [answersData]);
+
   const handleToggleExpand = useCallback((id: string, expanded: boolean) => {
     if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
       UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -374,12 +406,12 @@ export default function QuestionDetail() {
         const index = answers.findIndex(a => a.id.toString() === id);
         if (index >= 0) {
           flashListRef.current?.scrollToIndex({
-            index: index - 1,
+            index: index,
             animated: true,
             viewOffset: insets.top + 50, // Match header height exactly
           });
         }
-      }, 50);
+      }, 100);
     }
   }, [answers, insets.top]);
 
@@ -473,37 +505,6 @@ export default function QuestionDetail() {
     successMessage: (isActive) => (isActive ? '已取消关注' : '已关注问题'),
   });
 
-  const {
-    data: answersData,
-    isLoading: aLoading,
-    fetchNextPage,
-    hasNextPage,
-    isFetchingNextPage,
-    refetch,
-    isRefetching,
-  } = useZhihuInfiniteQuery({
-    queryKey: ['question-answers', id, sortBy],
-    queryFn: async ({ pageParam = 0 }) => {
-      const include =
-        'data[*].content,voteup_count,comment_count,author.name,author.avatar_url,author.headline,author.is_following,relationship.voting,relationship.is_author,created_time,segment_infos';
-      const res = await client.get(
-        `/questions/${id}/answers?include=${include}&limit=20&offset=${pageParam}&sort_by=${sortBy}`,
-      );
-      return res.data;
-    },
-    initialPageParam: 0,
-  });
-
-  const answers = useMemo(() => {
-    const all = answersData?.pages.flatMap((p: any) => p.data) || [];
-    const seen = new Set();
-    return all.filter((item: any) => {
-      const id = item?.id?.toString();
-      if (!id || seen.has(id)) return false;
-      seen.add(id);
-      return true;
-    });
-  }, [answersData]);
 
   // 恢复进度逻辑已禁用
   React.useEffect(() => {
