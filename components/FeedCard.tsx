@@ -1,14 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { useState } from 'react';
 import { Image, Pressable } from 'react-native';
 import Animated, { SharedTransition } from 'react-native-reanimated';
 import { LikeButton } from './LikeButton';
+import { ShareMenu, ShareContentType } from './ShareMenu';
 import { Text, View } from './Themed';
 
 const slowTransition = SharedTransition.duration(600);
 
-export const FeedCard = ({ item }: { item: any }) => {
+export const FeedCard = ({ item, tab }: { item: any; tab?: string }) => {
   const router = useRouter();
+  const [menuVisible, setMenuVisible] = useState(false);
   const isQuestionType = item.type === 'questions';
 
   return (
@@ -103,9 +106,17 @@ export const FeedCard = ({ item }: { item: any }) => {
       <Pressable
         onPress={() => {
           const routeType = item.type.slice(0, -1);
+          const params: any = {
+            title: item.title,
+            questionId: item.questionId,
+          };
+          if (tab) {
+            params.source = 'feed';
+            params.tab = tab;
+          }
           router.push({
             pathname: `/${routeType}/${item.id}`,
-            params: { title: item.title, questionId: item.questionId },
+            params,
           } as any);
         }}
         className="flex-row mt-1"
@@ -160,11 +171,27 @@ export const FeedCard = ({ item }: { item: any }) => {
             </Text>
           </Pressable>
 
-          <Pressable className="ml-auto">
-            <Ionicons name="ellipsis-horizontal" size={16} color="#888" />
+          <Pressable
+            onPress={() => setMenuVisible(true)}
+            className="ml-auto p-2 -mr-2"
+          >
+            <Ionicons name="ellipsis-horizontal" size={18} color="#888" />
           </Pressable>
         </View>
       )}
+
+      <ShareMenu
+        visible={menuVisible}
+        onClose={() => setMenuVisible(false)}
+        type={item.type.slice(0, -1) as ShareContentType}
+        data={{
+          id: item.id,
+          title: item.title,
+          author: item.author?.name,
+          authorHeadline: item.author?.headline,
+          excerpt: item.excerpt,
+        }}
+      />
     </View>
   );
 };

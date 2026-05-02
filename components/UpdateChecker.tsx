@@ -168,18 +168,23 @@ async function downloadAndInstallApk(
           const cUri = await getContentUriAsync(downloadedUri);
           console.log('[Update] Content URI:', cUri);
 
-          onStatusChange?.(false); // Hide progress before launching intent
+          // android.intent.action.VIEW is the modern way to install APKs
+          // FLAG_GRANT_READ_URI_PERMISSION (1) | FLAG_ACTIVITY_NEW_TASK (0x10000000)
           await IntentLauncher.startActivityAsync(
-            'android.intent.action.INSTALL_PACKAGE',
+            'android.intent.action.VIEW',
             {
               data: cUri,
-              flags: 1, // Intent.FLAG_GRANT_READ_URI_PERMISSION
+              flags: 1 | 0x10000000,
               type: 'application/vnd.android.package-archive',
             },
           );
+
+          // Delay closing the modal to ensure the intent has time to launch
+          setTimeout(() => onStatusChange?.(false), 1000);
         } catch (intentError) {
           console.error('[Update] Intent failed, trying fallback sharing:', intentError);
           onStatusChange?.(false);
+          showToast('直接安装失败，尝试通过分享打开...');
           await Sharing.shareAsync(downloadedUri, {
             mimeType: 'application/vnd.android.package-archive',
             dialogTitle: '安装更新',

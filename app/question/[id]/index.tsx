@@ -62,11 +62,17 @@ const AnswerItem = forwardRef(
       isExpanded,
       onToggle,
       onShare,
+      questionId,
+      questionTitle,
+      sortBy,
     }: {
       item: any;
       isExpanded: boolean;
       onToggle: (id: string, expanded: boolean) => void;
       onShare?: (item: any) => void;
+      questionId: string;
+      questionTitle?: string;
+      sortBy: string;
     },
     ref,
   ) => {
@@ -216,7 +222,17 @@ const AnswerItem = forwardRef(
             </View>
           ) : (
             <Pressable
-              onPress={() => item?.id && onToggle(item.id.toString(), true)}
+              onPress={() => {
+                router.push({
+                  pathname: `/answer/${item.id}`,
+                  params: {
+                    source: 'question',
+                    questionId: questionId,
+                    sortBy,
+                    title: questionTitle,
+                  },
+                } as any);
+              }}
               className="flex-row flex-1"
             >
               <Text
@@ -230,7 +246,7 @@ const AnswerItem = forwardRef(
                   style={{ color: '#0084ff' }}
                 >
                   {' '}
-                  阅读全文
+                  查看详情
                 </Text>
               </Text>
               {item.thumbnail || (item.content_img && item.content_img.length > 0) ? (
@@ -756,6 +772,9 @@ export default function QuestionDetail() {
               setSelectedAnswer(ans);
               setIsSharing(true);
             }}
+            questionId={id}
+            questionTitle={question?.title}
+            sortBy={sortBy}
           />
 
         )}
