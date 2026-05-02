@@ -112,19 +112,25 @@ export default function AnswerDetailScreen() {
             router.setParams({ id: newId });
           }
           
-          // 如果滑到了最后几个，预加载下一页
+          // 如果滑到了最后几个，预加载下一页 ID
           if (newIndex >= answerIds.length - 3 && hasNextPage && !isFetchingNextPage) {
             fetchNextPage();
           }
         }}
       >
-        {answerIds.map((aid) => (
+        {answerIds.map((aid, index) => (
           <View key={aid} className="flex-1">
-            <AnswerDetailView
-              id={aid}
-              initialTitle={aid === id ? (initialTitle as string) : undefined}
-              questionId={questionId as string}
-            />
+            {Math.abs(index - currentPage) <= 1 ? (
+              <AnswerDetailView
+                id={aid}
+                initialTitle={aid === id ? (initialTitle as string) : undefined}
+                questionId={questionId as string}
+              />
+            ) : (
+              <View className="flex-1 justify-center items-center">
+                <ActivityIndicator color={Colors[colorScheme].primary} />
+              </View>
+            )}
           </View>
         ))}
       </PagerView>
