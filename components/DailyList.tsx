@@ -118,10 +118,14 @@ export const DailyList = React.forwardRef<
     if (!data) return [];
     const items: ListItem[] = [];
     data.pages.forEach((page) => {
-      items.push({ type: 'date', date: page.date });
-      page.stories.forEach((story: Story) => {
-        items.push({ type: 'story', data: story });
-      });
+      if (page.date) {
+        items.push({ type: 'date', date: page.date });
+      }
+      if (Array.isArray(page.stories)) {
+        page.stories.forEach((story: Story) => {
+          items.push({ type: 'story', data: story });
+        });
+      }
     });
     return items;
   }, [data]);
@@ -132,6 +136,23 @@ export const DailyList = React.forwardRef<
         {[1, 2, 3, 4, 5].map((i) => (
           <SkeletonCard key={i} />
         ))}
+      </View>
+    );
+  }
+
+  if (!isLoading && flattenedData.length === 0) {
+    return (
+      <View className="flex-1 justify-center items-center p-10">
+        <Ionicons name="alert-circle-outline" size={48} color="#ccc" />
+        <Text type="secondary" className="mt-4 text-center">
+          暂时没发现日报内容喵，可能是网络问题或者知乎日报今天还没更新。
+        </Text>
+        <Pressable
+          className="mt-6 px-6 py-2.5 rounded-full bg-primary"
+          onPress={() => refetch()}
+        >
+          <Text className="text-white font-bold">重试一下</Text>
+        </Pressable>
       </View>
     );
   }

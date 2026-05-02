@@ -1,13 +1,38 @@
-import * as SecureStore from 'expo-secure-store';
+import * as FileSystem from 'expo-file-system';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
-// 适配器：让 Zustand 能用上 Expo 的安全存储
-const secureStorage = {
-  getItem: (name: string) => SecureStore.getItemAsync(name),
-  setItem: (name: string, value: string) =>
-    SecureStore.setItemAsync(name, value),
-  removeItem: (name: string) => SecureStore.deleteItemAsync(name),
+// 适配器：使用 Expo FileSystem 代替 SecureStore 存储大数据
+// Android SecureStore 有 2048 字节的硬限制，存储多个账号信息时极易导致崩溃
+const AUTH_STORAGE_PATH = `${FileSystem.documentDirectory}auth-storage.json`;
+
+const fileStorage = {
+  getItem: async (name: string) => {
+    try {
+      const info = await FileSystem.getInfoAsync(AUTH_STORAGE_PATH);
+      if (info.exists) {
+        return await FileSystem.readAsStringAsync(AUTH_STORAGE_PATH);
+      }
+      return null;
+    } catch (e) {
+      console.error('读取存储失败:', e);
+      return null;
+    }
+  },
+  setItem: async (name: string, value: string) => {
+    try {
+      await FileSystem.writeAsStringAsync(AUTH_STORAGE_PATH, value);
+    } catch (e) {
+      console.error('写入存储失败:', e);
+    }
+  },
+  removeItem: async (name: string) => {
+    try {
+      await FileSystem.deleteAsync(AUTH_STORAGE_PATH, { idempotent: true });
+    } catch (e) {
+      console.error('删除存储失败:', e);
+    }
+  },
 };
 
 export interface Account {
@@ -154,7 +179,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
-      storage: createJSONStorage(() => secureStorage),
+      storage: createJSONStorage(() => fileStorage),
       version: 2, // 升级版本以支持 last_updated 结构（虽然是可选的）
       migrate: (persistedState: any, version: number) => {
         if (version === 0) {

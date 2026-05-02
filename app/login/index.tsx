@@ -64,7 +64,15 @@ export default function LoginScreen() {
           .map(([name, value]) => `${name}=${value}`)
           .join('; ');
 
-        await SecureStore.setItemAsync('user_cookies', cookieString);
+        // 尝试保存到 SecureStore 作为备份，但 Android 有 2048 字节限制，超出会崩溃
+        try {
+          if (cookieString.length < 2000) {
+            await SecureStore.setItemAsync('user_cookies', cookieString);
+          }
+        } catch (e) {
+          console.warn('⚠️ 无法保存 Cookie 到 SecureStore (可能超出长度限制):', e);
+        }
+        
         useAuthStore.getState().setCookies(cookieString);
 
         // 🟢 预抓取用户信息，确保账号列表立即完整

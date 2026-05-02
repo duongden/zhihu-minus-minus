@@ -94,7 +94,13 @@ export default function ProfileScreen() {
   // 封装：同步原生层的 Session 状态（SecureStore 和 CookieManager）
   const syncNativeSession = async (cookieString: string | null) => {
     if (cookieString) {
-      await SecureStore.setItemAsync('user_cookies', cookieString);
+      try {
+        if (cookieString.length < 2000) {
+          await SecureStore.setItemAsync('user_cookies', cookieString);
+        }
+      } catch (e) {
+        console.warn('⚠️ 无法同步 Cookie 到 SecureStore:', e);
+      }
       await CookieManager.clearAll();
       const cookiePairs = cookieString.split(';');
       for (const pair of cookiePairs) {
