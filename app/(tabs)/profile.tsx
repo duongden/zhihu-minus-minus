@@ -75,10 +75,10 @@ export default function ProfileScreen() {
   }, [profile, cookies, addAccount]);
 
   const isLoading = isMeLoading || isMemberLoading;
-  const refetch = () => {
+  const refetch = React.useCallback(() => {
     refetchMe();
     refetchMember();
-  };
+  }, [refetchMe, refetchMember]);
 
   const unreadCount =
     (profile?.default_notifications_count || 0) +
@@ -86,7 +86,7 @@ export default function ProfileScreen() {
     (profile?.vote_thank_notifications_count || 0);
 
   useFocusEffect(
-    useCallback(() => {
+    React.useCallback(() => {
       if (cookies) refetch();
     }, [cookies, refetch]),
   );
