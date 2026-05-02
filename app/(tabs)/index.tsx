@@ -500,7 +500,7 @@ const FeedList = React.forwardRef<
         paddingBottom: 120,
       }}
       renderItem={({ item }: { item: any }) =>
-        tab === 'hot' ? <HotCard item={item} /> : <FeedCard item={item} />
+        tab === 'hot' ? <HotCard item={item} /> : <FeedCard item={item} tab={tab} />
       }
       ListFooterComponent={
         isFetchingNextPage ? <ActivityIndicator style={{ margin: 20 }} /> : null
