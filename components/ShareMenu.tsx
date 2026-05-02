@@ -131,16 +131,7 @@ export function ShareMenu({ visible, onClose, type, data }: ShareMenuProps) {
 
               <View className="py-2.5 bg-transparent">
                 <View className="flex-row items-center mb-4 px-2.5 bg-transparent">
-                  <Text className="text-xl font-bold">
-                    分享
-                    {type === 'answer'
-                      ? '回答'
-                      : type === 'question'
-                        ? '问题'
-                        : type === 'pin'
-                          ? '想法'
-                          : '文章'}
-                  </Text>
+                  <Text className="text-xl font-bold">更多选项</Text>
                 </View>
 
                 <MenuOption
@@ -158,6 +149,23 @@ export function ShareMenu({ visible, onClose, type, data }: ShareMenuProps) {
                   label="复制链接与信息"
                   onPress={onCopyMarkdown}
                 />
+                {/* <View className="h-[1px] bg-[rgba(150,150,150,0.1)] my-2.5 mx-2.5" />
+                <MenuOption
+                  icon="eye-off-outline"
+                  label="不感兴趣"
+                  onPress={() => {
+                    showToast('已记录，将减少此类内容推荐');
+                    onClose();
+                  }}
+                />
+                <MenuOption
+                  icon="flag-outline"
+                  label="举报"
+                  onPress={() => {
+                    showToast('感谢反馈，我们将尽快处理');
+                    onClose();
+                  }}
+                /> */}
               </View>
 
               <Pressable
