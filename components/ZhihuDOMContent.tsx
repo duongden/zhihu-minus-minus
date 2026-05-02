@@ -124,52 +124,50 @@ export default function ZhihuDOMContent({
       });
     }
 
-    // Allow DOM to settle before revealing
-    requestAnimationFrame(() => {
-      setMathRendered(true);
-    });
+    // Reveal immediately
+    setMathRendered(true);
   }, [processedHtml, segmentInfos]);
 
-    // Handle Clicks
-    const handleClick = (e: React.MouseEvent) => {
-      let target = e.target as HTMLElement | null;
+  // Handle Clicks
+  const handleClick = (e: React.MouseEvent) => {
+    let target = e.target as HTMLElement | null;
 
-      while (target && target !== containerRef.current) {
-        if (target.tagName === 'IMG') {
-          const src = target.getAttribute('src');
-          if (src) onImagePress(src);
-          return;
-        }
-        if (target.tagName === 'A') {
-          e.preventDefault();
-          const href = target.getAttribute('href');
-          if (href) onLinkPress(href);
-          return;
-        }
-        if ((target.tagName === 'P' || target.tagName === 'SPAN') && target.classList.contains('segment-interactable')) {
-          const pid = target.getAttribute('data-pid');
-          if (pid) onSegmentPress(pid);
-          return;
-        }
-        target = target.parentElement;
+    while (target && target !== containerRef.current) {
+      if (target.tagName === 'IMG') {
+        const src = target.getAttribute('src');
+        if (src) onImagePress(src);
+        return;
       }
-    };
+      if (target.tagName === 'A') {
+        e.preventDefault();
+        const href = target.getAttribute('href');
+        if (href) onLinkPress(href);
+        return;
+      }
+      if ((target.tagName === 'P' || target.tagName === 'SPAN') && target.classList.contains('segment-interactable')) {
+        const pid = target.getAttribute('data-pid');
+        if (pid) onSegmentPress(pid);
+        return;
+      }
+      target = target.parentElement;
+    }
+  };
 
-    const isDark = colorScheme === 'dark';
-    const textColor = isDark ? '#ffffff' : '#1a1a1a';
-    const surfaceColor = isDark ? '#121212' : '#ffffff';
-    const primaryColor = '#0084ff';
+  const isDark = colorScheme === 'dark';
+  const textColor = isDark ? '#ffffff' : '#1a1a1a';
+  const surfaceColor = isDark ? '#121212' : '#ffffff';
+  const primaryColor = '#0084ff';
 
 
-    return (
-      <div style={{ width: '100%', backgroundColor: 'transparent' }}>
-        <link
-          rel="stylesheet"
-          href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"
-          onLoad={() => setCssLoaded(true)}
-          onError={() => setCssLoaded(true)}
-        />
-        <style>{`
+  return (
+    <div style={{ width: '100%', backgroundColor: 'transparent' }}>
+      <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"
+        onLoad={() => setCssLoaded(true)}
+        onError={() => setCssLoaded(true)}
+      />
+      <style>{`
         body {
           margin: 0;
           padding: 0;
@@ -257,15 +255,15 @@ export default function ZhihuDOMContent({
         }
       `}</style>
 
-        <div
-          ref={containerRef}
-          className="zhihu-content"
-          onClick={handleClick}
-          dangerouslySetInnerHTML={{ __html: processedHtml }}
-          style={{
-            color: textColor,
-          }}
-        />
-      </div>
-    );
-  }
+      <div
+        ref={containerRef}
+        className="zhihu-content"
+        onClick={handleClick}
+        dangerouslySetInnerHTML={{ __html: processedHtml }}
+        style={{
+          color: textColor,
+        }}
+      />
+    </div>
+  );
+}

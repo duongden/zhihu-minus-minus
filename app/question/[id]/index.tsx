@@ -18,12 +18,15 @@ import {
   Alert,
   Animated,
   Image,
+  LayoutAnimation,
   Modal,
+  Platform,
   View as NativeView,
   Pressable,
   Share,
 
   StyleSheet,
+  UIManager,
   useWindowDimensions,
 } from 'react-native';
 import { copyToClipboard } from '@/utils/clipboard';
@@ -169,7 +172,23 @@ const AnswerItem = forwardRef(
         </View>
 
         <View className="my-1 bg-transparent">
-          {isExpanded ? (
+          {!isLongContent ? (
+            <View className="flex-row flex-1">
+              <Text
+                className="text-[17px] flex-1"
+                style={{ color: textColor, lineHeight: 27 }}
+              >
+                {rawText}
+              </Text>
+              {item.thumbnail || (item.content_img && item.content_img.length > 0) ? (
+                <Image
+                  source={{ uri: item.thumbnail || item.content_img[0] }}
+                  className="w-20 h-[60px] rounded ml-3"
+                  resizeMode="cover"
+                />
+              ) : null}
+            </View>
+          ) : isExpanded ? (
             <View className="flex-1 bg-transparent">
               <ZhihuContent
                 objectId={item.id}
@@ -177,25 +196,23 @@ const AnswerItem = forwardRef(
                 content={item.content}
                 segmentInfos={item.segment_infos}
               />
-              {isLongContent && (
-                <Pressable
-                  onPress={() => item?.id && onToggle(item.id.toString(), false)}
-                  className="flex-row items-center justify-center py-2.5 mt-1 bg-transparent"
+              <Pressable
+                onPress={() => item?.id && onToggle(item.id.toString(), false)}
+                className="flex-row items-center justify-center py-2.5 mt-1 bg-transparent"
+              >
+                <Text
+                  type="primary"
+                  className="text-[13px] font-bold mr-1"
+                  style={{ color: '#0084ff' }}
                 >
-                  <Text
-                    type="primary"
-                    className="text-[13px] font-bold mr-1"
-                    style={{ color: '#0084ff' }}
-                  >
-                    收起回答
-                  </Text>
-                  <Ionicons
-                    name="chevron-up"
-                    size={14}
-                    color={Colors[colorScheme].primary}
-                  />
-                </Pressable>
-              )}
+                  收起回答
+                </Text>
+                <Ionicons
+                  name="chevron-up"
+                  size={14}
+                  color={Colors[colorScheme].primary}
+                />
+              </Pressable>
             </View>
           ) : (
             <Pressable
@@ -207,18 +224,16 @@ const AnswerItem = forwardRef(
                 style={{ color: textColor, lineHeight: 27 }}
               >
                 {excerpt}
-                {isLongContent && (
-                  <Text
-                    type="primary"
-                    className="font-medium"
-                    style={{ color: '#0084ff' }}
-                  >
-                    {' '}
-                    阅读全文
-                  </Text>
-                )}
+                <Text
+                  type="primary"
+                  className="font-medium"
+                  style={{ color: '#0084ff' }}
+                >
+                  {' '}
+                  阅读全文
+                </Text>
               </Text>
-              {item.thumbnail || item.content_img?.length > 0 ? (
+              {item.thumbnail || (item.content_img && item.content_img.length > 0) ? (
                 <Image
                   source={{ uri: item.thumbnail || item.content_img[0] }}
                   className="w-20 h-[60px] rounded ml-3"
@@ -331,14 +346,34 @@ export default function QuestionDetail() {
     onViewableItemsChanged,
   } = useViewableItems<any>();
 
-  const toggleExpand = useCallback((id: string, expanded: boolean) => {
+  const handleToggleExpand = useCallback((id: string, expanded: boolean) => {
+    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+      UIManager.setLayoutAnimationEnabledExperimental(true);
+    }
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+
     setExpandedIds((prev) => {
       const next = new Set(prev);
       if (expanded) next.add(id);
       else next.delete(id);
       return next;
     });
-  }, []);
+
+    if (!expanded) {
+      // Collapsing: scroll back to the item to prevent losing context
+      // Use setTimeout to ensure the list has updated its layout
+      setTimeout(() => {
+        const index = answers.findIndex(a => a.id.toString() === id);
+        if (index >= 0) {
+          flashListRef.current?.scrollToIndex({
+            index: index - 1,
+            animated: true,
+            viewOffset: insets.top + 50, // Match header height exactly
+          });
+        }
+      }, 50);
+    }
+  }, [answers, insets.top]);
 
   const getShareLink = (answer: any) => {
     const aid = answer?.id;
@@ -716,7 +751,7 @@ export default function QuestionDetail() {
             }}
             item={item}
             isExpanded={item?.id ? expandedIds.has(item.id.toString()) : false}
-            onToggle={toggleExpand}
+            onToggle={handleToggleExpand}
             onShare={(ans) => {
               setSelectedAnswer(ans);
               setIsSharing(true);
@@ -810,6 +845,26 @@ export default function QuestionDetail() {
                   {activeItem?.comment_count || 0}
                 </Text>
               </Pressable>
+
+              {activeItem?.id && expandedIds.has(activeItem.id.toString()) && (
+                <Pressable
+                  className="flex-row items-center ml-5 bg-transparent"
+                  onPress={() => handleToggleExpand(activeItem.id.toString(), false)}
+                >
+                  <Ionicons
+                    name="chevron-up-circle-outline"
+                    size={20}
+                    color={Colors[colorScheme].primary}
+                  />
+                  <Text
+                    type="primary"
+                    className="ml-1.5 text-sm font-bold"
+                    style={{ color: Colors[colorScheme].primary }}
+                  >
+                    收起
+                  </Text>
+                </Pressable>
+              )}
             </View>
             <Pressable
               className="flex-row items-center bg-transparent"

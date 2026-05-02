@@ -327,15 +327,11 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
     const [modalVisible, setModalVisible] = useState(false);
     const [viewerVisible, setViewerVisible] = useState(false);
     const [viewerImage, setViewerImage] = useState<string | null>(null);
-    const [shouldRender, setShouldRender] = useState(false);
+    const [shouldRender, setShouldRender] = useState(true);
 
-    // 延迟解析 HTML 以保证转场动画流畅
+    // 延迟解析 HTML 已不再需要，直接渲染以保证丝滑
     React.useEffect(() => {
-      // 避免 InteractionManager 弃用警告，改为使用 requestAnimationFrame 或 setTimeout
-      const timer = setTimeout(() => {
-        setShouldRender(true);
-      }, 0);
-      return () => clearTimeout(timer);
+      setShouldRender(true);
     }, []);
 
     const handleInternalLink = useCallback(
