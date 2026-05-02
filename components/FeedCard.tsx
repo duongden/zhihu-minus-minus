@@ -113,7 +113,8 @@ export const FeedCard = ({ item }: { item: any }) => {
         <View className="flex-1 bg-transparent">
           <Text
             type="secondary"
-            className="text-[15px] leading-[22px]"
+            className="text-[17px]"
+            style={{ lineHeight: 27 }}
             numberOfLines={3}
           >
             {item.excerpt}

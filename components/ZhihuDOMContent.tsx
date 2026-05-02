@@ -1,6 +1,6 @@
 'use dom';
 
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import renderMathInElement from 'katex/dist/contrib/auto-render.js';
 
 interface SegmentInfo {
@@ -40,37 +40,54 @@ export default function ZhihuDOMContent({
   const [cssLoaded, setCssLoaded] = useState(false);
   const [mathRendered, setMathRendered] = useState(false);
 
+  // 0. Pre-process HTML content for images and protocols before rendering
+  const processedHtml = React.useMemo(() => {
+    if (!htmlContent) return '';
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlContent, 'text/html');
+
+    const images = doc.querySelectorAll('img');
+    images.forEach((img) => {
+      const src = img.getAttribute('src') || '';
+      const eeimg = img.getAttribute('eeimg');
+      const isFormula = src.includes('zhihu.com/equation') || eeimg === '1' || eeimg === '2';
+
+      if (!isFormula) {
+        let actualSrc = img.getAttribute('data-actualsrc') || img.getAttribute('data-original') || src;
+        if (actualSrc) {
+          actualSrc = actualSrc.trim();
+          if (actualSrc.startsWith('//')) actualSrc = 'https:' + actualSrc;
+          img.setAttribute('src', actualSrc);
+        }
+        img.removeAttribute('width');
+        img.removeAttribute('height');
+      }
+    });
+
+    return doc.body.innerHTML;
+  }, [htmlContent]);
+
   // Handle KaTeX auto-render and Interaction Styling
   useLayoutEffect(() => {
     if (!containerRef.current) return;
-    
-    // 1. Process Zhihu's native equation images and convert them to text so KaTeX can pick them up.
+
+    // 1. Process Equations (convert to text nodes for KaTeX)
     const images = containerRef.current.querySelectorAll('img');
     images.forEach((img) => {
       const src = img.getAttribute('src') || '';
       const eeimg = img.getAttribute('eeimg');
       const isFormula = src.includes('zhihu.com/equation') || eeimg === '1' || eeimg === '2';
       const alt = img.getAttribute('alt') || '';
-      
+
       if (isFormula && alt) {
         const isBlockFormula = eeimg === '2' || (!eeimg && (alt.includes('\\begin') || alt.includes('\\\\')));
         // Create a text node with the delimiters
         const textContent = isBlockFormula ? `$$${alt}$$` : `$${alt}$`;
         const textNode = document.createTextNode(textContent);
         img.parentNode?.replaceChild(textNode, img);
-      } else {
-        // Ensure regular images have correct protocol
-        const actualSrc = (
-          img.getAttribute('data-actualsrc') ||
-          img.getAttribute('data-original') ||
-          src
-        ).trim();
-        if (actualSrc) {
-          img.setAttribute('src', actualSrc.startsWith('//') ? `https:${actualSrc}` : actualSrc);
-        }
       }
     });
-    
+
     // 2. Run auto-render
     renderMathInElement(containerRef.current, {
       delimiters: [
@@ -89,7 +106,7 @@ export default function ZhihuDOMContent({
       paragraphs.forEach((p) => {
         const pid = p.getAttribute('data-pid');
         if (!pid) return;
-        
+
         const segment = segmentInfos.find(s => s.pid === pid);
         if (!segment) return;
 
@@ -116,68 +133,68 @@ export default function ZhihuDOMContent({
         }
       });
     }
-    
+
     // Allow DOM to settle before revealing
     requestAnimationFrame(() => {
       setMathRendered(true);
     });
-  }, [htmlContent, segmentInfos]);
+  }, [processedHtml, segmentInfos]);
 
-  // Handle Clicks
-  const handleClick = (e: React.MouseEvent) => {
-    let target = e.target as HTMLElement | null;
+    // Handle Clicks
+    const handleClick = (e: React.MouseEvent) => {
+      let target = e.target as HTMLElement | null;
 
-    while (target && target !== containerRef.current) {
-      if (target.tagName === 'IMG') {
-        const src = target.getAttribute('src');
-        if (src) onImagePress(src);
-        return;
+      while (target && target !== containerRef.current) {
+        if (target.tagName === 'IMG') {
+          const src = target.getAttribute('src');
+          if (src) onImagePress(src);
+          return;
+        }
+        if (target.tagName === 'A') {
+          e.preventDefault();
+          const href = target.getAttribute('href');
+          if (href) onLinkPress(href);
+          return;
+        }
+        if ((target.tagName === 'P' || target.tagName === 'SPAN') && target.classList.contains('segment-interactable')) {
+          const pid = target.getAttribute('data-pid');
+          if (pid) onSegmentPress(pid);
+          return;
+        }
+        target = target.parentElement;
       }
-      if (target.tagName === 'A') {
-        e.preventDefault();
-        const href = target.getAttribute('href');
-        if (href) onLinkPress(href);
-        return;
-      }
-      if ((target.tagName === 'P' || target.tagName === 'SPAN') && target.classList.contains('segment-interactable')) {
-        const pid = target.getAttribute('data-pid');
-        if (pid) onSegmentPress(pid);
-        return;
-      }
-      target = target.parentElement;
-    }
-  };
+    };
 
-  const isDark = colorScheme === 'dark';
-  const textColor = isDark ? '#ffffff' : '#1a1a1a';
-  const surfaceColor = isDark ? '#121212' : '#ffffff'; 
-  const primaryColor = '#0084ff';
+    const isDark = colorScheme === 'dark';
+    const textColor = isDark ? '#ffffff' : '#1a1a1a';
+    const surfaceColor = isDark ? '#121212' : '#ffffff';
+    const primaryColor = '#0084ff';
 
-  const ready = cssLoaded && mathRendered;
 
-  return (
-    <div style={{ width: '100%' }}>
-      <link 
-        rel="stylesheet" 
-        href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css" 
-        onLoad={() => setCssLoaded(true)}
-        onError={() => setCssLoaded(true)}
-      />
-      <style>{`
+    return (
+      <div style={{ width: '100%', backgroundColor: surfaceColor }}>
+        <link
+          rel="stylesheet"
+          href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"
+          onLoad={() => setCssLoaded(true)}
+          onError={() => setCssLoaded(true)}
+        />
+        <style>{`
         body {
           margin: 0;
           padding: 0;
-          background-color: transparent;
+          background-color: ${surfaceColor};
           max-width: 100vw;
           overflow-x: hidden;
         }
         .zhihu-content {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-          font-size: 18px;
+          font-size: 17px;
           line-height: 1.6;
           color: ${textColor};
           max-width: 100%;
         }
+        .katex { color: ${textColor}; }
         .katex-display {
           overflow-x: auto;
           overflow-y: hidden;
@@ -186,6 +203,7 @@ export default function ZhihuDOMContent({
         pre, code {
           max-width: 100%;
           overflow-x: auto;
+          color: ${textColor};
         }
         .zhihu-content p {
           margin-bottom: 20px;
@@ -201,7 +219,7 @@ export default function ZhihuDOMContent({
           text-align: center;
         }
         .zhihu-content figcaption {
-          color: #999;
+          color: ${isDark ? '#888' : '#999'};
           font-size: 13px;
           margin-top: 8px;
           font-style: italic;
@@ -213,12 +231,13 @@ export default function ZhihuDOMContent({
         .zhihu-content blockquote {
           border-left: 4px solid ${primaryColor};
           padding-left: 18px;
-          background-color: ${surfaceColor}80;
+          background-color: ${isDark ? '#1a1a1a' : '#f6f6f6'};
           padding: 12px 18px;
           margin: 15px 0;
           font-style: italic;
           color: ${textColor};
         }
+        .zhihu-content h1, .zhihu-content h2, .zhihu-content h3 { color: ${textColor}; }
         .zhihu-content h1 { font-size: 22px; font-weight: bold; margin: 20px 0; line-height: 1.4; }
         .zhihu-content h2 { font-size: 20px; font-weight: bold; margin: 18px 0; line-height: 1.4; }
         .zhihu-content h3 { font-size: 18px; font-weight: bold; margin: 15px 0; line-height: 1.4; }
@@ -235,20 +254,19 @@ export default function ZhihuDOMContent({
           margin: -4px;
         }
         .segment-liked {
-          background-color: rgba(0, 132, 255, 0.05);
+          background-color: ${isDark ? 'rgba(0, 132, 255, 0.15)' : 'rgba(0, 132, 255, 0.05)'};
         }
       `}</style>
-      
-      <div 
-        ref={containerRef}
-        className="zhihu-content"
-        onClick={handleClick}
-        dangerouslySetInnerHTML={{ __html: htmlContent }} 
-        style={{
-          opacity: ready ? 1 : 0,
-          transition: 'opacity 0.4s ease-out',
-        }}
-      />
-    </div>
-  );
-}
+
+        <div
+          ref={containerRef}
+          className="zhihu-content"
+          onClick={handleClick}
+          dangerouslySetInnerHTML={{ __html: processedHtml }}
+          style={{
+            color: textColor,
+          }}
+        />
+      </div>
+    );
+  }

@@ -27,7 +27,7 @@ export default function MathView({ formula, displayMode = false, colorScheme = '
       <span 
         dangerouslySetInnerHTML={{ __html: html }} 
         style={{ 
-          fontSize: '18px', 
+          fontSize: '17px', 
           color: textColor,
         }}
       />

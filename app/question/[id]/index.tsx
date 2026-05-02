@@ -203,8 +203,8 @@ const AnswerItem = forwardRef(
               className="flex-row flex-1"
             >
               <Text
-                className="text-[15px] leading-6 flex-1"
-                style={{ color: textColor }}
+                className="text-[17px] flex-1"
+                style={{ color: textColor, lineHeight: 27 }}
               >
                 {excerpt}
                 {isLongContent && (
