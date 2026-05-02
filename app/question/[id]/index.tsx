@@ -223,15 +223,7 @@ const AnswerItem = forwardRef(
           ) : (
             <Pressable
               onPress={() => {
-                router.push({
-                  pathname: `/answer/${item.id}`,
-                  params: {
-                    source: 'question',
-                    questionId: questionId,
-                    sortBy,
-                    title: questionTitle,
-                  },
-                } as any);
+                onToggle(item.id.toString(), true);
               }}
               className="flex-row flex-1"
             >
@@ -246,7 +238,7 @@ const AnswerItem = forwardRef(
                   style={{ color: '#0084ff' }}
                 >
                   {' '}
-                  查看详情
+                  展开全文
                 </Text>
               </Text>
               {item.thumbnail || (item.content_img && item.content_img.length > 0) ? (
