@@ -75,6 +75,18 @@ export default function AnswerDetailScreen() {
   const [currentPage, setCurrentPage] = useState(initialPage);
   const [isSharing, setIsSharing] = useState(false);
 
+  // 4. 这里的关键是：PagerView 在 Android 下如果动态改变 children 且没有重置 key，可能会导致页面错乱。
+  // 但重置 key 又会导致 WebView 重新加载。
+  // 我们使用一个更稳定的 key，仅在数据从“单条”变为“多条”时重置一次。
+  const [pagerReady, setPagerReady] = useState(false);
+  useEffect(() => {
+    if (answerIds.length > 1 && !pagerReady) {
+      setPagerReady(true);
+    }
+  }, [answerIds.length, pagerReady]);
+
+  const pagerKey = `pager-${questionId}-${pagerReady ? 'ready' : 'pending'}`;
+
   // 同步当前页面的数据，用于分享
   const currentId = answerIds[currentPage];
   const { data: currentAnswer } = useQuery({
@@ -101,9 +113,10 @@ export default function AnswerDetailScreen() {
       <Stack.Screen options={{ headerShown: false }} />
 
       <PagerView
-        key={`pager-${questionId}-${answerIds.length}`}
+        key={pagerKey}
         style={{ flex: 1 }}
         initialPage={initialPage}
+        offscreenPageLimit={1}
         onPageSelected={(e) => {
           const newIndex = e.nativeEvent.position;
           setCurrentPage(newIndex);

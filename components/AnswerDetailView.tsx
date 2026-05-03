@@ -166,8 +166,8 @@ export const AnswerDetailView = ({
   };
 
   const getShareLink = () => {
-    const qid = answer?.question?.id || questionId;
-    return `https://www.zhihu.com/question/${qid}/answer/${id}`;
+    const actualQid = answer?.question?.id || questionId;
+    return `https://www.zhihu.com/question/${actualQid}/answer/${id}`;
   };
 
   return (
@@ -312,8 +312,9 @@ export const AnswerDetailView = ({
                   onRefresh={refetch}
                 />
               ) : (
-                <View className="h-[300px] justify-center items-center bg-transparent">
+                <View className="h-[500px] justify-center items-center bg-transparent">
                   <ActivityIndicator size="small" color="#0084ff" />
+                  <Text type="secondary" className="mt-4 text-xs opacity-50">正在准备内容...</Text>
                 </View>
               )}
               <Text
