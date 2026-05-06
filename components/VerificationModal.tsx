@@ -1,5 +1,6 @@
 import React from 'react';
-import { Modal, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
+import { Modal, StyleSheet, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, View } from './Themed';

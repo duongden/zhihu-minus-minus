@@ -21,6 +21,7 @@ import {
 } from '@/store/useThemeStore';
 import '../global.css';
 import { Linking } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // 保持启动页显示，直到资源加载完成
 SplashScreen.preventAutoHideAsync();
@@ -113,102 +114,104 @@ function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <RootSiblingParent>
-        <ThemeProvider value={theme}>
-          <UpdateChecker />
-          <Stack
-            screenOptions={{
-              headerStyle: {
-                backgroundColor: isDark ? '#1a1a1a' : '#ffffff',
-              },
-              headerTitleStyle: {
-                color: isDark ? '#ffffff' : '#1a1a1a',
-                fontWeight: 'bold',
-              },
-              headerTintColor: '#0084ff',
-              headerShadowVisible: false,
-            }}
-          >
-            {/* 底部 Tab 主框架 */}
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-
-            {/* 文章详情页：从右侧推入 */}
-            <Stack.Screen
-              name="article/[id]"
-              options={{
-                headerTitle: '正文',
-                headerBackTitle: '返回',
+      <SafeAreaProvider>
+        <RootSiblingParent>
+          <ThemeProvider value={theme}>
+            <UpdateChecker />
+            <Stack
+              screenOptions={{
+                headerStyle: {
+                  backgroundColor: isDark ? '#1a1a1a' : '#ffffff',
+                },
+                headerTitleStyle: {
+                  color: isDark ? '#ffffff' : '#1a1a1a',
+                  fontWeight: 'bold',
+                },
+                headerTintColor: '#0084ff',
+                headerShadowVisible: false,
               }}
-            />
+            >
+              {/* 底部 Tab 主框架 */}
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
 
-            {/* 登录页：建议做成从底部弹出的 Modal */}
-            <Stack.Screen
-              name="login/index"
-              options={{
-                presentation: 'modal',
-                headerTitle: '登录知乎',
-                headerLeft: () => null,
-              }}
-            />
+              {/* 文章详情页：从右侧推入 */}
+              <Stack.Screen
+                name="article/[id]"
+                options={{
+                  headerTitle: '正文',
+                  headerBackTitle: '返回',
+                }}
+              />
 
-            <Stack.Screen
-              name="feedback/index"
-              options={{
-                headerShown: false,
-                presentation: 'card',
-              }}
-            />
+              {/* 登录页：建议做成从底部弹出的 Modal */}
+              <Stack.Screen
+                name="login/index"
+                options={{
+                  presentation: 'modal',
+                  headerTitle: '登录知乎',
+                  headerLeft: () => null,
+                }}
+              />
 
-            {/* 发布相关页面：使用全屏 Modal */}
-            <Stack.Screen
-              name="publish/answer"
-              options={{ presentation: 'fullScreenModal', headerShown: false }}
-            />
-            <Stack.Screen
-              name="publish/article"
-              options={{ presentation: 'fullScreenModal', headerShown: false }}
-            />
-            <Stack.Screen
-              name="publish/pin"
-              options={{ presentation: 'fullScreenModal', headerShown: false }}
-            />
-            <Stack.Screen
-              name="publish/question"
-              options={{ presentation: 'fullScreenModal', headerShown: false }}
-            />
+              <Stack.Screen
+                name="feedback/index"
+                options={{
+                  headerShown: false,
+                  presentation: 'card',
+                }}
+              />
 
-            {/* 问题详情页 */}
-            <Stack.Screen
-              name="question/[id]/index"
-              options={{
-                headerShown: false,
-                animation: 'fade',
-              }}
-            />
+              {/* 发布相关页面：使用全屏 Modal */}
+              <Stack.Screen
+                name="publish/answer"
+                options={{ presentation: 'fullScreenModal', headerShown: false }}
+              />
+              <Stack.Screen
+                name="publish/article"
+                options={{ presentation: 'fullScreenModal', headerShown: false }}
+              />
+              <Stack.Screen
+                name="publish/pin"
+                options={{ presentation: 'fullScreenModal', headerShown: false }}
+              />
+              <Stack.Screen
+                name="publish/question"
+                options={{ presentation: 'fullScreenModal', headerShown: false }}
+              />
 
-            {/* 回答详情页 */}
-            <Stack.Screen
-              name="answer/[id]"
-              options={{
-                headerShown: false,
-                animation: 'fade',
-              }}
-            />
+              {/* 问题详情页 */}
+              <Stack.Screen
+                name="question/[id]/index"
+                options={{
+                  headerShown: false,
+                  animation: 'fade',
+                }}
+              />
 
-            {/* 其他 Modal 弹窗 */}
-            <Stack.Screen
-              name="modal"
-              options={{ presentation: 'modal', title: '提示' }}
-            />
-          </Stack>
+              {/* 回答详情页 */}
+              <Stack.Screen
+                name="answer/[id]"
+                options={{
+                  headerShown: false,
+                  animation: 'fade',
+                }}
+              />
 
-          {/* 全局状态栏控制 */}
-          <StatusBar style={isDark ? 'light' : 'dark'} />
+              {/* 其他 Modal 弹窗 */}
+              <Stack.Screen
+                name="modal"
+                options={{ presentation: 'modal', title: '提示' }}
+              />
+            </Stack>
 
-          {/* 人机验证弹窗 */}
-          <VerificationModal />
-        </ThemeProvider>
-      </RootSiblingParent>
+            {/* 全局状态栏控制 */}
+            <StatusBar style={isDark ? 'light' : 'dark'} />
+
+            {/* 人机验证弹窗 */}
+            <VerificationModal />
+          </ThemeProvider>
+        </RootSiblingParent>
+      </SafeAreaProvider>
     </QueryClientProvider>
   );
 }
