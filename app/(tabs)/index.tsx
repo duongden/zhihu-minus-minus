@@ -25,6 +25,7 @@ import { FEED_URLS, getFeed } from '@/api/zhihu';
 import { DailyList } from '@/components/DailyList';
 import { FeedCard } from '@/components/FeedCard';
 import { HotCard, HotItem } from '@/components/HotCard';
+import { RecentMoments } from '@/components/RecentMoments';
 import ProfileScreen from './profile';
 import PublishScreen from './publish';
 import { Text, View } from '@/components/Themed';
@@ -530,6 +531,7 @@ const FeedList = React.forwardRef<
       renderItem={({ item }: { item: any }) =>
         tab === 'hot' ? <HotCard item={item} /> : <FeedCard item={item} tab={tab} />
       }
+      ListHeaderComponent={tab === 'following' ? <RecentMoments /> : null}
       ListFooterComponent={
         isFetchingNextPage ? <ActivityIndicator style={{ margin: 20 }} /> : null
       }
