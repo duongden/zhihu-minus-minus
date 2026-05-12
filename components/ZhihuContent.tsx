@@ -660,6 +660,26 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
       });
     };
 
+    const domProps = useMemo(() => ({ matchContents: true }), []);
+    const onReadyCallback = useCallback(() => setDomReady(true), []);
+    const onImagePressCallback = useCallback((src: string) => {
+      setViewerImage(src);
+      setViewerVisible(true);
+    }, []);
+    const onSegmentPressCallback = useCallback(
+      (pid: string) => {
+        const segment = segmentMap.get(pid);
+        if (segment) {
+          const interaction = findActiveInteraction(segment);
+          if (interaction) {
+            handlePress(pid, segment, interaction);
+          }
+        }
+      },
+      [segmentMap, findActiveInteraction, handlePress],
+    );
+    const domStyle = useMemo(() => ({ backgroundColor: 'transparent', minHeight: 400 }), []);
+
     if (!shouldRender && !contentArray) {
       return (
         <View className="h-[200px] justify-center items-center bg-transparent">
@@ -694,26 +714,15 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
               </View>
             )}
             <ZhihuDOMContent
-              dom={{ matchContents: true }}
+              dom={domProps}
               htmlContent={content || ''}
-              segmentInfos={segmentInfos as any}
+              segmentInfosStr={JSON.stringify(segmentInfos)}
               colorScheme={colorScheme}
-              onReady={() => setDomReady(true)}
-              onImagePress={(src) => {
-                setViewerImage(src);
-                setViewerVisible(true);
-              }}
+              onReady={onReadyCallback}
+              onImagePress={onImagePressCallback}
               onLinkPress={handleInternalLink}
-              onSegmentPress={(pid) => {
-                const segment = segmentMap.get(pid);
-                if (segment) {
-                  const interaction = findActiveInteraction(segment);
-                  if (interaction) {
-                    handlePress(pid, segment, interaction);
-                  }
-                }
-              }}
-              style={{ backgroundColor: 'transparent', minHeight: 400 }}
+              onSegmentPress={onSegmentPressCallback}
+              style={domStyle}
             />
           </View>
         )}

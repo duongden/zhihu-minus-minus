@@ -16,6 +16,9 @@ import { getAnswer } from '@/api/zhihu';
 import client from '@/api/client';
 import { useZhihuInfiniteQuery } from '@/hooks/useZhihuInfiniteQuery';
 import Colors from '@/constants/Colors';
+import Reanimated, { SharedTransition } from 'react-native-reanimated';
+
+const slowTransition = SharedTransition.duration(600);
 
 export default function AnswerDetailScreen() {
   const { id, title: initialTitle, questionId: propQuestionId, sortBy = 'default' } = useLocalSearchParams();
@@ -25,11 +28,14 @@ export default function AnswerDetailScreen() {
   const colorScheme = useColorScheme();
   const textColor = Colors[colorScheme].text;
 
+  // 锁定初始 ID，避免滑动时 URL 参数改变导致重新触发 top-level loading
+  const [initialId] = useState(id as string);
+
   // 1. 获取当前回答的基础信息（主要是为了拿到 questionId）
   const { data: initialAnswer, isLoading: loadingInitial } = useQuery({
-    queryKey: ['answer-detail', id],
-    queryFn: () => getAnswer(id as string),
-    enabled: !!id,
+    queryKey: ['answer-detail', initialId],
+    queryFn: () => getAnswer(initialId),
+    enabled: !!initialId,
   });
 
   const questionId = propQuestionId || initialAnswer?.question?.id;
@@ -59,18 +65,18 @@ export default function AnswerDetailScreen() {
     
     let combined = listIds;
     // 确保初始 ID 在列表中
-    if (id && !listIds.includes(id as string)) {
-      combined = [id as string, ...listIds];
+    if (initialId && !listIds.includes(initialId)) {
+      combined = [initialId, ...listIds];
     }
     
     // 使用 Set 去重
     return Array.from(new Set(combined));
-  }, [answersData, id]);
+  }, [answersData, initialId]);
 
   const initialPage = useMemo(() => {
-    const index = answerIds.indexOf(id as string);
+    const index = answerIds.indexOf(initialId);
     return index >= 0 ? index : 0;
-  }, [answerIds, id]);
+  }, [answerIds, initialId]);
 
   const [currentPage, setCurrentPage] = useState(initialPage);
   const [isSharing, setIsSharing] = useState(false);
@@ -112,6 +118,28 @@ export default function AnswerDetailScreen() {
     <View className="flex-1">
       <Stack.Screen options={{ headerShown: false }} />
 
+      {/* Question Area (Fixed) */}
+      <Pressable
+        className="mx-5 py-[15px] flex-row items-center justify-between bg-transparent"
+        onPress={() =>
+          router.push(`/question/${initialAnswer?.question?.id || questionId}`)
+        }
+        style={{ marginTop: insets.top + 45 }}
+      >
+        <Reanimated.View
+          sharedTransitionTag={`title-${questionId || id}`}
+          sharedTransitionStyle={slowTransition}
+          className="flex-1 mr-2.5 bg-transparent"
+        >
+          <Text className="text-[18px] font-bold leading-6">
+            {initialAnswer?.question?.title || (initialTitle as string) || '加载中...'}
+          </Text>
+        </Reanimated.View>
+        {!loadingInitial && (
+          <Ionicons name="chevron-forward" size={18} color="#999" />
+        )}
+      </Pressable>
+
       <PagerView
         key={pagerKey}
         style={{ flex: 1 }}
@@ -138,6 +166,7 @@ export default function AnswerDetailScreen() {
               initialTitle={aid === id ? (initialTitle as string) : undefined}
               questionId={questionId as string}
               isFocused={index === currentPage}
+              shouldPreload={Math.abs(index - currentPage) <= 1}
             />
           </View>
         ))}

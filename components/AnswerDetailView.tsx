@@ -44,6 +44,7 @@ interface AnswerDetailViewProps {
   questionId?: string;
   onScroll?: (y: number) => void;
   isFocused?: boolean;
+  shouldPreload?: boolean;
 }
 
 export const AnswerDetailView = ({
@@ -52,6 +53,7 @@ export const AnswerDetailView = ({
   questionId,
   onScroll,
   isFocused = false,
+  shouldPreload = false,
 }: AnswerDetailViewProps) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -92,6 +94,7 @@ export const AnswerDetailView = ({
   } = useQuery({
     queryKey: ['answer-detail', id],
     queryFn: () => getAnswer(id),
+    enabled: isFocused || shouldPreload,
   });
 
   const followMutation = useOptimisticToggle({
@@ -133,7 +136,7 @@ export const AnswerDetailView = ({
     {
       queryKey: ['answer-collection-status', id],
       queryFn: () => getAnswerCollectionStatus(id),
-      enabled: !!id,
+      enabled: !!id && hasBeenFocused,
     },
   );
 
@@ -222,27 +225,55 @@ export const AnswerDetailView = ({
         onScroll={handleScrollInternal}
         contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
       >
-        <View style={{ height: insets.top + 45 }} className="bg-transparent" />
 
-        <Pressable
-          className="mx-5 py-[15px] flex-row items-center justify-between bg-transparent"
-          onPress={() =>
-            router.push(`/question/${answer?.question?.id || questionId}`)
-          }
-        >
-          <Reanimated.View
-            sharedTransitionTag={`title-${questionId || id}`}
-            sharedTransitionStyle={slowTransition}
-            className="flex-1 mr-2.5 bg-transparent"
+        <View className="flex-row items-center p-5 justify-between bg-transparent">
+          <Pressable
+            onPress={goToProfile}
+            className="flex-row items-center flex-1 bg-transparent"
           >
-            <Text className="text-[18px] font-bold leading-6">
-              {answer?.question?.title || initialTitle || '加载中...'}
+            <Image
+              source={{ uri: answer?.author?.avatar_url }}
+              className="w-11 h-11 rounded-full"
+            />
+            <View className="ml-3 flex-1 bg-transparent">
+              <Text className="text-base font-bold">
+                {answer?.author?.name}
+              </Text>
+              <Text
+                type="secondary"
+                className="text-[13px] text-[#999] mt-0.5"
+                numberOfLines={1}
+              >
+                {answer?.author?.headline}
+              </Text>
+            </View>
+          </Pressable>
+          <Pressable
+            className="px-[15px] py-1.5 rounded-[20px]"
+            style={[
+              !answer?.author?.is_following
+                ? { backgroundColor: '#0084ff15' }
+                : {
+                  backgroundColor: 'transparent',
+                  borderWidth: 1,
+                  borderColor: '#eee',
+                },
+            ]}
+            onPress={() => followMutation.mutate()}
+            disabled={followMutation.isPending}
+          >
+            <Text
+              className="text-sm font-bold"
+              style={[
+                answer?.author?.is_following
+                  ? { color: '#999' }
+                  : { color: '#0084ff' },
+              ]}
+            >
+              {answer?.author?.is_following ? '已关注' : '关注'}
             </Text>
-          </Reanimated.View>
-          {!queryLoading && (
-            <Ionicons name="chevron-forward" size={18} color="#999" />
-          )}
-        </Pressable>
+          </Pressable>
+        </View>
 
         {queryLoading ? (
           <View className="h-[200px] justify-center items-center bg-transparent">
@@ -252,83 +283,32 @@ export const AnswerDetailView = ({
             </Text>
           </View>
         ) : (
-          <>
-            <View className="flex-row items-center p-5 justify-between bg-transparent">
-              <Pressable
-                onPress={goToProfile}
-                className="flex-row items-center flex-1 bg-transparent"
-              >
-                <Image
-                  source={{ uri: answer?.author?.avatar_url }}
-                  className="w-11 h-11 rounded-full"
-                />
-                <View className="ml-3 flex-1 bg-transparent">
-                  <Text className="text-base font-bold">
-                    {answer?.author?.name}
-                  </Text>
-                  <Text
-                    type="secondary"
-                    className="text-[13px] text-[#999] mt-0.5"
-                    numberOfLines={1}
-                  >
-                    {answer?.author?.headline}
-                  </Text>
-                </View>
-              </Pressable>
-              <Pressable
-                className="px-[15px] py-1.5 rounded-[20px]"
-                style={[
-                  !answer?.author?.is_following
-                    ? { backgroundColor: '#0084ff15' }
-                    : {
-                      backgroundColor: 'transparent',
-                      borderWidth: 1,
-                      borderColor: '#eee',
-                    },
-                ]}
-                onPress={() => followMutation.mutate()}
-                disabled={followMutation.isPending}
-              >
-                <Text
-                  className="text-sm font-bold"
-                  style={[
-                    answer?.author?.is_following
-                      ? { color: '#999' }
-                      : { color: '#0084ff' },
-                  ]}
-                >
-                  {answer?.author?.is_following ? '已关注' : '关注'}
-                </Text>
-              </Pressable>
-            </View>
-
-            <View className="px-5 bg-transparent">
-              {hasBeenFocused ? (
-                <ZhihuContent
-                  content={answer?.content || ''}
-                  segmentInfos={answer?.segment_infos}
-                  objectId={id}
-                  type="answer"
-                  onRefresh={refetch}
-                />
-              ) : (
-                <View className="h-[500px] justify-center items-center bg-transparent">
-                  <ActivityIndicator size="small" color="#0084ff" />
-                  <Text type="secondary" className="mt-4 text-xs opacity-50">正在准备内容...</Text>
-                </View>
-              )}
-              <Text
-                type="secondary"
-                className="text-[#bbb] text-[13px] mt-[30px] italic pb-5"
-              >
-                发布于{' '}
-                {answer?.created_time
-                  ? new Date(answer.created_time * 1000).toLocaleDateString()
-                  : answer?.created_time_name || '不久前'}{' '}
-                · 著作权归作者所有
-              </Text>
-            </View>
-          </>
+          <View className="px-5 bg-transparent">
+            {hasBeenFocused ? (
+              <ZhihuContent
+                content={answer?.content || ''}
+                segmentInfos={answer?.segment_infos}
+                objectId={id}
+                type="answer"
+                onRefresh={refetch}
+              />
+            ) : (
+              <View className="h-[500px] justify-center items-center bg-transparent">
+                <ActivityIndicator size="small" color="#0084ff" />
+                <Text type="secondary" className="mt-4 text-xs opacity-50">正在准备内容...</Text>
+              </View>
+            )}
+            <Text
+              type="secondary"
+              className="text-[#bbb] text-[13px] mt-[30px] italic pb-5"
+            >
+              发布于{' '}
+              {answer?.created_time
+                ? new Date(answer.created_time * 1000).toLocaleDateString()
+                : answer?.created_time_name || '不久前'}{' '}
+              · 著作权归作者所有
+            </Text>
+          </View>
         )}
       </ScrollView>
 
