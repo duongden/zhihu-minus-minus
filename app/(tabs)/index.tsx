@@ -20,6 +20,8 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { WebView } from 'react-native-webview';
+import CookieManager from '@react-native-cookies/cookies';
 // 使用 @ 别名导入组件
 import { FEED_URLS, getFeed } from '@/api/zhihu';
 import { DailyList } from '@/components/DailyList';
@@ -80,6 +82,7 @@ export default function HomeScreen() {
   const tintColor = Colors[colorScheme].tint;
   const textColor = Colors[colorScheme].text;
   const [currentPage, setCurrentPage] = useState(initialPageIndex);
+  const [guestCookieReady, setGuestCookieReady] = useState(false);
 
   // 监听 params.tab 变化并切换页面
   useEffect(() => {
@@ -324,7 +327,7 @@ export default function HomeScreen() {
                 <PublishScreen />
               ) : globalIndex === 5 ? (
                 <ProfileScreen />
-              ) : !cookies ? (
+              ) : !cookies && tab === 'following' ? (
                 <View style={styles.loginPrompt}>
                   <Text style={styles.loginText} type="secondary">
                     登录后才能看此栏目哦
@@ -341,6 +344,7 @@ export default function HomeScreen() {
                   ref={el => listRefs.current[idx] = el}
                   tab={tab as any}
                   insets={insets}
+                  guestCookieReady={guestCookieReady}
                   onScroll={(offset) => handleScrollUpdate(idx, offset)}
                 />
               )}
@@ -419,6 +423,30 @@ export default function HomeScreen() {
           </View>
         </BlurView>
       </View>
+      {!cookies && !guestCookieReady && (
+        <View style={{ width: 1, height: 1, opacity: 0, position: 'absolute', pointerEvents: 'none' }}>
+          <WebView
+            source={{ uri: 'https://www.zhihu.com/' }}
+            sharedCookiesEnabled={true}
+            injectedJavaScript={`
+              (function() {
+                var checkCookie = setInterval(function() {
+                  if (document.cookie.includes('d_c0')) {
+                    clearInterval(checkCookie);
+                    setTimeout(function() {
+                      window.ReactNativeWebView.postMessage('ready');
+                    }, 2000); // 找到 d_c0 后再等 2 秒，让其他 cookie 载入
+                  }
+                }, 500);
+              })();
+              true;
+            `}
+            onMessage={() => {
+              setGuestCookieReady(true);
+            }}
+          />
+        </View>
+      )}
     </View>
   );
 }
@@ -459,8 +487,8 @@ function BottomTabIcon({ icon, active, onPress, color, size = 24, isScrollTop }:
 // FeedList 组件
 const FeedList = React.forwardRef<
   any,
-  { tab: TabType; insets: any; onScroll?: (offset: number) => void }
->(({ tab, insets, onScroll }, ref) => {
+  { tab: TabType; insets: any; guestCookieReady: boolean; onScroll?: (offset: number) => void }
+>(({ tab, insets, guestCookieReady, onScroll }, ref) => {
   const { cookies } = useAuthStore();
   const {
     data,
@@ -473,7 +501,7 @@ const FeedList = React.forwardRef<
   } = useInfiniteQuery({
     queryKey: ['zhihu-feed', tab],
     queryFn: async ({ pageParam = (FEED_URLS as any)[tab] }) => {
-      if (!cookies && (tab === 'following' || tab === 'recommend'))
+      if (!cookies && tab === 'following')
         return { items: [], nextUrl: null };
       try {
         const data = await getFeed(pageParam as string);
@@ -499,7 +527,7 @@ const FeedList = React.forwardRef<
     },
     initialPageParam: (FEED_URLS as any)[tab],
     getNextPageParam: (lastPage) => lastPage.nextUrl,
-    enabled: !!cookies,
+    enabled: !!cookies || guestCookieReady,
   });
 
   const flattenedData = useMemo(() => {

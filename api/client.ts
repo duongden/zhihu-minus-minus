@@ -3,6 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useVerificationStore } from '@/store/useVerificationStore';
 import { signRequest96, ZSE_VERSION } from './zse96/index';
+import CookieManager from '@react-native-cookies/cookies';
 
 const apiClient = axios.create({
   baseURL: 'https://www.zhihu.com/api/v4',
@@ -21,15 +22,30 @@ function getXsrf(cookie: string) {
 
 apiClient.interceptors.request.use(async (config) => {
   // 优先从 AuthStore 获取，如果没有再尝试从 SecureStore (向下兼容)
-  const cookie =
+  let cookie =
     useAuthStore.getState().cookies ||
     (await SecureStore.getItemAsync('user_cookies')) ||
     '';
 
-  if (cookie) {
+  if (!cookie) {
+    try {
+      const nativeCookies = await CookieManager.get('https://www.zhihu.com');
+      if (nativeCookies) {
+        cookie = Object.entries(nativeCookies)
+          .map(([name, c]) => `${name}=${c.value}`)
+          .join('; ');
+        console.log('🍪 提取到的原生访客 Cookie:', cookie);
+      }
+    } catch (e) {
+      console.warn('获取原生 cookie 失败', e);
+    }
+  }
+
+    if (cookie) {
     config.headers['Cookie'] = cookie;
     const dc0 = getDc0(cookie);
     if (dc0) {
+      config.headers['X-Udid'] = dc0.split('|')[0]; // 添加 X-Udid 头
       const xsrf = getXsrf(cookie);
       if (xsrf) {
         config.headers['x-xsrftoken'] = xsrf;
@@ -65,14 +81,18 @@ apiClient.interceptors.response.use(
       if (redirectUrl) {
         useVerificationStore.getState().setVerification(redirectUrl);
       }
+      return Promise.reject(error); // 拦截 40352，不抛出红屏错误
     }
-    console.error(
-      'API 请求错误:',
-      error.response?.status,
-      error.response?.data || error.message,
-      '请求配置:',
-      error.config,
-    );
+
+    if (error.response?.status !== 401) {
+      console.error(
+        'API 请求错误:',
+        error.response?.status,
+        error.response?.data || error.message,
+        '请求配置:',
+        error.config,
+      );
+    }
     return Promise.reject(error);
   },
 );
