@@ -35,6 +35,7 @@ export default function AppearanceSettings() {
     primaryColor, 
     visibleTabs, 
     defaultTab,
+    useWebView,
     updateSettings,
     resetSettings 
   } = useSettingsStore();
@@ -123,6 +124,17 @@ export default function AppearanceSettings() {
               <Ionicons name="refresh" size={24} color="#666" />
             </Pressable>
           </View>
+        </Section>
+
+        {/* 实验性功能 */}
+        <Section title="实验性功能 (默认关闭)">
+          <SettingItem label="启用 WebView 渲染">
+            <Switch 
+              value={useWebView}
+              onValueChange={(val) => updateSettings({ useWebView: val })}
+              trackColor={{ true: tintColor }}
+            />
+          </SettingItem>
         </Section>
 
         {/* 3. 栏目管理 */}

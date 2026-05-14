@@ -17,6 +17,7 @@ export interface AppSettings {
   visibleTabs: TabKey[];
   defaultTab: TabKey;
   borderRadius: number;
+  useWebView: boolean;
 }
 
 interface SettingsState extends AppSettings {
@@ -31,6 +32,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   visibleTabs: ['following', 'recommend', 'hot', 'daily', 'publish', 'profile'],
   defaultTab: 'recommend',
   borderRadius: 12,
+  useWebView: false,
 };
 
 export const useSettingsStore = create<SettingsState>()(

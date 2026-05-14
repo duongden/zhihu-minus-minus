@@ -27,6 +27,8 @@ import { parseZhihuUrl } from '@/utils/url';
 import MathView from './MathView';
 import { Text, View } from './Themed';
 import ZhihuDOMContent from './ZhihuDOMContent';
+import { useSettingsStore } from '@/store/useSettingsStore';
+import { SvgUri } from 'react-native-svg';
 
 interface SegmentInfo {
   pid: string;
@@ -179,6 +181,8 @@ const P_Renderer: CustomBlockRenderer = ({ TDefaultRenderer, ...props }) => {
 const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
   const { src, width: attrWidth, height: attrHeight, eeimg } = tnode.attributes;
   const rendererProps = useRendererProps('img');
+  const { useWebView } = useSettingsStore();
+  const [svgError, setSvgError] = useState(false);
 
   if (!rendererProps) return null;
   const { onPress, width: contentWidth, colorScheme } = rendererProps as any;
@@ -213,7 +217,7 @@ const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
   } else if (isFormula) {
     // 默认高度估计
     displayHeight = isBlockFormula ? 60 : 22;
-    displayWidth = contentWidth;
+    displayWidth = isBlockFormula ? contentWidth : Math.min(contentWidth, Math.max(40, alt.length * 8));
   }
 
   const imageStyle: any = {
@@ -221,32 +225,29 @@ const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
     height: displayHeight,
   };
 
+  // 如果是公式，且是暗色模式，使用 tintColor 将黑色公式变为白色
+  if (isFormula && colorScheme === 'dark') {
+    imageStyle.tintColor = '#ffffff';
+  }
+
   // 确保 src 有协议
   const finalSrc = src.startsWith('//') ? `https:${src}` : src;
 
-  // 如果有 LaTeX 源码，尝试渲染源码 (MathView DOM Component)
-  if (isFormula && alt) {
+  if (isFormula && !isBlockFormula) {
     return (
-      <View
-        className={
-          isFormula
-            ? `my-1.5 items-center bg-transparent ${isBlockFormula ? 'w-full' : ''}`
-            : 'my-2.5 items-center w-full bg-transparent'
-        }
-      >
-        <Pressable
-          onPress={() => onPress(finalSrc)}
-          className="bg-transparent w-full"
-        >
-          <MathView
-            dom={{ matchContents: true }}
-            formula={alt}
-            displayMode={isBlockFormula}
-            colorScheme={colorScheme}
-            style={{ backgroundColor: 'transparent' }}
+      <Text onPress={() => onPress(finalSrc)}>
+        {svgError ? (
+          <Text style={{ color: colorScheme === 'dark' ? '#ffffff' : '#1a1a1a', fontSize: 16 }}>{alt || '公式'}</Text>
+        ) : (
+          <SvgUri
+            uri={finalSrc}
+            width={displayWidth}
+            height={displayHeight}
+            color={colorScheme === 'dark' ? '#ffffff' : '#1a1a1a'}
+            onError={() => setSvgError(true)}
           />
-        </Pressable>
-      </View>
+        )}
+      </Text>
     );
   }
 
@@ -259,12 +260,26 @@ const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
       }
     >
       <Pressable onPress={() => onPress(finalSrc)} className="bg-transparent">
-        <Image
-          source={{ uri: finalSrc }}
-          className={isFormula ? '' : 'rounded-xl bg-[rgba(150,150,150,0.1)]'}
-          style={imageStyle}
-          resizeMode="contain"
-        />
+        {isFormula ? (
+          svgError ? (
+            <Text style={{ color: colorScheme === 'dark' ? '#ffffff' : '#1a1a1a', fontSize: 16 }}>{alt || '公式加载失败'}</Text>
+          ) : (
+            <SvgUri
+              uri={finalSrc}
+              width={displayWidth}
+              height={displayHeight}
+              color={colorScheme === 'dark' ? '#ffffff' : '#1a1a1a'}
+              onError={() => setSvgError(true)}
+            />
+          )
+        ) : (
+          <Image
+            source={{ uri: finalSrc }}
+            className="rounded-xl bg-[rgba(150,150,150,0.1)]"
+            style={imageStyle}
+            resizeMode="contain"
+          />
+        )}
       </Pressable>
     </View>
   );
@@ -309,6 +324,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
   ({ content, contentArray, segmentInfos, objectId, type, onRefresh }) => {
     const colorScheme = useColorScheme();
     const { width } = useWindowDimensions();
+    const { useWebView } = useSettingsStore();
     const textColor = Colors[colorScheme].text;
     const surfaceColor = Colors[colorScheme].surface;
     const router = useRouter();
@@ -543,7 +559,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
       () => ({
         p: { color: textColor, fontSize: 18, lineHeight: 28, marginBottom: 20 },
         b: { color: Colors[colorScheme].primary, fontWeight: 'bold' },
-        img: { borderRadius: 12, marginVertical: 10 },
+        img: { borderRadius: 12, marginVertical: 10, display: 'inline' },
         blockquote: {
           borderLeftWidth: 4,
           borderLeftColor: Colors[colorScheme].primary,
@@ -698,7 +714,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
       <View className="bg-transparent">
         {contentArray ? (
           renderPinContent()
-        ) : useNativeFallback ? (
+        ) : (!useWebView || useNativeFallback) ? (
           <View className="px-1">
             <RenderHtml
               contentWidth={width - 40}

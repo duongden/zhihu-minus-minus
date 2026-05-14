@@ -62,13 +62,13 @@ export default function AnswerDetailScreen() {
   // 3. 构建 ID 列表
   const answerIds = useMemo(() => {
     const listIds = answersData?.pages.flatMap((p: any) => p.data).map((i: any) => i.id.toString()) || [];
-    
+
     let combined = listIds;
     // 确保初始 ID 在列表中
     if (initialId && !listIds.includes(initialId)) {
       combined = [initialId, ...listIds];
     }
-    
+
     // 使用 Set 去重
     return Array.from(new Set(combined));
   }, [answersData, initialId]);
@@ -118,27 +118,49 @@ export default function AnswerDetailScreen() {
     <View className="flex-1">
       <Stack.Screen options={{ headerShown: false }} />
 
-      {/* Question Area (Fixed) */}
-      <Pressable
-        className="mx-5 py-[15px] flex-row items-center justify-between bg-transparent"
-        onPress={() =>
-          router.push(`/question/${initialAnswer?.question?.id || questionId}`)
-        }
-        style={{ marginTop: insets.top + 45 }}
+      {/* Header Bar */}
+      <View
+        className="flex-row items-center px-2.5"
+        style={{
+          marginTop: insets.top + 8,
+          minHeight: 44,
+          backgroundColor: colorScheme === 'dark' ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.6)'
+        }}
       >
-        <Reanimated.View
-          sharedTransitionTag={`title-${questionId || id}`}
-          sharedTransitionStyle={slowTransition}
-          className="flex-1 mr-2.5 bg-transparent"
+        {/* 返回按钮 */}
+        <Pressable
+          onPress={() => router.back()}
+          className="w-10 h-10 justify-center items-center"
         >
-          <Text className="text-[18px] font-bold leading-6">
-            {initialAnswer?.question?.title || (initialTitle as string) || '加载中...'}
-          </Text>
-        </Reanimated.View>
-        {!loadingInitial && (
-          <Ionicons name="chevron-forward" size={18} color="#999" />
-        )}
-      </Pressable>
+          <Ionicons name="chevron-back" size={28} color={textColor} />
+        </Pressable>
+
+        {/* 标题区域 */}
+        <Pressable
+          className="flex-1 mx-2"
+          onPress={() =>
+            router.push(`/question/${initialAnswer?.question?.id || questionId}`)
+          }
+        >
+          <Reanimated.View
+            sharedTransitionTag={`title-${questionId || id}`}
+            sharedTransitionStyle={slowTransition}
+            className="bg-transparent"
+          >
+            <Text className="text-[18px] font-bold leading-6" numberOfLines={2}>
+              {initialAnswer?.question?.title || (initialTitle as string) || '加载中...'}
+            </Text>
+          </Reanimated.View>
+        </Pressable>
+
+        {/* 分享按钮 */}
+        <Pressable
+          onPress={() => setIsSharing(true)}
+          className="w-10 h-10 justify-center items-center"
+        >
+          <Ionicons name="share-outline" size={24} color={textColor} />
+        </Pressable>
+      </View>
 
       <PagerView
         key={pagerKey}
@@ -152,7 +174,7 @@ export default function AnswerDetailScreen() {
           if (newId) {
             router.setParams({ id: newId });
           }
-          
+
           // 如果滑到了最后几个，预加载下一页 ID
           if (newIndex >= answerIds.length - 3 && hasNextPage && !isFetchingNextPage) {
             fetchNextPage();
@@ -172,23 +194,7 @@ export default function AnswerDetailScreen() {
         ))}
       </PagerView>
 
-      {/* 固定在顶部的返回按钮 */}
-      <Pressable
-        onPress={() => router.back()}
-        className="absolute left-2.5 z-[100] w-10 h-10 justify-center items-center"
-        style={{ top: insets.top + 8 }}
-      >
-        <Ionicons name="chevron-back" size={28} color={textColor} />
-      </Pressable>
 
-      {/* 固定在顶部的分享按钮 */}
-      <Pressable
-        onPress={() => setIsSharing(true)}
-        className="absolute right-2.5 z-[100] w-10 h-10 justify-center items-center"
-        style={{ top: insets.top + 8 }}
-      >
-        <Ionicons name="share-outline" size={24} color={textColor} />
-      </Pressable>
 
       <ShareMenu
         visible={isSharing}
