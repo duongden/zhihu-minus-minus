@@ -206,6 +206,50 @@ export default React.memo(function ZhihuDOMContent({
           console.error('Failed to parse segmentInfos', e);
         }
 
+        // Process footnotes
+        try {
+          const footnotes = container.querySelectorAll('sup[data-text]');
+          if (footnotes.length > 0) {
+            const footnoteList = document.createElement('div');
+            footnoteList.style.marginTop = '40px';
+            footnoteList.style.borderTop = '1px solid rgba(150,150,150,0.2)';
+            footnoteList.style.paddingTop = '15px';
+            footnoteList.style.fontSize = '14px';
+            
+            const title = document.createElement('h4');
+            title.innerText = '注脚';
+            title.style.margin = '0 0 10px 0';
+            title.style.fontSize = '16px';
+            title.style.color = '${textColor}';
+            footnoteList.appendChild(title);
+            
+            footnotes.forEach((sup) => {
+              const text = sup.getAttribute('data-text');
+              const numero = sup.getAttribute('data-numero') || sup.innerText.replace('[', '').replace(']', '');
+              
+              const footnoteId = 'footnote-' + numero;
+              const refId = 'ref-' + numero;
+              sup.id = refId;
+              
+              const item = document.createElement('div');
+              item.id = footnoteId;
+              item.style.marginBottom = '8px';
+              item.style.lineHeight = '1.5';
+              item.style.color = '${isDark ? '#aaa' : '#666'}';
+              
+              item.innerHTML = '<a href="#' + refId + '" style="color:${primaryColor}; text-decoration:none; font-weight:bold;">[' + numero + ']</a> ' + text;
+              
+              footnoteList.appendChild(item);
+              
+              sup.innerHTML = '<a href="#' + footnoteId + '" style="color:${primaryColor}; text-decoration:none;">[' + numero + ']</a>';
+            });
+            
+            container.appendChild(footnoteList);
+          }
+        } catch (e) {
+          console.error('Failed to process footnotes', e);
+        }
+
         // Render Math
         renderMathInElement(container, {
           delimiters: [
