@@ -16,12 +16,11 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BouncyButton } from '@/components/BouncyButton';
+import { Section, SettingItem } from '@/components/SettingItem';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
-import { feedExposureRepository } from '@/storage/feedExposureRepository';
 import { type TabKey, useSettingsStore } from '@/store/useSettingsStore';
-import { showToast } from '@/utils/toast';
 
 // 开启 Android 下的 LayoutAnimation
 if (
@@ -61,8 +60,6 @@ export default function AppearanceSettings() {
     useWebView,
     enablePrivateMessaging,
     enableBrowseHistory,
-    enableLocalFeedDedup,
-    enableFeedCacheOnLaunch,
     pressOpacity,
     pressScale,
     androidFeedbackType,
@@ -569,65 +566,6 @@ export default function AppearanceSettings() {
               trackColor={{ true: tintColor }}
             />
           </SettingItem>
-          <SettingItem
-            label="本地 Feed 去重"
-            icon="layers-outline"
-            colorScheme={colorScheme}
-          >
-            <Switch
-              value={enableLocalFeedDedup}
-              onValueChange={(val) =>
-                updateSettings({ enableLocalFeedDedup: val })
-              }
-              trackColor={{ true: tintColor }}
-            />
-          </SettingItem>
-          <SettingItem
-            label="启动时保留推荐流"
-            icon="bookmark-outline"
-            colorScheme={colorScheme}
-          >
-            <Switch
-              value={enableFeedCacheOnLaunch}
-              onValueChange={(val) =>
-                updateSettings({ enableFeedCacheOnLaunch: val })
-              }
-              trackColor={{ true: tintColor }}
-            />
-          </SettingItem>
-          <SettingItem
-            label="清除本地去重记录"
-            icon="trash-bin-outline"
-            colorScheme={colorScheme}
-          >
-            <Pressable
-              onPress={() => {
-                Alert.alert(
-                  '清除本地去重记录',
-                  '清除后，近期看过的推荐内容可能再次出现。',
-                  [
-                    { text: '取消', style: 'cancel' },
-                    {
-                      text: '清除',
-                      style: 'destructive',
-                      onPress: async () => {
-                        try {
-                          await feedExposureRepository.clearAll();
-                          showToast('本地去重记录已清除');
-                        } catch (error) {
-                          console.error('清除本地去重记录失败', error);
-                          showToast('清除失败，请稍后重试');
-                        }
-                      },
-                    },
-                  ],
-                );
-              }}
-              className="px-3 py-1.5"
-            >
-              <Text style={{ color: Colors[colorScheme].danger }}>清除</Text>
-            </Pressable>
-          </SettingItem>
         </Section>
 
         <Pressable
@@ -652,84 +590,6 @@ export default function AppearanceSettings() {
           </Text>
         </Pressable>
       </ScrollView>
-    </RNView>
-  );
-}
-
-// ================= UI Components =================
-
-function Section({
-  title,
-  children,
-  colorScheme,
-}: {
-  title: string;
-  children: React.ReactNode;
-  colorScheme: 'light' | 'dark';
-}) {
-  const isDark = colorScheme === 'dark';
-  const cardBg = isDark ? '#1C1C1E' : '#FFFFFF';
-  const dividerColor = isDark ? '#38383A' : '#E5E5EA';
-
-  // 为 Section 内部元素自动添加底部分割线
-  const childArray = React.Children.toArray(children).filter(Boolean);
-
-  return (
-    <RNView style={styles.section}>
-      <Text style={styles.sectionTitle} type="secondary">
-        {title}
-      </Text>
-      <RNView style={[styles.sectionContent, { backgroundColor: cardBg }]}>
-        {childArray.map((child, index) => {
-          const isLast = index === childArray.length - 1;
-          return (
-            <RNView
-              // biome-ignore lint/suspicious/noArrayIndexKey: childArray 来自 React.Children,子元素在调用处的 JSX 里逐个写死,数量与顺序在编译期就固定了。
-              key={index}
-            >
-              {child}
-              {!isLast && (
-                <RNView
-                  style={[styles.divider, { backgroundColor: dividerColor }]}
-                />
-              )}
-            </RNView>
-          );
-        })}
-      </RNView>
-    </RNView>
-  );
-}
-
-function SettingItem({
-  label,
-  icon,
-  children,
-  colorScheme,
-}: {
-  label: string;
-  icon?: keyof typeof Ionicons.glyphMap;
-  children: React.ReactNode;
-  colorScheme: 'light' | 'dark';
-}) {
-  return (
-    <RNView style={styles.settingItem}>
-      <RNView style={styles.settingLabelContainer}>
-        {icon && (
-          <RNView
-            style={[
-              styles.iconWrapper,
-              {
-                backgroundColor: colorScheme === 'dark' ? '#2C2C2E' : '#F2F2F7',
-              },
-            ]}
-          >
-            <Ionicons name={icon} size={16} color={Colors[colorScheme].text} />
-          </RNView>
-        )}
-        <Text style={styles.settingLabel}>{label}</Text>
-      </RNView>
-      {children}
     </RNView>
   );
 }
@@ -1061,43 +921,6 @@ function ColorPickerSection({ primaryColor, onColorChange }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  section: { marginBottom: 28 },
-  sectionTitle: {
-    fontSize: 13,
-    marginBottom: 8,
-    marginLeft: 16,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  sectionContent: {
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    marginLeft: 48, // 避开 Icon 区域的分割线
-  },
-  settingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    minHeight: 52,
-  },
-  settingLabelContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  iconWrapper: {
-    width: 28,
-    height: 28,
-    borderRadius: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  settingLabel: { fontSize: 16 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
