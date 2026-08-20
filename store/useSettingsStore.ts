@@ -74,7 +74,7 @@ export interface AppSettings {
   /** 过滤总开关。默认关：行为改变型功能不在升级后静默生效。 */
   enableLocalFeedFilter: boolean;
   /** 被过滤内容的展示方式：折叠占位（默认）或直接隐藏。 */
-  filterMode: 'collapse' | 'hide';
+  filterMode: FilterMode;
   /** 折叠模式下是否在占位行上显示原因文案（仅折叠模式有载体）。 */
   filterShowReason: boolean;
   // 推广 / 营销类开关型规则
@@ -96,7 +96,7 @@ export interface AppSettings {
   /** 质量过滤开关，与上面推广开关独立。 */
   filterEnableQuality: boolean;
   /** 三档强度阈值，驱动四类内容的组合条件（详见 utils/feedFilter.ts）。 */
-  filterQualityLevel: 'loose' | 'standard' | 'strict';
+  filterQualityLevel: FilterQualityLevel;
   // 豁免
   /** 关注作者的内容永不过滤（质量规则的内建豁免依据） */
   filterKeepFollowing: boolean;

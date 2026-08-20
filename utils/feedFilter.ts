@@ -148,14 +148,17 @@ export function evaluateFeedItem(
   return KEEP;
 }
 
-/** `answer_type === 'PAID'` 或 `paid_info != null`，两个版本接口的信号取或。 */
+/** 盐选判定。双信号（answer_type === 'PAID' 或 paid_info != null）已在
+ * parseRecommendData 解析阶段归一成 answerType === 'PAID'，这里只读结果。 */
 function isPaidAnswer(item: FeedItem): boolean {
   return item.answerType === 'PAID';
 }
 
+type QualityThreshold = (typeof QUALITY_THRESHOLDS)[FilterQualityLevel];
+
 function qualityReason(
   item: FeedItem,
-  t: (typeof QUALITY_THRESHOLDS)[FilterQualityLevel],
+  t: QualityThreshold,
 ): string | null {
   switch (item.type) {
     case 'answers':

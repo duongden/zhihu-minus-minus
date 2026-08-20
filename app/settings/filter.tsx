@@ -4,13 +4,11 @@ import { Stack } from 'expo-router';
 import { useMemo } from 'react';
 import {
   Alert,
-  Platform,
   Pressable,
   View as RNView,
   ScrollView,
   StyleSheet,
   Switch,
-  UIManager,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { FeedItem } from '@/api/zhihu';
@@ -26,14 +24,6 @@ import { feedExposureRepository } from '@/storage/feedExposureRepository';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { computeFilterStats } from '@/utils/feedFilter';
 import { showToast } from '@/utils/toast';
-
-// LayoutAnimation 在 Android 上需显式开启
-if (
-  Platform.OS === 'android' &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
 
 const QUALITY_LEVELS: {
   key: 'loose' | 'standard' | 'strict';

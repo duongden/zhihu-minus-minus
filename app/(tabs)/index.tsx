@@ -90,10 +90,10 @@ const TABS = [
 type TabType = (typeof TABS)[number];
 type FeedListItem = FeedItem | HotItem | CollapsedGroup;
 
-// 自动补页阈值：隐藏模式下被过滤项不占行，列表偏短时自动续页避免空白。
-// 触顶后在列表底部显示提示，不静默停止。
+// 隐藏模式下被过滤项不占行；列表短于该阈值且已无更多页时，footer 给出
+// 一句诚实的提示，避免用户以为加载卡住。折叠模式下过滤项仍占一行，
+// 不会触发该阈值。
 const MIN_RENDERABLE_ITEMS = 8;
-const MAX_AUTO_FETCH_ROUNDS = 3;
 
 export default function HomeScreen() {
   const { width: windowWidth } = useWindowDimensions();
@@ -797,8 +797,6 @@ const FeedList = React.forwardRef<
         return next;
       });
     }, []);
-    // 自动补页：隐藏模式下被过滤项不占行，列表偏短时自动续页避免空白
-    const [autoFetchRounds, setAutoFetchRounds] = useState(0);
     const [recentExposureKeys, setRecentExposureKeys] =
       useState<Set<string> | null>(() =>
         localDedupEnabled ? null : new Set(),
@@ -970,9 +968,8 @@ const FeedList = React.forwardRef<
     const handleRefresh = useCallback(async () => {
       setIsRefreshing(true);
       onRefreshStateChange?.(true);
-      // 刷新即重置折叠展开状态与自动补页计数
+      // 刷新即重置折叠展开状态（计划要求展开不持久化）
       setExpandedCollapsedKeys(new Set());
-      setAutoFetchRounds(0);
       try {
         if (localDedupEnabled && exposureContext) {
           try {
@@ -1092,17 +1089,10 @@ const FeedList = React.forwardRef<
           return `feed-${key || index}`;
         }}
         onEndReached={() => {
-          if (!hasNextPage || isFetchingNextPage) return;
-          // 隐藏模式下被过滤项不占行，列表偏短时自动续页避免空白；
-          // 触顶 MAX_AUTO_FETCH_ROUNDS 次后不再静默续页，由 footer 提示
-          if (
-            filterEnabled &&
-            flattenedData.length < MIN_RENDERABLE_ITEMS &&
-            autoFetchRounds < MAX_AUTO_FETCH_ROUNDS
-          ) {
-            setAutoFetchRounds((n) => n + 1);
-          }
-          fetchNextPage();
+          // 只要有下一页就继续追加。隐藏模式被过滤项不占行，列表自然偏短，
+          // 这里依靠 hasNextPage 持续续页即可；列表过短且已到底时由 footer
+          // 给出一句诚实的提示，避免用户以为加载卡住。
+          if (hasNextPage && !isFetchingNextPage) fetchNextPage();
         }}
         onEndReachedThreshold={0.5}
         onViewableItemsChanged={onViewableItemsChanged}
@@ -1124,7 +1114,7 @@ const FeedList = React.forwardRef<
           paddingTop: insets.top + 70,
           paddingBottom: 120,
         }}
-        renderItem={({ item }: { item: any }) => {
+        renderItem={({ item }: { item: FeedListItem }) => {
           if (isCollapsedGroup(item)) {
             const expanded = expandedCollapsedKeys.has(item.groupKey);
             const showReason = filterMode === 'collapse' && filterShowReason;
@@ -1151,9 +1141,11 @@ const FeedList = React.forwardRef<
             );
           }
           return tab === 'hot' ? (
-            <HotCard item={item} />
+            // tab 在该 FeedList 实例生命周期内不变，是可靠的运行时判别：
+            // hot tab 的 data 只含 HotItem，其余 tab 只含 FeedItem（折叠行已在上层排除）。
+            <HotCard item={item as HotItem} />
           ) : (
-            <FeedCard item={item} tab={tab} />
+            <FeedCard item={item as FeedItem} tab={tab} />
           );
         }}
         ListHeaderComponent={tab === 'following' ? <RecentMoments /> : null}
@@ -1162,7 +1154,7 @@ const FeedList = React.forwardRef<
             <ActivityIndicator style={{ margin: 20 }} />
           ) : filterEnabled &&
             !hasNextPage &&
-            autoFetchRounds >= MAX_AUTO_FETCH_ROUNDS ? (
+            flattenedData.length <= MIN_RENDERABLE_ITEMS ? (
             <Text
               type="secondary"
               style={{ textAlign: 'center', margin: 20, fontSize: 12 }}
