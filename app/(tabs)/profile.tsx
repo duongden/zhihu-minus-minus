@@ -340,6 +340,12 @@ export default function ProfileScreen() {
           color={accentColor}
           onPress={() => router.push('/settings/appearance' as any)}
         />
+        <MenuItem
+          icon="filter-outline"
+          title="过滤与推荐"
+          color={accentColor}
+          onPress={() => router.push('/settings/filter' as any)}
+        />
 
         <MenuItem
           icon="notifications-outline"

@@ -57,6 +57,13 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { type TabKey, useSettingsStore } from '@/store/useSettingsStore';
 import { supportsLocalFeedDedup } from '@/utils/feedDedup';
 import {
+  applyFeedFilter,
+  type CollapsedGroup,
+  type FeedFilterRules,
+  isCollapsedGroup,
+  supportsLocalFeedFilter,
+} from '@/utils/feedFilter';
+import {
   type FeedContentIdentity,
   getFeedContentIdentity,
   getFeedContentKey,
@@ -81,7 +88,12 @@ const TABS = [
   'profile',
 ] as const;
 type TabType = (typeof TABS)[number];
-type FeedListItem = FeedItem | HotItem;
+type FeedListItem = FeedItem | HotItem | CollapsedGroup;
+
+// 隐藏模式下被过滤项不占行；列表短于该阈值且已无更多页时，footer 给出
+// 一句诚实的提示，避免用户以为加载卡住。折叠模式下过滤项仍占一行，
+// 不会触发该阈值。
+const MIN_RENDERABLE_ITEMS = 8;
 
 export default function HomeScreen() {
   const { width: windowWidth } = useWindowDimensions();
@@ -700,8 +712,24 @@ const FeedList = React.forwardRef<
   ) => {
     const queryClient = useQueryClient();
     const { cookies, me } = useAuthStore();
-    const { enableLocalFeedDedup, enableFeedCacheOnLaunch } =
-      useSettingsStore();
+    const {
+      enableLocalFeedDedup,
+      enableFeedCacheOnLaunch,
+      enableLocalFeedFilter,
+      filterMode,
+      filterShowReason,
+      filterBlockPaid,
+      filterBlockAdPlatform,
+      filterBlockZhihuSchool,
+      filterBlockWeChat,
+      filterBlockLabeled,
+      filterBlockOrgAuthor,
+      filterBlockAdvertiser,
+      filterEnableQuality,
+      filterQualityLevel,
+      filterKeepFollowing,
+      filterKeepUpvotedByFollowee,
+    } = useSettingsStore();
     const _colorScheme = useColorScheme();
     const tintColor = useThemeColor({}, 'primary');
     const [isRefreshing, setIsRefreshing] = useState(false);
@@ -726,6 +754,49 @@ const FeedList = React.forwardRef<
       if (!localAccountKey) return null;
       return { accountKey: localAccountKey, feedType: tab };
     }, [enableFeedCacheOnLaunch, localAccountKey, tab]);
+
+    const filterRules = useMemo<FeedFilterRules>(
+      () => ({
+        blockPaid: filterBlockPaid,
+        blockAdPlatform: filterBlockAdPlatform,
+        blockZhihuSchool: filterBlockZhihuSchool,
+        blockWeChat: filterBlockWeChat,
+        blockLabeled: filterBlockLabeled,
+        blockOrgAuthor: filterBlockOrgAuthor,
+        blockAdvertiser: filterBlockAdvertiser,
+        enableQuality: filterEnableQuality,
+        qualityLevel: filterQualityLevel,
+        keepFollowing: filterKeepFollowing,
+        keepUpvotedByFollowee: filterKeepUpvotedByFollowee,
+      }),
+      [
+        filterBlockPaid,
+        filterBlockAdPlatform,
+        filterBlockZhihuSchool,
+        filterBlockWeChat,
+        filterBlockLabeled,
+        filterBlockOrgAuthor,
+        filterBlockAdvertiser,
+        filterEnableQuality,
+        filterQualityLevel,
+        filterKeepFollowing,
+        filterKeepUpvotedByFollowee,
+      ],
+    );
+    // 本地过滤仅作用于推荐流
+    const filterEnabled = enableLocalFeedFilter && supportsLocalFeedFilter(tab);
+    // 折叠组展开状态：刷新即重置，不持久化
+    const [expandedCollapsedKeys, setExpandedCollapsedKeys] = useState<
+      Set<string>
+    >(new Set());
+    const toggleCollapsed = useCallback((groupKey: string) => {
+      setExpandedCollapsedKeys((prev) => {
+        const next = new Set(prev);
+        if (next.has(groupKey)) next.delete(groupKey);
+        else next.add(groupKey);
+        return next;
+      });
+    }, []);
     const [recentExposureKeys, setRecentExposureKeys] =
       useState<Set<string> | null>(() =>
         localDedupEnabled ? null : new Set(),
@@ -818,7 +889,9 @@ const FeedList = React.forwardRef<
         if (!enabled || !context) return;
 
         const identities = viewableItems
-          .map((viewable) => getFeedContentIdentity(viewable.item))
+          .map((viewable) => viewable.item)
+          .filter((item): item is FeedItem | HotItem => !isCollapsedGroup(item))
+          .map((item) => getFeedContentIdentity(item))
           .filter(
             (identity): identity is FeedContentIdentity => identity !== null,
           );
@@ -895,6 +968,8 @@ const FeedList = React.forwardRef<
     const handleRefresh = useCallback(async () => {
       setIsRefreshing(true);
       onRefreshStateChange?.(true);
+      // 刷新即重置折叠展开状态（计划要求展开不持久化）
+      setExpandedCollapsedKeys(new Set());
       try {
         if (localDedupEnabled && exposureContext) {
           try {
@@ -930,9 +1005,16 @@ const FeedList = React.forwardRef<
     const flattenedData = useMemo(() => {
       const all = data?.pages.flatMap((page) => page.items) ?? [];
       const seen = new Set<string>();
-      return all.filter((item) => {
+      const deduped: FeedListItem[] = [];
+      for (const item of all) {
+        // 启动缓存与解析均只产出 FeedItem / HotItem，折叠行不会从源头进入；
+        // 这里仅做类型收窄，避免 CollapsedGroup 误传入 identity 函数。
+        if (isCollapsedGroup(item)) {
+          deduped.push(item);
+          continue;
+        }
         const inMemoryKey = getInMemoryFeedKey(item);
-        if (!inMemoryKey || seen.has(inMemoryKey)) return false;
+        if (!inMemoryKey || seen.has(inMemoryKey)) continue;
         seen.add(inMemoryKey);
 
         const persistentKey = getFeedContentKey(item);
@@ -941,11 +1023,43 @@ const FeedList = React.forwardRef<
           persistentKey &&
           recentExposureKeys?.has(persistentKey)
         ) {
-          return false;
+          continue;
         }
-        return true;
-      });
-    }, [data, localDedupEnabled, recentExposureKeys]);
+        deduped.push(item);
+      }
+
+      // 本地过滤仅作用于推荐流。Recommend tab 下 deduped 全为 FeedItem。
+      if (filterEnabled) {
+        const filtered = applyFeedFilter(
+          deduped as FeedItem[],
+          filterRules,
+          filterMode,
+        );
+        const out: FeedListItem[] = [];
+        for (const item of filtered) {
+          if (
+            isCollapsedGroup(item) &&
+            expandedCollapsedKeys.has(item.groupKey)
+          ) {
+            // 已展开：保留折叠行（变「已展开」态）并把内容平铺回列表
+            out.push(item);
+            for (const sub of item.items) out.push(sub);
+          } else {
+            out.push(item);
+          }
+        }
+        return out;
+      }
+      return deduped;
+    }, [
+      data,
+      localDedupEnabled,
+      recentExposureKeys,
+      filterEnabled,
+      filterRules,
+      filterMode,
+      expandedCollapsedKeys,
+    ]);
 
     const flashListRef = useRef<FlashListRef<FeedListItem>>(null);
 
@@ -970,12 +1084,16 @@ const FeedList = React.forwardRef<
         showsVerticalScrollIndicator={false}
         data={flattenedData}
         keyExtractor={(item, index) => {
+          if (isCollapsedGroup(item)) return `collapsed-${item.groupKey}`;
           const key = getInMemoryFeedKey(item);
           return `feed-${key || index}`;
         }}
-        onEndReached={() =>
-          hasNextPage && !isFetchingNextPage && fetchNextPage()
-        }
+        onEndReached={() => {
+          // 只要有下一页就继续追加。隐藏模式被过滤项不占行，列表自然偏短，
+          // 这里依靠 hasNextPage 持续续页即可；列表过短且已到底时由 footer
+          // 给出一句诚实的提示，避免用户以为加载卡住。
+          if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+        }}
         onEndReachedThreshold={0.5}
         onViewableItemsChanged={onViewableItemsChanged}
         viewabilityConfig={viewabilityConfig}
@@ -996,17 +1114,53 @@ const FeedList = React.forwardRef<
           paddingTop: insets.top + 70,
           paddingBottom: 120,
         }}
-        renderItem={({ item }: { item: any }) =>
-          tab === 'hot' ? (
-            <HotCard item={item} />
+        renderItem={({ item }: { item: FeedListItem }) => {
+          if (isCollapsedGroup(item)) {
+            const expanded = expandedCollapsedKeys.has(item.groupKey);
+            const showReason = filterMode === 'collapse' && filterShowReason;
+            return (
+              <Pressable
+                onPress={() => toggleCollapsed(item.groupKey)}
+                className="mx-2 my-1 flex-row items-center justify-between rounded-xl px-4 py-3"
+                style={{ backgroundColor: tintColor + '14' }}
+              >
+                <Text type="secondary">
+                  {expanded
+                    ? `已展开 ${item.items.length} 条`
+                    : `已折叠 ${item.items.length} 条`}
+                  {showReason && !expanded && item.reasons.length > 0
+                    ? ` · ${item.reasons.join('、')}`
+                    : ''}
+                </Text>
+                <Ionicons
+                  name={expanded ? 'chevron-up' : 'chevron-down'}
+                  size={16}
+                  color={tintColor}
+                />
+              </Pressable>
+            );
+          }
+          return tab === 'hot' ? (
+            // tab 在该 FeedList 实例生命周期内不变，是可靠的运行时判别：
+            // hot tab 的 data 只含 HotItem，其余 tab 只含 FeedItem（折叠行已在上层排除）。
+            <HotCard item={item as HotItem} />
           ) : (
-            <FeedCard item={item} tab={tab} />
-          )
-        }
+            <FeedCard item={item as FeedItem} tab={tab} />
+          );
+        }}
         ListHeaderComponent={tab === 'following' ? <RecentMoments /> : null}
         ListFooterComponent={
           isFetchingNextPage ? (
             <ActivityIndicator style={{ margin: 20 }} />
+          ) : filterEnabled &&
+            !hasNextPage &&
+            flattenedData.length <= MIN_RENDERABLE_ITEMS ? (
+            <Text
+              type="secondary"
+              style={{ textAlign: 'center', margin: 20, fontSize: 12 }}
+            >
+              过滤后内容偏少，已无更多可加载
+            </Text>
           ) : null
         }
         ListEmptyComponent={
@@ -1114,6 +1268,26 @@ function parseRecommendData(item: RawFeedItem): FeedItem | null {
     voted: target.relationship?.voting || 0,
     type: appType,
     topics: target.topics?.map((t: any) => ({ id: t.id, name: t.name })) || [],
+    // 本地过滤信号：实测推荐流可用字段（详见 utils/feedFilter.ts）
+    // 盐选双信号取或：answer_type === 'PAID' 或 paid_info != null
+    answerType:
+      target.answer_type === 'PAID' || target.paid_info != null
+        ? 'PAID'
+        : target.answer_type,
+    isLabeled: Boolean(target.is_labeled),
+    isOrgAuthor: Boolean(target.author?.is_org),
+    isAdvertiser: Boolean(target.author?.is_advertiser),
+    isFollowingAuthor: Boolean(target.author?.is_following),
+    upvotedByFollowee:
+      (target.relationship?.upvoted_followee_ids?.length ?? 0) > 0,
+    boundTopicIds: target.question?.bound_topic_ids,
+    // question 类型 target 自身即 question，答案/文章则从嵌套 question 读取
+    answerCount:
+      type === 'question' ? target.answer_count : target.question?.answer_count,
+    followerCount:
+      type === 'question'
+        ? target.follower_count
+        : target.question?.follower_count,
   };
 }
 

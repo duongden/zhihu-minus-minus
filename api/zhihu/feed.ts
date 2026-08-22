@@ -34,6 +34,25 @@ export interface FeedItem {
   rank?: number;
   hotValue?: string;
   titleString?: string;
+  // —— 本地过滤所需的结构化信号（实测推荐流可用字段，见 utils/feedFilter.ts）——
+  /** `answer_type === 'PAID'` 或 `paid_info != null` 即知乎盐选付费内容 */
+  answerType?: string;
+  /** 推广/利益声明标记，话题流返回、推荐流通常不返回 */
+  isLabeled?: boolean;
+  /** author.is_org —— 机构号 */
+  isOrgAuthor?: boolean;
+  /** author.is_advertiser —— 广告主 */
+  isAdvertiser?: boolean;
+  /** author.is_following —— 当前用户是否关注作者（质量规则的内建豁免依据） */
+  isFollowingAuthor?: boolean;
+  /** relationship.upvoted_followee_ids 非空 —— 我关注的人赞过 */
+  upvotedByFollowee?: boolean;
+  /** question.bound_topic_ids，为二期话题屏蔽预留 */
+  boundTopicIds?: number[];
+  /** question.answer_count，问题类型质量判定用 */
+  answerCount?: number;
+  /** question.follower_count，问题类型质量判定用 */
+  followerCount?: number;
 }
 
 export interface RawFeedTarget {
@@ -49,6 +68,12 @@ export interface RawFeedTarget {
   comment_count?: number;
   favlists_count?: number;
   favorite_count?: number;
+  /** 回答类型：`NORMAL` / `PAID`；`PAID` 即知乎盐选付费内容 */
+  answer_type?: string;
+  /** 盐选付费信息，与 `answer_type === 'PAID'` 取或作为兜底信号 */
+  paid_info?: unknown;
+  /** 推广/利益声明标记（话题流返回，推荐流通常不返回） */
+  is_labeled?: boolean;
   reaction?: {
     relation?: {
       liked?: boolean;
@@ -61,6 +86,8 @@ export interface RawFeedTarget {
   };
   relationship?: {
     voting?: number;
+    /** 我关注的人赞过该内容的作者 ID 列表（推荐流可返回） */
+    upvoted_followee_ids?: unknown[];
   };
   author?: {
     id: string;
@@ -68,10 +95,22 @@ export interface RawFeedTarget {
     avatar_url: string;
     headline?: string;
     url_token?: string;
+    /** 机构号标记 */
+    is_org?: boolean;
+    /** 广告主标记 */
+    is_advertiser?: boolean;
+    /** 当前用户是否关注该作者 */
+    is_following?: boolean;
   };
   question?: {
     id: string | number;
     title: string;
+    /** 问题绑定的顶级话题 ID 列表 */
+    bound_topic_ids?: number[];
+    /** 问题下的回答数 */
+    answer_count?: number;
+    /** 问题关注数 */
+    follower_count?: number;
   };
   topics?: Array<{
     id: string;

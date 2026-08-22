@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import type { FilterMode, FilterQualityLevel } from '@/utils/feedFilter';
 
 const settingsStorage = {
   getItem: (name: string) => SecureStore.getItemAsync(name),
@@ -18,6 +19,23 @@ function isValidHex(color: string | null | undefined): boolean {
 /** Sanitize a color value: returns the color if valid, null otherwise */
 function sanitizeColor(color: string | null | undefined): string | null {
   return isValidHex(color) ? (color as string) : null;
+}
+
+const VALID_FILTER_MODES: ReadonlyArray<FilterMode> = ['collapse', 'hide'];
+const VALID_QUALITY_LEVELS: ReadonlyArray<FilterQualityLevel> = [
+  'loose',
+  'standard',
+  'strict',
+];
+
+function isValidFilterMode(v: unknown): v is FilterMode {
+  return typeof v === 'string' && (VALID_FILTER_MODES as string[]).includes(v);
+}
+
+function isValidQualityLevel(v: unknown): v is FilterQualityLevel {
+  return (
+    typeof v === 'string' && (VALID_QUALITY_LEVELS as string[]).includes(v)
+  );
 }
 
 export type TabKey =
@@ -51,6 +69,39 @@ export interface AppSettings {
   enableLocalFeedDedup: boolean;
   /** 是否在冷启动时保留上次的推荐流内容 */
   enableFeedCacheOnLaunch: boolean;
+
+  // —— 本地内容过滤（见 utils/feedFilter.ts）——
+  /** 过滤总开关。默认关：行为改变型功能不在升级后静默生效。 */
+  enableLocalFeedFilter: boolean;
+  /** 被过滤内容的展示方式：折叠占位（默认）或直接隐藏。 */
+  filterMode: FilterMode;
+  /** 折叠模式下是否在占位行上显示原因文案（仅折叠模式有载体）。 */
+  filterShowReason: boolean;
+  // 推广 / 营销类开关型规则
+  /** answer_type === 'PAID' 或 paid_info != null（知乎盐选付费内容） */
+  filterBlockPaid: boolean;
+  /** 正文含 xg.zhihu.com（知乎广告平台推流） */
+  filterBlockAdPlatform: boolean;
+  /** 正文含 d.zhihu.com / data-edu-card-id（知乎学堂课程卡片） */
+  filterBlockZhihuSchool: boolean;
+  /** 正文含 mp.weixin.qq.com（微信公众号引流文章） */
+  filterBlockWeChat: boolean;
+  /** is_labeled（带推广标记的内容） */
+  filterBlockLabeled: boolean;
+  /** author.is_org（机构号发布的内容；默认放行，机构号也有正经内容） */
+  filterBlockOrgAuthor: boolean;
+  /** author.is_advertiser（广告主发布的内容） */
+  filterBlockAdvertiser: boolean;
+  // 内容质量过滤
+  /** 质量过滤开关，与上面推广开关独立。 */
+  filterEnableQuality: boolean;
+  /** 三档强度阈值，驱动四类内容的组合条件（详见 utils/feedFilter.ts）。 */
+  filterQualityLevel: FilterQualityLevel;
+  // 豁免
+  /** 关注作者的内容永不过滤（质量规则的内建豁免依据） */
+  filterKeepFollowing: boolean;
+  /** 我关注的人赞过的内容永不过滤 */
+  filterKeepUpvotedByFollowee: boolean;
 }
 
 interface SettingsState extends AppSettings {
@@ -74,6 +125,20 @@ const DEFAULT_SETTINGS: AppSettings = {
   enableBrowseHistory: true,
   enableLocalFeedDedup: false,
   enableFeedCacheOnLaunch: false,
+  enableLocalFeedFilter: false,
+  filterMode: 'collapse',
+  filterShowReason: true,
+  filterBlockPaid: true,
+  filterBlockAdPlatform: true,
+  filterBlockZhihuSchool: true,
+  filterBlockWeChat: true,
+  filterBlockLabeled: true,
+  filterBlockOrgAuthor: false,
+  filterBlockAdvertiser: true,
+  filterEnableQuality: true,
+  filterQualityLevel: 'standard',
+  filterKeepFollowing: true,
+  filterKeepUpvotedByFollowee: true,
 };
 
 export const useSettingsStore = create<SettingsState>()(
@@ -100,6 +165,13 @@ export const useSettingsStore = create<SettingsState>()(
           }
           // 兜底：非法 hex 颜色退回默认（null）
           nextSettings.primaryColor = sanitizeColor(nextSettings.primaryColor);
+          // 兜底：过滤 union 字段写入非枚举值时退回默认
+          if (!isValidFilterMode(nextSettings.filterMode)) {
+            nextSettings.filterMode = 'collapse';
+          }
+          if (!isValidQualityLevel(nextSettings.filterQualityLevel)) {
+            nextSettings.filterQualityLevel = 'standard';
+          }
           return nextSettings;
         }),
       resetSettings: () => set(DEFAULT_SETTINGS),
@@ -107,7 +179,7 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'zhihu-settings-storage',
       storage: createJSONStorage(() => settingsStorage),
-      version: 7,
+      version: 8,
       migrate: (persistedState: any, version: number) => {
         // 清理历史脏数据：null 或非法 hex 都退回默认蓝
         const sanitized = sanitizeColor(persistedState?.primaryColor);
@@ -138,6 +210,43 @@ export const useSettingsStore = create<SettingsState>()(
         if (version < 7) {
           persistedState.enableFeedCacheOnLaunch =
             persistedState.enableFeedCacheOnLaunch ?? false;
+        }
+
+        // 升级到 v8 时兜底本地内容过滤字段
+        if (version < 8) {
+          persistedState.enableLocalFeedFilter = false;
+          persistedState.filterMode = isValidFilterMode(
+            persistedState.filterMode,
+          )
+            ? persistedState.filterMode
+            : 'collapse';
+          persistedState.filterShowReason =
+            persistedState.filterShowReason ?? true;
+          persistedState.filterBlockPaid =
+            persistedState.filterBlockPaid ?? true;
+          persistedState.filterBlockAdPlatform =
+            persistedState.filterBlockAdPlatform ?? true;
+          persistedState.filterBlockZhihuSchool =
+            persistedState.filterBlockZhihuSchool ?? true;
+          persistedState.filterBlockWeChat =
+            persistedState.filterBlockWeChat ?? true;
+          persistedState.filterBlockLabeled =
+            persistedState.filterBlockLabeled ?? true;
+          persistedState.filterBlockOrgAuthor =
+            persistedState.filterBlockOrgAuthor ?? false;
+          persistedState.filterBlockAdvertiser =
+            persistedState.filterBlockAdvertiser ?? true;
+          persistedState.filterEnableQuality =
+            persistedState.filterEnableQuality ?? true;
+          persistedState.filterQualityLevel = isValidQualityLevel(
+            persistedState.filterQualityLevel,
+          )
+            ? persistedState.filterQualityLevel
+            : 'standard';
+          persistedState.filterKeepFollowing =
+            persistedState.filterKeepFollowing ?? true;
+          persistedState.filterKeepUpvotedByFollowee =
+            persistedState.filterKeepUpvotedByFollowee ?? true;
         }
 
         return persistedState as SettingsState;
