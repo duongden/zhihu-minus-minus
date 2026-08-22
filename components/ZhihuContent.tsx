@@ -20,7 +20,7 @@ import {
   TouchableWithoutFeedback,
   useWindowDimensions,
 } from 'react-native';
-import ImageViewer from 'react-native-image-zoom-viewer';
+import { ImagePreviewModal } from '@/components/ImagePreviewModal';
 import RenderHtml, {
   type CustomBlockRenderer,
   defaultSystemFonts,
@@ -1253,25 +1253,11 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
           </Modal>
         )}
 
-        {viewerVisible && (
-          <Modal
-            visible={viewerVisible}
-            transparent={true}
-            onRequestClose={() => setViewerVisible(false)}
-          >
-            {viewerImage && (
-              <ImageViewer
-                imageUrls={[{ url: viewerImage }]}
-                onCancel={() => setViewerVisible(false)}
-                onClick={() => setViewerVisible(false)}
-                enableSwipeDown={true}
-                onSwipeDown={() => setViewerVisible(false)}
-                renderIndicator={() => <></>}
-                saveToLocalByLongPress={false}
-              />
-            )}
-          </Modal>
-        )}
+        <ImagePreviewModal
+          visible={viewerVisible && Boolean(viewerImage)}
+          imageUrls={viewerImage ? [viewerImage] : []}
+          onClose={() => setViewerVisible(false)}
+        />
 
         {textSelection && type === 'answer' && (
           <View

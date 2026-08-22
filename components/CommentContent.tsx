@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import type React from 'react';
 import { useState } from 'react';
-import { Image, Modal } from 'react-native';
-import ImageViewer from 'react-native-image-zoom-viewer';
+import { Image } from 'react-native';
+import { ImagePreviewModal } from '@/components/ImagePreviewModal';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { saveImageToGallery } from '@/utils/saveImage';
 import { BouncyButton } from './BouncyButton';
 import { Text, useThemeColor, View } from './Themed';
 
@@ -74,6 +75,7 @@ export const CommentContent: React.FC<CommentContentProps> = ({
         >
           <BouncyButton
             onPress={() => handleOpenImage(url)}
+            onLongPress={() => saveImageToGallery(url)}
             className="flex-row items-center p-2 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/20"
           >
             <Image
@@ -87,7 +89,7 @@ export const CommentContent: React.FC<CommentContentProps> = ({
                 查看图片
               </Text>
               <Text type="secondary" className="text-xs mt-1">
-                点击展开大图
+                点击展开大图 / 长按保存图片
               </Text>
             </View>
             <Ionicons
@@ -100,23 +102,14 @@ export const CommentContent: React.FC<CommentContentProps> = ({
       ))}
 
       {/* 图片灯箱 */}
-      {viewerVisible && activeImage && (
-        <Modal
-          visible={viewerVisible}
-          transparent={true}
-          onRequestClose={() => setViewerVisible(false)}
-        >
-          <ImageViewer
-            imageUrls={[{ url: activeImage }]}
-            onCancel={() => setViewerVisible(false)}
-            onClick={() => setViewerVisible(false)}
-            enableSwipeDown={true}
-            onSwipeDown={() => setViewerVisible(false)}
-            renderIndicator={() => <></>}
-            saveToLocalByLongPress={false}
-          />
-        </Modal>
-      )}
+      <ImagePreviewModal
+        visible={viewerVisible && Boolean(activeImage)}
+        imageUrls={activeImage ? [activeImage] : imageUrls}
+        initialIndex={
+          activeImage ? Math.max(0, imageUrls.indexOf(activeImage)) : 0
+        }
+        onClose={() => setViewerVisible(false)}
+      />
     </View>
   );
 };

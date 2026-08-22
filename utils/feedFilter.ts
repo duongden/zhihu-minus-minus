@@ -156,10 +156,7 @@ function isPaidAnswer(item: FeedItem): boolean {
 
 type QualityThreshold = (typeof QUALITY_THRESHOLDS)[FilterQualityLevel];
 
-function qualityReason(
-  item: FeedItem,
-  t: QualityThreshold,
-): string | null {
+function qualityReason(item: FeedItem, t: QualityThreshold): string | null {
   switch (item.type) {
     case 'answers':
       if (item.voteCount < t.answerVote) return `赞同数 < ${t.answerVote}`;
