@@ -20,7 +20,8 @@ import {
   TouchableWithoutFeedback,
   useWindowDimensions,
 } from 'react-native';
-import ImageViewer from 'react-native-image-zoom-viewer';
+import { ImageActionBottomSheet } from '@/components/ImageActionBottomSheet';
+import { ImagePreviewModal } from '@/components/ImagePreviewModal';
 import RenderHtml, {
   type CustomBlockRenderer,
   defaultSystemFonts,
@@ -424,7 +425,12 @@ const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
   const [svgError, setSvgError] = useState(false);
 
   if (!rendererProps) return null;
-  const { onPress, width: contentWidth, colorScheme } = rendererProps as any;
+  const {
+    onPress,
+    onLongPress,
+    width: contentWidth,
+    colorScheme,
+  } = rendererProps as any;
 
   const originalWidth = parseInt(attrWidth as string, 10) || 0;
   const originalHeight = parseInt(attrHeight as string, 10) || 0;
@@ -507,7 +513,11 @@ const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
           : 'my-2.5 items-center w-full bg-transparent'
       }
     >
-      <Pressable onPress={() => onPress(finalSrc)} className="bg-transparent">
+      <Pressable
+        onPress={() => onPress(finalSrc)}
+        onLongPress={() => onLongPress?.(finalSrc)}
+        className="bg-transparent"
+      >
         {isFormula ? (
           svgError ? (
             <Text
@@ -608,6 +618,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
     const [modalVisible, setModalVisible] = useState(false);
     const [viewerVisible, setViewerVisible] = useState(false);
     const [viewerImage, setViewerImage] = useState<string | null>(null);
+    const [actionSheetUrl, setActionSheetUrl] = useState<string | null>(null);
     const [shouldRender, setShouldRender] = useState(true);
     const [domReady, setDomReady] = useState(false);
     const [useNativeFallback, setUseNativeFallback] = useState(false);
@@ -815,6 +826,9 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
           onPress: (src: string) => {
             setViewerImage(src);
             setViewerVisible(true);
+          },
+          onLongPress: (src: string) => {
+            setActionSheetUrl(src);
           },
           width: width - 40,
           colorScheme,
@@ -1107,6 +1121,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
               colorScheme={colorScheme}
               onReady={onReadyCallback}
               onImagePress={onImagePressCallback}
+              onImageLongPress={(src) => setActionSheetUrl(src)}
               onLinkPress={handleInternalLink}
               onSegmentPress={onSegmentPressCallback}
               onTextSelected={
@@ -1253,25 +1268,17 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
           </Modal>
         )}
 
-        {viewerVisible && (
-          <Modal
-            visible={viewerVisible}
-            transparent={true}
-            onRequestClose={() => setViewerVisible(false)}
-          >
-            {viewerImage && (
-              <ImageViewer
-                imageUrls={[{ url: viewerImage }]}
-                onCancel={() => setViewerVisible(false)}
-                onClick={() => setViewerVisible(false)}
-                enableSwipeDown={true}
-                onSwipeDown={() => setViewerVisible(false)}
-                renderIndicator={() => <></>}
-                saveToLocalByLongPress={false}
-              />
-            )}
-          </Modal>
-        )}
+        <ImagePreviewModal
+          visible={viewerVisible && Boolean(viewerImage)}
+          imageUrls={viewerImage ? [viewerImage] : []}
+          onClose={() => setViewerVisible(false)}
+        />
+
+        <ImageActionBottomSheet
+          visible={Boolean(actionSheetUrl)}
+          imageUrl={actionSheetUrl}
+          onClose={() => setActionSheetUrl(null)}
+        />
 
         {textSelection && type === 'answer' && (
           <View
