@@ -438,11 +438,7 @@ export default function HomeScreen() {
               onPress={() => router.push('/search')}
               style={styles.searchBtn}
             >
-              {isCurrentRefreshing ? (
-                <ActivityIndicator size="small" color={tintColor} />
-              ) : (
-                <Ionicons name="search" size={22} color={textColor} />
-              )}
+              <Ionicons name="search" size={22} color={textColor} />
             </Pressable>
           </View>
           {isCurrentRefreshing && <TopLoadingBar color={tintColor} />}
@@ -929,14 +925,16 @@ const FeedList = React.forwardRef<
         try {
           let requestUrl = pageParam as string;
           const isInitialUrl =
-            requestUrl === (FEED_URLS as any)[tab] ||
-            requestUrl === 'zhihu://local-feed' ||
-            requestUrl.includes('feed/topstory/recommend');
+            (requestUrl === (FEED_URLS as any)[tab] ||
+              requestUrl === 'zhihu://local-feed' ||
+              requestUrl.includes('feed/topstory/recommend')) &&
+            !requestUrl.includes('action=down');
           if (isRefreshing && isInitialUrl) {
             const sep = requestUrl.includes('?') ? '&' : '?';
             requestUrl = `${requestUrl}${sep}action=up&t=${Date.now()}`;
           }
 
+          console.log(`🌐 [queryFn] Requesting URL: ${requestUrl} (tab=${tab}, isRefreshing=${isRefreshing})`);
           const data = await getFeed(requestUrl);
           const rawItems = data.data || [];
           let items: Array<FeedItem | HotItem>;
@@ -1004,10 +1002,15 @@ const FeedList = React.forwardRef<
             console.warn('刷新本地 Feed 曝光记录失败', error);
           }
         }
+        const initialParam =
+          tab === 'local'
+            ? 'zhihu://local-feed'
+            : (FEED_URLS as any)[tab];
         await refreshInfiniteQuery(
           queryClient,
           ['zhihu-feed', queryAccountKey, tab],
           refetch,
+          initialParam,
         );
       } catch (_e) {
       } finally {
@@ -1085,12 +1088,11 @@ const FeedList = React.forwardRef<
 
     const flashListRef = useRef<FlashListRef<FeedListItem>>(null);
 
-    // 隐藏模式下被过滤项不占行，列表可能短到无法滚动，onEndReached 就此失效。
+    // 过滤开启下，列表可能因大量过滤/折叠短到无法滚动，onEndReached 就此失效。
     // 这里主动补页把可渲染行数补到 MIN_RENDERABLE_ITEMS，并以
     // MAX_AUTO_FETCH_ROUNDS 封顶，避免高过滤率下无节制连续请求。
-    // 折叠模式不需要——被过滤项仍占一行，滚动与续页行为不变。
     useEffect(() => {
-      if (!filterEnabled || filterMode !== 'hide') return;
+      if (!filterEnabled) return;
       if (!hasNextPage || isFetchingNextPage) return;
       if (flattenedData.length >= MIN_RENDERABLE_ITEMS) return;
       if (autoFetchRounds.current >= MAX_AUTO_FETCH_ROUNDS) {
@@ -1102,7 +1104,6 @@ const FeedList = React.forwardRef<
       void fetchNextPage();
     }, [
       filterEnabled,
-      filterMode,
       flattenedData.length,
       hasNextPage,
       isFetchingNextPage,
@@ -1129,6 +1130,13 @@ const FeedList = React.forwardRef<
         ref={flashListRef}
         showsVerticalScrollIndicator={false}
         data={flattenedData}
+        extraData={{
+          expandedCollapsedKeys,
+          filterMode,
+          filterRules,
+          isRefreshing,
+          isRefetching,
+        }}
         keyExtractor={(item, index) => {
           if (isCollapsedGroup(item)) return `collapsed-${item.groupKey}`;
           const key = getInMemoryFeedKey(item);
@@ -1149,9 +1157,11 @@ const FeedList = React.forwardRef<
           <RefreshControl
             refreshing={isRefreshing || isRefetching}
             onRefresh={handleRefresh}
-            tintColor={tintColor}
-            colors={[tintColor]}
+            tintColor="transparent"
+            colors={['transparent']}
+            progressBackgroundColor="transparent"
             progressViewOffset={insets.top + 10}
+            style={{ opacity: 0 }}
           />
         }
         onScroll={(e) => onScroll?.(e.nativeEvent.contentOffset.y)}
@@ -1199,6 +1209,10 @@ const FeedList = React.forwardRef<
           isFetchingNextPage ? (
             <ActivityIndicator style={{ margin: 20 }} />
           ) : filterEnabled &&
+            !isRefreshing &&
+            !isRefetching &&
+            !isLoading &&
+            flattenedData.length > 0 &&
             flattenedData.length <= MIN_RENDERABLE_ITEMS &&
             (!hasNextPage || autoFetchExhausted) ? (
             <Text
@@ -1212,7 +1226,7 @@ const FeedList = React.forwardRef<
           ) : null
         }
         ListEmptyComponent={
-          isLoading ? (
+          isLoading || isRefreshing || isRefetching ? (
             <View className="flex-1 items-center justify-center mt-[100px] bg-transparent">
               <ActivityIndicator size="large" color={tintColor} />
             </View>

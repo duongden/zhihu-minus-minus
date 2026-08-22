@@ -17,18 +17,9 @@ import type {
 export async function refreshInfiniteQuery(
   queryClient: QueryClient,
   queryKey: QueryKey,
-  refetch: () => Promise<unknown>,
+  _refetch?: () => Promise<unknown>,
+  _initialPageParam?: unknown,
 ) {
-  // 只裁剪页数组本身,不触碰页内容,因此元素类型用 unknown 即可。
-  queryClient.setQueryData<InfiniteData<unknown, unknown>>(
-    queryKey,
-    (oldData) => {
-      if (!oldData) return oldData;
-      return {
-        pages: oldData.pages.slice(0, 1),
-        pageParams: oldData.pageParams.slice(0, 1),
-      };
-    },
-  );
-  return refetch();
+  // 重置 InfiniteQuery：清空已加载的所有翻页缓存及 pageParams，回到初始第 1 页重新抓取
+  return queryClient.resetQueries({ queryKey, exact: true });
 }
