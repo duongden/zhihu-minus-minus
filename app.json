@@ -2,7 +2,7 @@
   "expo": {
     "name": "知乎--",
     "slug": "ZhihuMinusMinus",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "zhihu--",
@@ -43,7 +43,9 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.huamu013.ZhihuMinusMinus",
-      "permissions": ["REQUEST_INSTALL_PACKAGES"],
+      "permissions": [
+        "REQUEST_INSTALL_PACKAGES"
+      ],
       "intentFilters": [
         {
           "action": "VIEW",
@@ -129,7 +131,10 @@
               "pathPrefix": "/collection/"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         },
         {
           "action": "VIEW",
@@ -140,7 +145,10 @@
               "pathPrefix": "/p/"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         },
         {
           "action": "VIEW",
@@ -186,7 +194,10 @@
               "pathPrefix": "/pins/"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         },
         {
           "action": "VIEW",
@@ -195,7 +206,10 @@
               "scheme": "zhihu"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -235,6 +249,10 @@
       "router": {},
       "sentryDsn": "https://93a6099dd49b040d9c516485eb3c72f6@o4511051860672512.ingest.de.sentry.io/4511051866112080",
       "releaseNotes": {
+        "v0.4.0": [
+          "图片保存与长按交互优化: 增加长按图片保存到本地相册。",
+          "本地内容过滤系统: 新增「过滤与推荐」设置页面，支持针对关键词、作者及内容的屏蔽规则配置与实时效果预览。"
+        ],
         "v0.3.0": [
           "推荐流本地去重（实验性）: 为「推荐」与「同城」Tab 增加可选的本地已看去重，支持基于曝光判定（面积≥50% 且停留≥800ms）快照式过滤已看内容，支持 SQLite 自动淘汰清理与账号隔离管理；可在「外观与定制 → 实验性功能」中开启。",
           "优雅 404 无知识荒原展示: 详情页与内容加载针对 404 错误禁止无效重试，第一时间呈现“荒原”占位及返回导航；静默拦截控制台日志堆栈与无效链接弹窗。"
@@ -256,8 +274,8 @@
           "基础稳定性优化: 修复了若干 UI 细节与已知的小概率崩溃问题。"
         ]
       },
-      "status": "🚀 v0.3.0 - 404荒原优雅展示与个人页数据修复完成",
-      "lastUpdated": "2026-08-14",
+      "status": "🚀 v0.4.0 - 本地过滤系统与长按图片保存分享上线",
+      "lastUpdated": "2026-08-22",
       "eas": {
         "projectId": "faa0f061-50e6-4ec4-bb6f-accda0dbd24f"
       }

@@ -2,7 +2,9 @@
 
 > [!IMPORTANT]
 > **🚧 项目声明**：本项目目前核心功能基本稳定，但仍有许多不完善，且知乎 API 也可能发生变动导致功能失效。  
-> 欢迎 PR Issue 或者 fork 去改。  也可以去看看其他软件：<https://github.com/zhihulite/Hydrogen> 和 <https://github.com/zly2006/zhihu-plus-plus>
+> 欢迎 PR Issue 或者 fork 去改。  也可以去看看其他软件：  
+> - <https://github.com/zhihulite/Hydrogen>  
+> - <https://github.com/zly2006/zhihu-plus-plus>
 
 ![zhihu--](./assets/images/favicon.svg)
 
@@ -191,4 +193,4 @@ npm run ios
 </a>
 
 ---
-**Version**: v0.3.0 | **Last Updated**: 2026-08-14
+**Version**: v0.4.0 | **Last Updated**: 2026-08-22
