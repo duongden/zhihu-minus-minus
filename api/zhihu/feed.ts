@@ -74,6 +74,12 @@ export interface RawFeedTarget {
   paid_info?: unknown;
   /** 推广/利益声明标记（话题流返回，推荐流通常不返回） */
   is_labeled?: boolean;
+  /**
+   * 以下两项仅在 target 自身即为 question 时出现（推荐流的「推荐问题」卡片）。
+   * 回答/文章的问题信息在嵌套的 `question` 字段里，勿混用。
+   */
+  answer_count?: number;
+  follower_count?: number;
   reaction?: {
     relation?: {
       liked?: boolean;

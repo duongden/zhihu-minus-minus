@@ -204,7 +204,12 @@ export function applyFeedFilter(
     const firstKey = getInMemoryFeedKey(pending.items[0]);
     out.push({
       kind: 'collapsed',
-      groupKey: firstKey || `collapsible-${out.length}`,
+      // 实际调用路径上 firstKey 不会为空：parseRecommendData 的 id 有随机兜底，
+      // flattenedData 也已滤掉无 key 的项。这里的兜底仅防御该函数被复用到未去重
+      // 的输入，且刻意由内容派生而非 out.length —— 位置会随分页续页漂移，
+      // 会让同一组的 key 在追加新页后改变，展开状态随之丢失。
+      groupKey:
+        firstKey ?? `collapsed:${pending.items.map((i) => i.id).join(',')}`,
       items: pending.items,
       reasons: Array.from(pending.reasons),
     });

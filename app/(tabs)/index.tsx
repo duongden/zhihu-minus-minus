@@ -36,6 +36,7 @@ import {
   type FeedItem,
   getFeed,
   type RawFeedItem,
+  type RawFeedTarget,
 } from '@/api/zhihu';
 import { BouncyButton } from '@/components/BouncyButton';
 import { DailyList } from '@/components/DailyList';
@@ -90,10 +91,13 @@ const TABS = [
 type TabType = (typeof TABS)[number];
 type FeedListItem = FeedItem | HotItem | CollapsedGroup;
 
-// 隐藏模式下被过滤项不占行；列表短于该阈值且已无更多页时，footer 给出
-// 一句诚实的提示，避免用户以为加载卡住。折叠模式下过滤项仍占一行，
-// 不会触发该阈值。
+// 隐藏模式下被过滤项不占行，一页内容可能所剩无几甚至为空——列表不足一屏时
+// 用户无法滚动，onEndReached 不会再触发，列表就此卡住。故在该模式下主动补页
+// 直到攒够 MIN_RENDERABLE_ITEMS 行；同时用 MAX_AUTO_FETCH_ROUNDS 限制单轮
+// 刷新内的补页次数，避免高过滤率下无节制连续请求。触顶后由 footer 给出提示。
+// 折叠模式下过滤项仍占一行，不需要补页。
 const MIN_RENDERABLE_ITEMS = 8;
+const MAX_AUTO_FETCH_ROUNDS = 3;
 
 export default function HomeScreen() {
   const { width: windowWidth } = useWindowDimensions();
@@ -797,6 +801,11 @@ const FeedList = React.forwardRef<
         return next;
       });
     }, []);
+    // 隐藏模式下的自动补页轮次，handleRefresh 时清零
+    const autoFetchRounds = useRef(0);
+    // 补页预算耗尽（仍有下一页但已停止自动补）——ref 不触发重渲染，
+    // 用一个 state 让 footer 能如实告知用户列表为何偏短。
+    const [autoFetchExhausted, setAutoFetchExhausted] = useState(false);
     const [recentExposureKeys, setRecentExposureKeys] =
       useState<Set<string> | null>(() =>
         localDedupEnabled ? null : new Set(),
@@ -970,6 +979,9 @@ const FeedList = React.forwardRef<
       onRefreshStateChange?.(true);
       // 刷新即重置折叠展开状态（计划要求展开不持久化）
       setExpandedCollapsedKeys(new Set());
+      // 新一轮刷新重新计算补页预算
+      autoFetchRounds.current = 0;
+      setAutoFetchExhausted(false);
       try {
         if (localDedupEnabled && exposureContext) {
           try {
@@ -1063,6 +1075,30 @@ const FeedList = React.forwardRef<
 
     const flashListRef = useRef<FlashListRef<FeedListItem>>(null);
 
+    // 隐藏模式下被过滤项不占行，列表可能短到无法滚动，onEndReached 就此失效。
+    // 这里主动补页把可渲染行数补到 MIN_RENDERABLE_ITEMS，并以
+    // MAX_AUTO_FETCH_ROUNDS 封顶，避免高过滤率下无节制连续请求。
+    // 折叠模式不需要——被过滤项仍占一行，滚动与续页行为不变。
+    useEffect(() => {
+      if (!filterEnabled || filterMode !== 'hide') return;
+      if (!hasNextPage || isFetchingNextPage) return;
+      if (flattenedData.length >= MIN_RENDERABLE_ITEMS) return;
+      if (autoFetchRounds.current >= MAX_AUTO_FETCH_ROUNDS) {
+        // 相同值的 setState 会被 React bail out，不会造成循环
+        setAutoFetchExhausted(true);
+        return;
+      }
+      autoFetchRounds.current += 1;
+      void fetchNextPage();
+    }, [
+      filterEnabled,
+      filterMode,
+      flattenedData.length,
+      hasNextPage,
+      isFetchingNextPage,
+      fetchNextPage,
+    ]);
+
     useEffect(() => {
       if (!isActive || !localDedupEnabled || recentExposureKeys === null)
         return;
@@ -1122,7 +1158,7 @@ const FeedList = React.forwardRef<
               <Pressable
                 onPress={() => toggleCollapsed(item.groupKey)}
                 className="mx-2 my-1 flex-row items-center justify-between rounded-xl px-4 py-3"
-                style={{ backgroundColor: tintColor + '14' }}
+                style={{ backgroundColor: `${tintColor}14` }}
               >
                 <Text type="secondary">
                   {expanded
@@ -1153,13 +1189,15 @@ const FeedList = React.forwardRef<
           isFetchingNextPage ? (
             <ActivityIndicator style={{ margin: 20 }} />
           ) : filterEnabled &&
-            !hasNextPage &&
-            flattenedData.length <= MIN_RENDERABLE_ITEMS ? (
+            flattenedData.length <= MIN_RENDERABLE_ITEMS &&
+            (!hasNextPage || autoFetchExhausted) ? (
             <Text
               type="secondary"
               style={{ textAlign: 'center', margin: 20, fontSize: 12 }}
             >
-              过滤后内容偏少，已无更多可加载
+              {hasNextPage
+                ? '过滤后内容偏少，下拉可继续加载'
+                : '过滤后内容偏少，已无更多可加载'}
             </Text>
           ) : null
         }
@@ -1224,8 +1262,27 @@ function parseFollowingData(item: RawFeedItem): FeedItem | null {
   };
 }
 
+/**
+ * 归一化回答的付费类型。
+ *
+ * `answer_type` 的大小写随接口而异——实测游客推荐流返回小写 `normal`，
+ * 话题流返回大写 `NORMAL` / `PAID`。统一大写后比较，并与 `paid_info`
+ * 取或作为兜底信号，避免盐选内容因大小写差异静默漏判。
+ */
+function normalizeAnswerType(target: {
+  answer_type?: unknown;
+  paid_info?: unknown;
+}): string | undefined {
+  const raw =
+    typeof target.answer_type === 'string'
+      ? target.answer_type.toUpperCase()
+      : undefined;
+  if (raw === 'PAID' || target.paid_info != null) return 'PAID';
+  return raw;
+}
+
 function parseRecommendData(item: RawFeedItem): FeedItem | null {
-  const target = (item.target || item) as any;
+  const target = (item.target || item) as unknown as RawFeedTarget;
   const type = target.type;
   const stableId = target.id?.toString().trim();
   let appType: 'answers' | 'articles' | 'pins' | 'questions' | null = null;
@@ -1269,11 +1326,10 @@ function parseRecommendData(item: RawFeedItem): FeedItem | null {
     type: appType,
     topics: target.topics?.map((t: any) => ({ id: t.id, name: t.name })) || [],
     // 本地过滤信号：实测推荐流可用字段（详见 utils/feedFilter.ts）
-    // 盐选双信号取或：answer_type === 'PAID' 或 paid_info != null
-    answerType:
-      target.answer_type === 'PAID' || target.paid_info != null
-        ? 'PAID'
-        : target.answer_type,
+    // 盐选双信号取或：answer_type === 'PAID' 或 paid_info != null。
+    // 大小写按接口而异——实测游客推荐流返回小写 `normal`，话题流返回大写
+    // `NORMAL`/`PAID`，故统一大写后再比较，避免漏判。
+    answerType: normalizeAnswerType(target),
     isLabeled: Boolean(target.is_labeled),
     isOrgAuthor: Boolean(target.author?.is_org),
     isAdvertiser: Boolean(target.author?.is_advertiser),
