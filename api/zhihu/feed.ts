@@ -190,14 +190,27 @@ export const FEED_URLS = {
   hot: 'https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total?limit=50',
 };
 
+function shuffleArray<T>(array: T[]): T[] {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 export const getFeed = async (url: string): Promise<ZhihuFeedResponse> => {
   let finalUrl = url;
   const { cookies } = useAuthStore.getState();
+  const isRefreshRequest = url.includes('action=up') || url.includes('t=');
 
   // 如果未登录且请求的是推荐页初始接口，则切换为游客接口
   if (!cookies && url.includes('feed/topstory/recommend')) {
     finalUrl =
       'https://www.zhihu.com/api/v3/explore/guest/feeds?limit=15&ws_qiangzhisafe=0';
+    if (isRefreshRequest) {
+      finalUrl += `&t=${Date.now()}`;
+    }
   }
 
   if (url === 'zhihu://local-feed') {
@@ -244,5 +257,17 @@ export const getFeed = async (url: string): Promise<ZhihuFeedResponse> => {
     }
   }
 
+  // 游客模式刷新推荐流时打乱顺序，给未登录用户带来新鲜感
+  if (
+    !cookies &&
+    isRefreshRequest &&
+    (url.includes('explore/guest/feeds') || url.includes('feed/topstory/recommend'))
+  ) {
+    if (Array.isArray(res.data?.data)) {
+      res.data.data = shuffleArray(res.data.data);
+    }
+  }
+
   return res.data;
 };
+

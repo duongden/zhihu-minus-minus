@@ -927,7 +927,17 @@ const FeedList = React.forwardRef<
         if (!cookies && tab === 'following')
           return { items: [], nextUrl: null };
         try {
-          const data = await getFeed(pageParam as string);
+          let requestUrl = pageParam as string;
+          const isInitialUrl =
+            requestUrl === (FEED_URLS as any)[tab] ||
+            requestUrl === 'zhihu://local-feed' ||
+            requestUrl.includes('feed/topstory/recommend');
+          if (isRefreshing && isInitialUrl) {
+            const sep = requestUrl.includes('?') ? '&' : '?';
+            requestUrl = `${requestUrl}${sep}action=up&t=${Date.now()}`;
+          }
+
+          const data = await getFeed(requestUrl);
           const rawItems = data.data || [];
           let items: Array<FeedItem | HotItem>;
           if (tab === 'following')
@@ -948,7 +958,7 @@ const FeedList = React.forwardRef<
 
           if (
             launchCacheContext &&
-            pageParam === (FEED_URLS as any)[tab] &&
+            isInitialUrl &&
             items.length > 0
           ) {
             void feedCacheRepository
