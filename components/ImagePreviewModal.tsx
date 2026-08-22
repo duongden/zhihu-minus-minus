@@ -1,17 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
-import React, { useCallback, useState } from 'react';
-import {
-  ActionSheetIOS,
-  Alert,
-  Modal,
-  Platform,
-  Pressable,
-  SafeAreaView,
-  StyleSheet,
-  View,
-} from 'react-native';
+import React, { useState } from 'react';
+import { Modal, Pressable, SafeAreaView, StyleSheet, View } from 'react-native';
 import ImageViewer from 'react-native-image-zoom-viewer';
+import { ImageActionBottomSheet } from '@/components/ImageActionBottomSheet';
 import { Text } from '@/components/Themed';
 import { saveImageToGallery, shareImage } from '@/utils/saveImage';
 
@@ -29,8 +20,8 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
   onClose,
 }) => {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [sheetUrl, setSheetUrl] = useState<string | null>(null);
 
-  // 同步 initialIndex 更改
   React.useEffect(() => {
     if (visible) {
       setCurrentIndex(initialIndex);
@@ -42,50 +33,6 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
   }, [imageUrls]);
 
   const currentUrl = imageUrls[currentIndex] || imageUrls[0];
-
-  const handleShowMenu = useCallback(
-    (url?: string) => {
-      const targetUrl = url || currentUrl;
-      if (!targetUrl) return;
-
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-      const options = ['保存到相册', '分享图片', '取消'];
-      const cancelButtonIndex = 2;
-
-      if (Platform.OS === 'ios') {
-        ActionSheetIOS.showActionSheetWithOptions(
-          {
-            options,
-            cancelButtonIndex,
-          },
-          async (buttonIndex) => {
-            if (buttonIndex === 0) {
-              await saveImageToGallery(targetUrl);
-            } else if (buttonIndex === 1) {
-              await shareImage(targetUrl);
-            }
-          },
-        );
-      } else {
-        Alert.alert('图片操作', undefined, [
-          {
-            text: '保存到相册',
-            onPress: () => saveImageToGallery(targetUrl),
-          },
-          {
-            text: '分享图片',
-            onPress: () => shareImage(targetUrl),
-          },
-          {
-            text: '取消',
-            style: 'cancel',
-          },
-        ]);
-      }
-    },
-    [currentUrl],
-  );
 
   if (!visible || imageUrls.length === 0) {
     return null;
@@ -107,7 +54,7 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
           onClick={onClose}
           enableSwipeDown={true}
           onSwipeDown={onClose}
-          onLongPress={(image) => handleShowMenu(image?.url)}
+          onLongPress={(image) => setSheetUrl(image?.url || currentUrl)}
           saveToLocalByLongPress={false}
           renderIndicator={() => <></>}
         />
@@ -127,13 +74,6 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
 
             <View style={styles.rightActions}>
               <Pressable
-                onPress={() => shareImage(currentUrl)}
-                style={styles.iconBtn}
-                hitSlop={12}
-              >
-                <Ionicons name="share-outline" size={22} color="#FFFFFF" />
-              </Pressable>
-              <Pressable
                 onPress={() => saveImageToGallery(currentUrl)}
                 style={styles.iconBtn}
                 hitSlop={12}
@@ -143,6 +83,13 @@ export const ImagePreviewModal: React.FC<ImagePreviewModalProps> = ({
             </View>
           </View>
         </SafeAreaView>
+
+        {/* 长按底部 Action Sheet 盘 */}
+        <ImageActionBottomSheet
+          visible={Boolean(sheetUrl)}
+          imageUrl={sheetUrl}
+          onClose={() => setSheetUrl(null)}
+        />
       </View>
     </Modal>
   );

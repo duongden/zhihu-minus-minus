@@ -16,6 +16,7 @@ interface ZhihuDOMContentProps {
   segmentInfosStr?: string;
   colorScheme: 'light' | 'dark';
   onImagePress: (src: string) => void;
+  onImageLongPress?: (src: string) => void;
   onLinkPress: (href: string) => void;
   onSegmentPress: (pid: string) => void;
   onTextSelected?: (info: TextSelectionInfo | null) => void;
@@ -28,6 +29,7 @@ export default React.memo(function ZhihuDOMContent({
   segmentInfosStr,
   colorScheme,
   onImagePress,
+  onImageLongPress,
   onLinkPress,
   onSegmentPress,
   onTextSelected,
@@ -286,8 +288,43 @@ export default React.memo(function ZhihuDOMContent({
           strict: false,
         });
 
-        // Click handlers
+        // Click and touch long-press handlers
+        var imageTouchTimer = null;
+        var isLongPress = false;
+
+        container.addEventListener('touchstart', function(e) {
+          isLongPress = false;
+          var target = e.target;
+          while (target && target !== container) {
+            if (target.tagName === 'IMG') {
+              var src = target.getAttribute('src');
+              if (src) {
+                imageTouchTimer = setTimeout(function() {
+                  isLongPress = true;
+                  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'image_long_press', src: src }));
+                }, 450);
+              }
+              break;
+            }
+            target = target.parentElement;
+          }
+        }, { passive: true });
+
+        container.addEventListener('touchend', function() {
+          if (imageTouchTimer) clearTimeout(imageTouchTimer);
+        }, { passive: true });
+
+        container.addEventListener('touchmove', function() {
+          if (imageTouchTimer) clearTimeout(imageTouchTimer);
+        }, { passive: true });
+
         container.addEventListener('click', function(e) {
+          if (isLongPress) {
+            isLongPress = false;
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+          }
           let target = e.target;
           while (target && target !== container) {
             if (target.tagName === 'IMG') {
@@ -415,6 +452,8 @@ export default React.memo(function ZhihuDOMContent({
               onReady?.();
             } else if (data.type === 'image') {
               onImagePress(data.src);
+            } else if (data.type === 'image_long_press') {
+              onImageLongPress?.(data.src);
             } else if (data.type === 'link') {
               onLinkPress(data.href);
             } else if (data.type === 'segment') {

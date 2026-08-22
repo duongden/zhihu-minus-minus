@@ -1,12 +1,7 @@
-import { Ionicons } from '@expo/vector-icons';
 import type React from 'react';
 import { useState } from 'react';
-import { Image } from 'react-native';
+import { Image, Pressable } from 'react-native';
 import { ImagePreviewModal } from '@/components/ImagePreviewModal';
-import { useColorScheme } from '@/components/useColorScheme';
-import Colors from '@/constants/Colors';
-import { saveImageToGallery } from '@/utils/saveImage';
-import { BouncyButton } from './BouncyButton';
 import { Text, useThemeColor, View } from './Themed';
 
 interface CommentContentProps {
@@ -17,8 +12,6 @@ interface CommentContentProps {
 export const CommentContent: React.FC<CommentContentProps> = ({
   htmlContent,
 }) => {
-  const colorScheme = useColorScheme();
-  const tint = useThemeColor({}, 'primary');
   const textColor = useThemeColor({}, 'text');
 
   const [viewerVisible, setViewerVisible] = useState(false);
@@ -66,40 +59,29 @@ export const CommentContent: React.FC<CommentContentProps> = ({
         </Text>
       ) : null}
 
-      {/* 渲染提取出的图片卡片（独占整行） */}
-      {imageUrls.map((url, idx) => (
-        <View
-          // biome-ignore lint/suspicious/noArrayIndexKey: 同一条评论可以重复引用同一张图,url 不唯一,复合 key 才能保证不撞。
-          key={`${url}-${idx}`}
-          className="bg-transparent my-1.5 w-full"
-        >
-          <BouncyButton
-            onPress={() => handleOpenImage(url)}
-            onLongPress={() => saveImageToGallery(url)}
-            className="flex-row items-center p-2 rounded-xl border border-dashed border-gray-300 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-800/20"
-          >
-            <Image
-              source={{ uri: url }}
-              className="w-16 h-16 rounded-lg mr-3 bg-gray-200 dark:bg-gray-800"
-              resizeMode="cover"
-            />
-            <View className="flex-1 bg-transparent">
-              <Text className="text-sm font-semibold flex-row items-center">
-                <Ionicons name="image-outline" size={16} color={tint} />{' '}
-                查看图片
-              </Text>
-              <Text type="secondary" className="text-xs mt-1">
-                点击展开大图 / 长按保存图片
-              </Text>
-            </View>
-            <Ionicons
-              name="chevron-forward"
-              size={16}
-              color={Colors[colorScheme].textSecondary}
-            />
-          </BouncyButton>
+      {/* 评论配图（紧凑网格展示） */}
+      {imageUrls.length > 0 && (
+        <View className="flex-row flex-wrap gap-2 my-1.5 bg-transparent">
+          {imageUrls.map((url, idx) => (
+            <Pressable
+              // biome-ignore lint/suspicious/noArrayIndexKey: 同一条评论可以重复引用同一张图,url 不唯一,复合 key 才能保证不撞。
+              key={`${url}-${idx}`}
+              onPress={() => handleOpenImage(url)}
+              className="rounded-2xl overflow-hidden bg-gray-100 dark:bg-gray-800/60 border border-gray-200/40 dark:border-gray-700/40"
+            >
+              <Image
+                source={{ uri: url }}
+                style={
+                  imageUrls.length === 1
+                    ? { width: 130, height: 130 }
+                    : { width: 88, height: 88 }
+                }
+                resizeMode="cover"
+              />
+            </Pressable>
+          ))}
         </View>
-      ))}
+      )}
 
       {/* 图片灯箱 */}
       <ImagePreviewModal
