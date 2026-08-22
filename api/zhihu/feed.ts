@@ -190,15 +190,6 @@ export const FEED_URLS = {
   hot: 'https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total?limit=50',
 };
 
-function shuffleArray<T>(array: T[]): T[] {
-  const arr = [...array];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
-
 export const getFeed = async (url: string): Promise<ZhihuFeedResponse> => {
   let finalUrl = url;
   const { cookies } = useAuthStore.getState();
@@ -254,17 +245,6 @@ export const getFeed = async (url: string): Promise<ZhihuFeedResponse> => {
         'https://api.zhihu.com/feed-root/section/',
         'zhihu://local-feed/',
       );
-    }
-  }
-
-  // 游客模式刷新推荐流时打乱顺序，给未登录用户带来新鲜感
-  if (
-    !cookies &&
-    isRefreshRequest &&
-    (url.includes('explore/guest/feeds') || url.includes('feed/topstory/recommend'))
-  ) {
-    if (Array.isArray(res.data?.data)) {
-      res.data.data = shuffleArray(res.data.data);
     }
   }
 
