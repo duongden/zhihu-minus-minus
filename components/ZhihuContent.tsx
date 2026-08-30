@@ -20,8 +20,6 @@ import {
   TouchableWithoutFeedback,
   useWindowDimensions,
 } from 'react-native';
-import { ImageActionBottomSheet } from '@/components/ImageActionBottomSheet';
-import { ImagePreviewModal } from '@/components/ImagePreviewModal';
 import RenderHtml, {
   type CustomBlockRenderer,
   defaultSystemFonts,
@@ -37,6 +35,8 @@ import {
 import { getArticle } from '@/api/zhihu/article';
 import { getPin } from '@/api/zhihu/pin';
 import { getQuestion } from '@/api/zhihu/question';
+import { ImageActionBottomSheet } from '@/components/ImageActionBottomSheet';
+import { ImagePreviewModal } from '@/components/ImagePreviewModal';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useSettingsStore } from '@/store/useSettingsStore';
@@ -586,7 +586,8 @@ const renderers = {
   linkcard: LinkCardRenderer,
 };
 
-const ignoredDomTags = ['noscript'];
+const IGNORED_DOM_TAGS = ['noscript'];
+const SYSTEM_FONTS = [...defaultSystemFonts, 'Inter', 'Roboto'];
 
 export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
   ({
@@ -806,11 +807,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
       () => ({
         p: {
           segmentMap,
-          activeSegmentId: activeSegment?.pid,
-          modalVisible,
           onPress: handlePress,
-          findActiveInteraction,
-          colorScheme,
           fontSizeScale,
           lineHeightScale,
         },
@@ -836,14 +833,13 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
       }),
       [
         segmentMap,
-        activeSegment?.pid,
-        modalVisible,
         handlePress,
-        findActiveInteraction,
         colorScheme,
         handleInternalLink,
         surfaceColor,
         width,
+        fontSizeScale,
+        lineHeightScale,
       ],
     );
 
@@ -957,8 +953,6 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
       ],
     );
 
-    const systemFonts = [...defaultSystemFonts, 'Inter', 'Roboto'];
-
     const defaultTextProps = useMemo(() => ({ selectable: true }), []);
 
     const renderPinContent = () => {
@@ -975,9 +969,9 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
               tagsStyles={tagsStyles as any}
               classesStyles={classesStyles as any}
               domVisitors={domVisitors}
-              systemFonts={systemFonts}
+              systemFonts={SYSTEM_FONTS}
               renderersProps={renderersProps as any}
-              ignoredDomTags={ignoredDomTags}
+              ignoredDomTags={IGNORED_DOM_TAGS}
               defaultTextProps={defaultTextProps}
             />
           );
@@ -1099,9 +1093,9 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
               tagsStyles={tagsStyles as any}
               classesStyles={classesStyles as any}
               domVisitors={domVisitors}
-              systemFonts={systemFonts}
+              systemFonts={SYSTEM_FONTS}
               renderersProps={renderersProps as any}
-              ignoredDomTags={ignoredDomTags}
+              ignoredDomTags={IGNORED_DOM_TAGS}
               defaultTextProps={defaultTextProps}
             />
           </View>

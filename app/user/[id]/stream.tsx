@@ -270,19 +270,14 @@ const StreamItem = forwardRef(
               style={{ maxHeight: 150, overflow: 'hidden' }}
               className="flex-1"
             >
-              <ZhihuContent
-                objectId={item.id?.toString()}
-                type={type === 'pin' ? 'pin' : type}
-                content={
-                  typeof item.content === 'string' ? item.content : undefined
-                }
-                contentArray={
-                  type === 'pin' && Array.isArray(item.content)
-                    ? item.content
-                    : undefined
-                }
-                useNative={true}
-              />
+              <Text
+                type="secondary"
+                className="text-[17px]"
+                style={{ lineHeight: 27 }}
+                numberOfLines={5}
+              >
+                {getExcerpt()}
+              </Text>
               <Pressable
                 onPress={() => item?.id && onToggle(item.id.toString(), true)}
                 className="absolute inset-x-0 bottom-0 h-24 z-[100]"
