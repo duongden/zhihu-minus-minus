@@ -73,3 +73,5 @@ Debug Dev Client 自身占用很重，因此后续必须补一轮 Release 对照
 ## 帧数据备注
 
 一次回答打开窗口内共记录 476 帧：Android 新口径 deadline-missed 1 帧（0.21%），旧口径 jank 26 帧（5.46%），GPU P95 为 4 ms。GPU 开销较轻；现有证据更指向网络等待、JS/UI 线程工作和大量 View 挂载，而不是 GPU 绘制能力。
+
+这份 Debug 基线已经促成正文缓存复用与相邻预取优化，但不能回答公式排版、Android 文本装饰和真正超长正文的问题。后续对照矩阵与替换路线见 [Renderer V2 迁移计划](./renderer-v2-plan.md)。

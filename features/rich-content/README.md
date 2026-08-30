@@ -6,8 +6,8 @@
 
 ## 目录
 
-- `components/`：原生 RNRH 渲染器和 WebView/DOM 备用渲染器。
-- `docs/`：架构决策、真机基准计划和阶段性结论。
+- `components/`：当前 RNRH 渲染器和已有 WebView/DOM 实验实现；迁移期间作为旧链路与参考。
+- `docs/`：Renderer V2 架构、真机基准计划和阶段性结论。
 - `fixtures/inbox/`：可以持续投递的新 `.md`/HTML 样本。
 - `fixtures/cases/`：已经登记精确期望值的稳定回归案例。
 - `fixtures/manifest.json`：稳定案例的来源、特征和结构断言。
@@ -34,10 +34,12 @@ npm run test:rich-content
 
 ## 当前范围
 
-1. 建立可重复的真实内容测试集和真机性能基线。
-2. 修复折叠卡片挂载完整正文、RNRH 配置不稳定等确定性问题。
-3. 复用列表已有正文，并限制 Pager 只在空闲时预取相邻回答。
-4. 评估单个离线 DOM/WebView 详情渲染器。
-5. 最后用数据决定是否推进 `ZhihuBlock` + FlashList。
+项目已经完成测试集集中、首轮真机基线、列表正文复用、长按预览复用和 Pager 相邻回答预取。下一阶段不再把 RNRH 作为长期架构，而是按 [Renderer V2 迁移计划](./docs/renderer-v2-plan.md) 逐步替换：
 
-在 Phase 0 完成前，这个模块不会把桌面 Node 微基准描述成手机端最终性能。
+1. 补齐正确性 oracle 与真正超长文本案例。
+2. 建立统一的 `ZhihuDocument`（Block + InlineRun）规范化层。
+3. 先用单个、内部滚动的离线 DOM/WebView 解决公式、装饰线和复杂 inline flow 的正确性。
+4. 再用 Block AST + FlashList 控制超级长正文的挂载量与内存。
+5. 达到 Android/iOS Release 验收条件后删除 RNRH 依赖。
+
+RNRH 在迁移期只保留为旧实现、对照和 fallback。桌面 Node 微基准不作为手机端最终性能结论。
