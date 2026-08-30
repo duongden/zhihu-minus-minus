@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
@@ -13,7 +16,6 @@ import {
 const manifestPath = fileURLToPath(
   new URL('../fixtures/manifest.json', import.meta.url),
 );
-const inboxPath = fileURLToPath(new URL('../fixtures/inbox/', import.meta.url));
 
 test('normalizes captured escaped HTML values', () => {
   assert.equal(
@@ -38,9 +40,24 @@ test('normalizes escaped closing tags from captured API values', () => {
 });
 
 test('discovers every unregistered inbox sample without manifest work', async () => {
-  const results = await analyzeFixtureDirectory(inboxPath);
-  assert.ok(results.some(({ id }) => id === 'inbox:pig.md#0'));
-  assert.ok(results.every(({ stats }) => stats.characters > 0));
+  const directoryPath = await mkdtemp(
+    path.join(tmpdir(), 'rich-content-fixtures-'),
+  );
+  try {
+    await writeFile(
+      path.join(directoryPath, 'new-sample.md'),
+      '<p>A</p>\n\n<p>B</p>',
+    );
+    await writeFile(path.join(directoryPath, 'README.md'), '# ignored');
+
+    const results = await analyzeFixtureDirectory(directoryPath);
+    assert.deepEqual(
+      results.map(({ id }) => id),
+      ['inbox:new-sample.md#0', 'inbox:new-sample.md#1'],
+    );
+  } finally {
+    await rm(directoryPath, { recursive: true, force: true });
+  }
 });
 
 test('keeps a single-line legacy split compatible', () => {

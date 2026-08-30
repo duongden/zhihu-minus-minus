@@ -35,4 +35,4 @@ npm run analyze:rich-content:inbox
 
 `cases/lala.md` 是第一批历史样本，目前包含两个非空 HTML 块。manifest 分别把它们登记为公式密集和图片/视频案例。它作为兼容种子保留原名；后续新内容使用独立文件，不再继续追加到 `lala.md`。
 
-`inbox/pig.md` 是尚未固化期望值的长图文样本，用来验证“先投递、后登记”的工作流。
+`cases/pig.md` 是段落和图片密集的超长正文案例，用来覆盖无公式长图文的解析与渲染压力。

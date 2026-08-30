@@ -36,6 +36,26 @@
         "noscripts": 5,
         "videoBoxes": 1
       }
+    },
+    {
+      "id": "long-image-heavy-001",
+      "file": "./cases/pig.md",
+      "block": 0,
+      "sourceType": "answer",
+      "collectedAt": "2026-08-30",
+      "traits": ["long-form", "image", "figcaption", "escaped-html"],
+      "expected": {
+        "paragraphs": 269,
+        "headings": 0,
+        "figures": 16,
+        "figcaptions": 16,
+        "totalImages": 32,
+        "activeImages": 16,
+        "formulaImages": 0,
+        "noscripts": 16,
+        "videoBoxes": 0,
+        "linkCards": 0
+      }
     }
   ]
 }
