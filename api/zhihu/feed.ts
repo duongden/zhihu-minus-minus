@@ -72,6 +72,8 @@ export interface RawFeedTarget {
   answer_type?: string;
   /** 盐选付费信息，与 `answer_type === 'PAID'` 取或作为兜底信号 */
   paid_info?: unknown;
+  /** 推荐流正文是否被截断；为 true 时不能作为完整详情复用 */
+  content_need_truncated?: boolean;
   /** 推广/利益声明标记（话题流返回，推荐流通常不返回） */
   is_labeled?: boolean;
   /**
@@ -250,4 +252,3 @@ export const getFeed = async (url: string): Promise<ZhihuFeedResponse> => {
 
   return res.data;
 };
-

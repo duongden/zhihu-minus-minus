@@ -30,7 +30,7 @@ import { ShareMenu } from '@/components/ShareMenu';
 import { Text, ThemedIcon, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
-import { ZhihuContent } from '@/features/rich-content';
+import { RICH_CONTENT_STALE_TIME, ZhihuContent } from '@/features/rich-content';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
 import { useScrollHeaderAnim } from '@/hooks/useScrollAnimation';
 import { useCollectionStore } from '@/store/useCollectionStore';
@@ -45,7 +45,6 @@ interface AnswerDetailViewProps {
   questionId?: string;
   onScroll?: (y: number) => void;
   isFocused?: boolean;
-  shouldPreload?: boolean;
 }
 
 export const AnswerDetailView = ({
@@ -53,7 +52,6 @@ export const AnswerDetailView = ({
   questionId,
   onScroll,
   isFocused = false,
-  shouldPreload = false,
 }: AnswerDetailViewProps) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -95,8 +93,8 @@ export const AnswerDetailView = ({
   } = useQuery({
     queryKey: ['answer-detail', id],
     queryFn: () => getAnswer(id),
-    enabled: isFocused || shouldPreload,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    enabled: isFocused,
+    staleTime: RICH_CONTENT_STALE_TIME,
     retry: (failureCount, err: any) =>
       err?.response?.status === 404 ? false : failureCount < 2,
   });
@@ -219,6 +217,10 @@ export const AnswerDetailView = ({
   const primaryTransparent = useThemeColor({}, 'primaryTransparent');
   const secondaryColor = useThemeColor({}, 'textSecondary');
   const warningColor = useThemeColor({}, 'warning');
+
+  if (!hasBeenFocused) {
+    return <View className="flex-1" />;
+  }
 
   return (
     <View className="flex-1">
@@ -380,22 +382,13 @@ export const AnswerDetailView = ({
           </View>
         ) : (
           <View className="px-5 pb-2 bg-transparent">
-            {hasBeenFocused ? (
-              <ZhihuContent
-                content={answer?.content || ''}
-                segmentInfos={answer?.segment_infos}
-                objectId={id}
-                type="answer"
-                onRefresh={refetch}
-              />
-            ) : (
-              <View className="h-[500px] justify-center items-center bg-transparent">
-                <ActivityIndicator size="small" color={primaryColor} />
-                <Text type="secondary" className="mt-4 text-xs opacity-50">
-                  正在准备内容...
-                </Text>
-              </View>
-            )}
+            <ZhihuContent
+              content={answer?.content || ''}
+              segmentInfos={answer?.segment_infos}
+              objectId={id}
+              type="answer"
+              onRefresh={refetch}
+            />
             {/* Meta info */}
             <View
               style={{

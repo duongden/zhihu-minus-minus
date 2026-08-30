@@ -13,6 +13,7 @@
 - `fixtures/manifest.json`：稳定案例的来源、特征和结构断言。
 - `tests/`：不依赖 React Native 运行时的 fixture 回归测试。
 - `tools/`：内容复杂度分析和后续基准辅助工具。
+- `queryPolicy.ts`：列表正文复用、统一查询 key 和 Pager 相邻预取策略。
 - `index.ts`：供应用层使用的稳定公共入口。
 
 `components/ZhihuContent.tsx` 和 `components/ZhihuDOMContent.tsx` 仅保留兼容转发，不再包含实现。新代码统一使用：
@@ -35,7 +36,8 @@ npm run test:rich-content
 
 1. 建立可重复的真实内容测试集和真机性能基线。
 2. 修复折叠卡片挂载完整正文、RNRH 配置不稳定等确定性问题。
-3. 评估单个离线 DOM/WebView 详情渲染器。
-4. 最后用数据决定是否推进 `ZhihuBlock` + FlashList。
+3. 复用列表已有正文，并限制 Pager 只在空闲时预取相邻回答。
+4. 评估单个离线 DOM/WebView 详情渲染器。
+5. 最后用数据决定是否推进 `ZhihuBlock` + FlashList。
 
 在 Phase 0 完成前，这个模块不会把桌面 Node 微基准描述成手机端最终性能。

@@ -19,6 +19,10 @@ import { ShareMenu } from '@/components/ShareMenu';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import {
+  getNeighborAnswerIds,
+  RICH_CONTENT_STALE_TIME,
+} from '@/features/rich-content';
 import { useZhihuInfiniteQuery } from '@/hooks/useZhihuInfiniteQuery';
 import { useSettingsStore } from '@/store/useSettingsStore';
 
@@ -62,7 +66,7 @@ export default function AnswerDetailScreen() {
     queryKey: ['answer-detail', initialId],
     queryFn: () => getAnswer(initialId),
     enabled: !!initialId,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: RICH_CONTENT_STALE_TIME,
     retry: (failureCount, err: any) =>
       err?.response?.status === 404 ? false : failureCount < 2,
   });
@@ -144,13 +148,35 @@ export default function AnswerDetailScreen() {
   const [pagerReady, setPagerReady] = useState(false);
   useEffect(() => {
     if (answerIds.length > 1 && !pagerReady) {
+      setCurrentPage(initialPage);
       setPagerReady(true);
     }
-  }, [answerIds.length, pagerReady]);
+  }, [answerIds.length, initialPage, pagerReady]);
 
   const pagerKey = `pager-${questionId}-${pagerReady ? 'ready' : 'pending'}`;
 
   const currentId = answerIds[currentPage];
+
+  useEffect(() => {
+    if (!pagerReady) return;
+
+    const idleCallbackId = requestIdleCallback(
+      () => {
+        const neighborIds = getNeighborAnswerIds(answerIds, currentPage);
+
+        for (const answerId of neighborIds) {
+          void queryClient.prefetchQuery({
+            queryKey: ['answer-detail', answerId],
+            queryFn: () => getAnswer(answerId),
+            staleTime: RICH_CONTENT_STALE_TIME,
+          });
+        }
+      },
+      { timeout: 1500 },
+    );
+
+    return () => cancelIdleCallback(idleCallbackId);
+  }, [answerIds, currentPage, pagerReady, queryClient]);
 
   useEffect(() => {
     if (
@@ -312,7 +338,6 @@ export default function AnswerDetailScreen() {
               initialTitle={aid === id ? (initialTitle as string) : undefined}
               questionId={questionId as string}
               isFocused={index === currentPage}
-              shouldPreload={Math.abs(index - currentPage) <= 1}
               onScroll={(y) => {
                 scrollPositions.current[aid] = y;
                 if (index === currentPage) {

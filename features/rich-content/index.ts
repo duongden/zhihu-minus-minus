@@ -7,3 +7,11 @@ export type {
   TextSelectionInfo,
   ZhihuDOMContentProps,
 } from './components/ZhihuDOMContent';
+export {
+  getNeighborAnswerIds,
+  getRichContentQueryKey,
+  hasInlineRichContent,
+  hasReusableAnswerDetail,
+  RICH_CONTENT_STALE_TIME,
+  type RichContentEntityType,
+} from './queryPolicy';
