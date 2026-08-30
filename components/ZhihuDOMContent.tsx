@@ -290,16 +290,47 @@ export default React.memo(function ZhihuDOMContent({
 
         // Click and touch long-press handlers
         var imageTouchTimer = null;
+        var imageTouchStart = null;
         var isLongPress = false;
+        var imageLongPressMoveTolerance = 10;
+
+        function clearImageLongPress() {
+          if (imageTouchTimer) {
+            clearTimeout(imageTouchTimer);
+            imageTouchTimer = null;
+          }
+          imageTouchStart = null;
+        }
+
+        function findTrackedTouch(touchList) {
+          if (!imageTouchStart) return null;
+          for (var i = 0; i < touchList.length; i++) {
+            if (touchList[i].identifier === imageTouchStart.identifier) {
+              return touchList[i];
+            }
+          }
+          return null;
+        }
 
         container.addEventListener('touchstart', function(e) {
+          clearImageLongPress();
           isLongPress = false;
+          if (e.touches.length !== 1) return;
+
           var target = e.target;
           while (target && target !== container) {
             if (target.tagName === 'IMG') {
               var src = target.getAttribute('src');
               if (src) {
+                var touch = e.touches[0];
+                imageTouchStart = {
+                  identifier: touch.identifier,
+                  x: touch.clientX,
+                  y: touch.clientY,
+                };
                 imageTouchTimer = setTimeout(function() {
+                  if (!imageTouchStart) return;
+                  imageTouchTimer = null;
                   isLongPress = true;
                   window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'image_long_press', src: src }));
                 }, 450);
@@ -310,13 +341,31 @@ export default React.memo(function ZhihuDOMContent({
           }
         }, { passive: true });
 
-        container.addEventListener('touchend', function() {
-          if (imageTouchTimer) clearTimeout(imageTouchTimer);
-        }, { passive: true });
+        window.addEventListener('touchmove', function(e) {
+          if (!imageTouchStart) return;
+          if (e.touches.length !== 1) {
+            clearImageLongPress();
+            return;
+          }
 
-        container.addEventListener('touchmove', function() {
-          if (imageTouchTimer) clearTimeout(imageTouchTimer);
-        }, { passive: true });
+          var touch = findTrackedTouch(e.touches);
+          if (!touch) {
+            clearImageLongPress();
+            return;
+          }
+
+          var deltaX = touch.clientX - imageTouchStart.x;
+          var deltaY = touch.clientY - imageTouchStart.y;
+          if (
+            deltaX * deltaX + deltaY * deltaY >
+            imageLongPressMoveTolerance * imageLongPressMoveTolerance
+          ) {
+            clearImageLongPress();
+          }
+        }, { passive: true, capture: true });
+
+        window.addEventListener('touchend', clearImageLongPress, { passive: true, capture: true });
+        window.addEventListener('touchcancel', clearImageLongPress, { passive: true, capture: true });
 
         container.addEventListener('click', function(e) {
           if (isLongPress) {
