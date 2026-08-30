@@ -9,8 +9,13 @@ import {
 } from '@/api/zhihu';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import {
+  getRichContentQueryKey,
+  hasInlineRichContent,
+  RICH_CONTENT_STALE_TIME,
+  ZhihuContent,
+} from '@/features/rich-content';
 import { Text, View } from './Themed';
-import { ZhihuContent } from './ZhihuContent';
 
 interface FeedCardPreviewProps {
   item: FeedItem;
@@ -26,9 +31,12 @@ export function FeedCardPreview({ item }: FeedCardPreviewProps) {
         : item.type === 'pins'
           ? 'pin'
           : 'question';
+  const inlineContent = item.content as unknown;
+  const hasInlineContent = hasInlineRichContent(inlineContent);
+  const queryKey = getRichContentQueryKey(item.type, item.id);
 
   const { data: fullData, isLoading } = useQuery({
-    queryKey: ['feed-card-preview', typeKey, item.id],
+    queryKey,
     queryFn: async () => {
       try {
         if (item.type === 'answers') {
@@ -51,7 +59,9 @@ export function FeedCardPreview({ item }: FeedCardPreviewProps) {
         throw err;
       }
     },
-    staleTime: 5 * 60 * 1000,
+    enabled: !hasInlineContent,
+    placeholderData: hasInlineContent ? { content: inlineContent } : undefined,
+    staleTime: RICH_CONTENT_STALE_TIME,
     retry: false,
   });
 
@@ -108,7 +118,11 @@ export function FeedCardPreview({ item }: FeedCardPreviewProps) {
         ) : (
           <View className="bg-transparent mb-2">
             <ZhihuContent
-              content={fullData?.content}
+              content={
+                typeof fullData?.content === 'string'
+                  ? fullData.content
+                  : undefined
+              }
               contentArray={
                 item.type === 'pins' && Array.isArray(fullData?.content)
                   ? fullData.content

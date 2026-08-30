@@ -1,7 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  type QueryClient,
+  useInfiniteQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { BlurView } from 'expo-blur';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import React, {
@@ -46,6 +50,7 @@ import { RecentMoments } from '@/components/RecentMoments';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { hasReusableAnswerDetail } from '@/features/rich-content';
 import {
   type FeedCacheContext,
   feedCacheRepository,
@@ -937,6 +942,7 @@ const FeedList = React.forwardRef<
           console.log(`🌐 [queryFn] Requesting URL: ${requestUrl} (tab=${tab}, isRefreshing=${isRefreshing})`);
           const data = await getFeed(requestUrl);
           const rawItems = data.data || [];
+          seedAnswerDetailsFromFeed(queryClient, rawItems);
           let items: Array<FeedItem | HotItem>;
           if (tab === 'following')
             items = rawItems
@@ -1303,6 +1309,22 @@ function normalizeAnswerType(target: {
       : undefined;
   if (raw === 'PAID' || target.paid_info != null) return 'PAID';
   return raw;
+}
+
+function seedAnswerDetailsFromFeed(
+  queryClient: QueryClient,
+  items: RawFeedItem[],
+) {
+  for (const item of items) {
+    const target = (item.target || item) as unknown as RawFeedTarget;
+    const id = target.id?.toString().trim();
+
+    if (!id || !hasReusableAnswerDetail(target)) continue;
+
+    queryClient.setQueryData(['answer-detail', id], (existing: unknown) =>
+      existing == null ? target : existing,
+    );
+  }
 }
 
 function parseRecommendData(item: RawFeedItem): FeedItem | null {

@@ -3,9 +3,9 @@ import React, { useCallback, useMemo } from 'react';
 import { Linking } from 'react-native';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { LinkCard } from '@/features/rich-content';
 import { extractZhihuRedirectTarget, parseZhihuUrl } from '@/utils/url';
 import { Text, View } from './Themed';
-import { LinkCard } from './ZhihuContent';
 
 function parseExcerpt(html: string): { text: string; links: string[] } {
   const links: string[] = [];

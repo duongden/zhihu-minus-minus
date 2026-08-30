@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "formula-heavy-001",
+      "file": "./cases/lala.md",
+      "block": 0,
+      "sourceType": "answer",
+      "collectedAt": "2026-08-30",
+      "traits": ["formula", "image", "heading", "list"],
+      "expected": {
+        "paragraphs": 50,
+        "headings": 7,
+        "figures": 3,
+        "totalImages": 77,
+        "activeImages": 74,
+        "formulaImages": 71,
+        "noscripts": 3,
+        "videoBoxes": 0
+      }
+    },
+    {
+      "id": "image-video-001",
+      "file": "./cases/lala.md",
+      "block": 1,
+      "sourceType": "answer",
+      "collectedAt": "2026-08-30",
+      "traits": ["image", "figcaption", "video"],
+      "expected": {
+        "paragraphs": 6,
+        "headings": 0,
+        "figures": 5,
+        "totalImages": 11,
+        "activeImages": 6,
+        "formulaImages": 0,
+        "noscripts": 5,
+        "videoBoxes": 1
+      }
+    },
+    {
+      "id": "long-image-heavy-001",
+      "file": "./cases/pig.md",
+      "block": 0,
+      "sourceType": "answer",
+      "collectedAt": "2026-08-30",
+      "traits": ["long-form", "image", "figcaption", "escaped-html"],
+      "expected": {
+        "paragraphs": 269,
+        "headings": 0,
+        "figures": 16,
+        "figcaptions": 16,
+        "totalImages": 32,
+        "activeImages": 16,
+        "formulaImages": 0,
+        "noscripts": 16,
+        "videoBoxes": 0,
+        "linkCards": 0
+      }
+    }
+  ]
+}

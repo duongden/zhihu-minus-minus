@@ -8,8 +8,8 @@ import type { FeedItem } from '@/api/zhihu';
 import { BouncyButton } from '@/components/BouncyButton';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
-import { ZhihuContent } from '@/components/ZhihuContent';
 import Colors from '@/constants/Colors';
+import { ZhihuContent } from '@/features/rich-content';
 
 export default function GuestDetailScreen() {
   const router = useRouter();
