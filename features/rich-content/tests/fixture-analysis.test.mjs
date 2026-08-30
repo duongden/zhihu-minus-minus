@@ -3,6 +3,7 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import {
   analyzeFixtureCase,
+  analyzeFixtureDirectory,
   analyzeHtml,
   loadManifest,
   normalizeFixtureHtml,
@@ -12,6 +13,7 @@ import {
 const manifestPath = fileURLToPath(
   new URL('../fixtures/manifest.json', import.meta.url),
 );
+const inboxPath = fileURLToPath(new URL('../fixtures/inbox/', import.meta.url));
 
 test('normalizes captured escaped HTML values', () => {
   assert.equal(
@@ -25,6 +27,23 @@ test('normalizes captured escaped HTML values', () => {
 });
 
 test('splits a legacy multi-sample fixture on blank lines', () => {
+  assert.deepEqual(
+    splitFixtureBlocks('<p>A</p>\n<span>A2</span>\n\n<p>B</p>'),
+    ['<p>A</p>\n<span>A2</span>', '<p>B</p>'],
+  );
+});
+
+test('normalizes escaped closing tags from captured API values', () => {
+  assert.deepEqual(normalizeFixtureHtml('<p>A<\\/p>'), '<p>A</p>');
+});
+
+test('discovers every unregistered inbox sample without manifest work', async () => {
+  const results = await analyzeFixtureDirectory(inboxPath);
+  assert.ok(results.some(({ id }) => id === 'inbox:pig.md#0'));
+  assert.ok(results.every(({ stats }) => stats.characters > 0));
+});
+
+test('keeps a single-line legacy split compatible', () => {
   assert.deepEqual(splitFixtureBlocks('<p>A</p>\n\n\n<p>B</p>'), [
     '<p>A</p>',
     '<p>B</p>',

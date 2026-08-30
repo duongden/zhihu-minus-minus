@@ -3,7 +3,7 @@
   "cases": [
     {
       "id": "formula-heavy-001",
-      "file": "../../../lala.md",
+      "file": "./cases/lala.md",
       "block": 0,
       "sourceType": "answer",
       "collectedAt": "2026-08-30",
@@ -21,7 +21,7 @@
     },
     {
       "id": "image-video-001",
-      "file": "../../../lala.md",
+      "file": "./cases/lala.md",
       "block": 1,
       "sourceType": "answer",
       "collectedAt": "2026-08-30",

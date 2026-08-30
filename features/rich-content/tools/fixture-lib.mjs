@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const OPEN_TAG_PATTERN = /<([a-z][a-z0-9-]*)(?:\s|\/?>)/gi;
@@ -18,7 +18,7 @@ function getOpeningTags(html) {
 
 export function splitFixtureBlocks(raw) {
   return raw
-    .split(/\r?\n+/)
+    .split(/(?:\r?\n){2,}/)
     .map((block) => block.trim())
     .filter(Boolean);
 }
@@ -34,7 +34,7 @@ export function normalizeFixtureHtml(rawBlock) {
       // complete JSON string. Fall through to the conservative normalization.
     }
   }
-  return trimmed.replaceAll('\\"', '"');
+  return trimmed.replaceAll('\\"', '"').replaceAll('\\/', '/');
 }
 
 export function analyzeHtml(html) {
@@ -115,4 +115,41 @@ export async function analyzeFixtureCase(fixtureCase, manifestPath) {
     stats,
     errors: compareExpected(stats, fixtureCase.expected),
   };
+}
+
+async function listFixtureFiles(directoryPath) {
+  const entries = await readdir(directoryPath, { withFileTypes: true });
+  const nestedFiles = await Promise.all(
+    entries.map(async (entry) => {
+      const entryPath = path.join(directoryPath, entry.name);
+      if (entry.isDirectory()) return listFixtureFiles(entryPath);
+      if (entry.name.toLowerCase() === 'readme.md') return [];
+      return /\.(?:html?|md)$/i.test(entry.name) ? [entryPath] : [];
+    }),
+  );
+  return nestedFiles.flat().sort();
+}
+
+export async function analyzeFixtureDirectory(directoryPath) {
+  const filePaths = await listFixtureFiles(directoryPath);
+  const results = [];
+
+  for (const filePath of filePaths) {
+    const raw = await readFile(filePath, 'utf8');
+    const blocks = splitFixtureBlocks(raw);
+    for (const [blockIndex, rawBlock] of blocks.entries()) {
+      const relativePath = path.relative(directoryPath, filePath);
+      results.push({
+        id: `inbox:${relativePath}#${blockIndex}`,
+        filePath,
+        block: blockIndex,
+        sourceType: 'unregistered',
+        traits: [],
+        stats: analyzeHtml(normalizeFixtureHtml(rawBlock)),
+        errors: [],
+      });
+    }
+  }
+
+  return results;
 }

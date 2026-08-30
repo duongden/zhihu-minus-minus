@@ -35,8 +35,8 @@ import { LikeButton } from '@/components/LikeButton';
 import { ShareMenu } from '@/components/ShareMenu';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
-import { ZhihuContent } from '@/components/ZhihuContent';
 import Colors from '@/constants/Colors';
+import { ZhihuContent } from '@/features/rich-content';
 import { formatDate } from '@/utils/date';
 
 const StreamItem = forwardRef(

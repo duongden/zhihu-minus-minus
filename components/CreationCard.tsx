@@ -7,12 +7,12 @@ import Animated from 'react-native-reanimated';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { ZhihuContent } from '@/features/rich-content';
 import { useCollectionAction } from '@/hooks/useCollectionAction';
 import { useCollectionStore } from '@/store/useCollectionStore';
 import { BouncyButton } from './BouncyButton';
 import { LikeButton } from './LikeButton';
 import { type ShareContentType, ShareMenu } from './ShareMenu';
-import { ZhihuContent } from './ZhihuContent';
 
 export const CreationCard = React.forwardRef(
   (

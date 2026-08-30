@@ -9,8 +9,8 @@ import {
 } from '@/api/zhihu';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { ZhihuContent } from '@/features/rich-content';
 import { Text, View } from './Themed';
-import { ZhihuContent } from './ZhihuContent';
 
 interface FeedCardPreviewProps {
   item: FeedItem;
