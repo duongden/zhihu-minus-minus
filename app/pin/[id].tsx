@@ -23,6 +23,7 @@ import Colors from '@/constants/Colors';
 import { ZhihuContent } from '@/features/rich-content';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import type { ZhihuPin } from '@/types/zhihu';
 import { formatDateTime } from '@/utils/date';
 
 export default function PinDetailScreen() {
@@ -59,15 +60,24 @@ export default function PinDetailScreen() {
     }
   }, [enableBrowseHistory, pin?.id]);
 
-  const followMutation = useOptimisticToggle({
+  const followMutation = useOptimisticToggle<Pick<ZhihuPin, 'author'>>({
+    queryKey: ['pin-detail', id],
     mutationFn: async () => {
-      if (pin?.author?.is_following)
-        return unfollowMember(pin.author.url_token || pin.author.id);
-      return followMember(pin.author.url_token || pin.author.id);
+      const author = pin?.author;
+      if (!author) throw new Error('想法尚未加载');
+      if (author.is_following)
+        return unfollowMember(author.url_token || author.id);
+      return followMember(author.url_token || author.id);
     },
     isActive: pin?.author?.is_following,
+    onUpdateCache: (old) => ({
+      ...old,
+      author: {
+        ...old.author,
+        is_following: !old.author.is_following,
+      },
+    }),
     successMessage: (isActive) => (isActive ? '已取消关注' : '已关注'),
-    invalidateQueries: [['pin-detail', id]],
   });
 
   const goToProfile = useCallback(() => {

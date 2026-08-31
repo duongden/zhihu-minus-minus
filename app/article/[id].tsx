@@ -36,6 +36,7 @@ import { ZhihuContent } from '@/features/rich-content';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
 import { useCollectionStore } from '@/store/useCollectionStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import type { ZhihuArticle } from '@/types/zhihu';
 import { formatDate } from '@/utils/date';
 import { showToast } from '@/utils/toast';
 
@@ -142,7 +143,8 @@ export default function ArticleDetail() {
   });
 
   // 4. 关注作者逻辑
-  const followMutation = useOptimisticToggle({
+  const followMutation = useOptimisticToggle<ZhihuArticle>({
+    queryKey: ['zhihu-article', id],
     mutationFn: async () => {
       if (data?.author?.is_following) {
         return unfollowMember(data.author.url_token || data.author.id);
@@ -150,8 +152,16 @@ export default function ArticleDetail() {
       return followMember(data.author.url_token || data.author.id);
     },
     isActive: data?.author?.is_following,
+    onUpdateCache: (old) => ({
+      ...old,
+      author: old.author
+        ? {
+            ...old.author,
+            is_following: !old.author.is_following,
+          }
+        : old.author,
+    }),
     successMessage: (isActive) => (isActive ? '已取消关注' : '已关注'),
-    invalidateQueries: [['zhihu-article', id]],
   });
 
   // 5. 获取专栏卡片信息
