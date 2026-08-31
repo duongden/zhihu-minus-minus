@@ -1,15 +1,19 @@
 import { FlashList } from '@shopify/flash-list';
-import { useInfiniteQuery } from '@tanstack/react-query';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { Stack, useLocalSearchParams } from 'expo-router';
 import { ActivityIndicator } from 'react-native';
+import type { ZhihuMemberListItem } from '@/api/zhihu';
 import { getMemberFollowers } from '@/api/zhihu';
+import { QueryErrorView } from '@/components/QueryErrorView';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { UserCard } from '@/components/UserCard';
+import { refreshInfiniteQuery } from '@/utils/query';
+import { getNextPageOffset } from '@/utils/userProfile';
 
 export default function FollowersScreen() {
-  const { id } = useLocalSearchParams();
-  const _router = useRouter();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const primaryColor = useThemeColor({}, 'primary');
+  const queryClient = useQueryClient();
 
   const {
     data,
@@ -17,18 +21,16 @@ export default function FollowersScreen() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isError,
     refetch,
     isRefetching,
   } = useInfiniteQuery({
     queryKey: ['user-followers', id],
-    queryFn: ({ pageParam = 0 }) =>
-      getMemberFollowers(id as string, 20, pageParam as number),
+    queryFn: ({ pageParam = 0 }) => getMemberFollowers(id, 20, pageParam),
     initialPageParam: 0,
     getNextPageParam: (lastPage) => {
       if (!lastPage || lastPage.paging?.is_end) return undefined;
-      const nextUrl = lastPage.paging?.next;
-      const match = nextUrl?.match(/offset=(\d+)/);
-      return match ? parseInt(match[1], 10) : undefined;
+      return getNextPageOffset(lastPage.paging?.next);
     },
   });
 
@@ -37,17 +39,36 @@ export default function FollowersScreen() {
   return (
     <View className="flex-1">
       <Stack.Screen options={{ title: '关注者列表' }} />
-      <FlashList
+      <FlashList<ZhihuMemberListItem>
         data={users}
-        renderItem={({ item }) => <UserCard user={item} />}
-        {...({ estimatedItemSize: 80 } as any)}
-        onEndReached={() => hasNextPage && fetchNextPage()}
-        onRefresh={refetch}
+        keyExtractor={(item) => String(item.id || item.url_token)}
+        renderItem={({ item }) => (
+          <UserCard
+            user={item}
+            invalidateQueryKeys={[['user-followers', id]]}
+          />
+        )}
+        onEndReached={() => {
+          if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+        }}
+        onRefresh={() =>
+          void refreshInfiniteQuery(
+            queryClient,
+            ['user-followers', id],
+            refetch,
+          )
+        }
         refreshing={isRefetching}
         ListEmptyComponent={() => (
           <View className="p-[50px] items-center">
             {isLoading ? (
               <ActivityIndicator color={primaryColor} />
+            ) : isError ? (
+              <QueryErrorView
+                compact
+                message="关注者加载失败"
+                onRetry={() => void refetch()}
+              />
             ) : (
               <Text type="secondary">还没有关注者喵</Text>
             )}

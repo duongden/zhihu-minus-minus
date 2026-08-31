@@ -32,6 +32,7 @@ import Animated, {
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
+import type { EdgeInsets } from 'react-native-safe-area-context';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
 // 使用 @ 别名导入组件
@@ -60,7 +61,7 @@ import {
   feedExposureRepository,
 } from '@/storage/feedExposureRepository';
 import { useAuthStore } from '@/store/useAuthStore';
-import { type TabKey, useSettingsStore } from '@/store/useSettingsStore';
+import { useSettingsStore } from '@/store/useSettingsStore';
 import { supportsLocalFeedDedup } from '@/utils/feedDedup';
 import {
   applyFeedFilter,
@@ -94,7 +95,21 @@ const TABS = [
   'profile',
 ] as const;
 type TabType = (typeof TABS)[number];
+type FeedTabType = keyof typeof FEED_URLS;
 type FeedListItem = FeedItem | HotItem | CollapsedGroup;
+
+function isTabType(value: string): value is TabType {
+  return (TABS as readonly string[]).includes(value);
+}
+
+interface TabListHandle {
+  scrollToOffset: (args: { offset: number; animated?: boolean }) => void;
+  refresh?: () => void;
+}
+
+interface FeedListHandle extends TabListHandle {
+  refresh: () => void;
+}
 
 // 隐藏模式下被过滤项不占行，一页内容可能所剩无几甚至为空——列表不足一屏时
 // 用户无法滚动，onEndReached 不会再触发，列表就此卡住。故在该模式下主动补页
@@ -117,18 +132,10 @@ export default function HomeScreen() {
 
   // 动态过滤 Tabs
   const currentTabs = useMemo(() => {
-    return [
-      'following',
-      'recommend',
-      'local',
-      'hot',
-      'daily',
-      'publish',
-      'profile',
-    ].filter((tab) => {
+    return TABS.filter((tab) => {
       if (tab === 'profile') return true;
-      return visibleTabs.includes(tab as any);
-    }) as TabType[];
+      return visibleTabs.includes(tab);
+    });
   }, [visibleTabs]);
 
   const homeTabs = useMemo(() => {
@@ -147,8 +154,8 @@ export default function HomeScreen() {
   // 计算初始页码
   const initialPageIndex = useMemo(() => {
     // 优先考虑 URL 参数中的 tab
-    if (params.tab) {
-      const idx = currentTabs.indexOf(params.tab as TabKey);
+    if (params.tab && isTabType(params.tab)) {
+      const idx = currentTabs.indexOf(params.tab);
       if (idx >= 0) return idx;
     }
     const idx = currentTabs.indexOf(defaultTab);
@@ -193,8 +200,8 @@ export default function HomeScreen() {
 
   // 监听 params.tab 变化并切换页面
   useEffect(() => {
-    if (params.tab) {
-      const idx = currentTabs.indexOf(params.tab as TabKey);
+    if (params.tab && isTabType(params.tab)) {
+      const idx = currentTabs.indexOf(params.tab);
       if (idx >= 0 && idx !== currentPage) {
         pagerRef.current?.setPage(idx);
         setCurrentPage(idx);
@@ -206,7 +213,7 @@ export default function HomeScreen() {
   const [refreshingTabs, setRefreshingTabs] = useState<Record<number, boolean>>(
     {},
   );
-  const listRefs = useRef<any[]>([]);
+  const listRefs = useRef<Array<TabListHandle | null>>([]);
 
   const handleRefreshStateChange = useCallback(
     (pageIndex: number, isRefreshing: boolean) => {
@@ -468,7 +475,9 @@ export default function HomeScreen() {
             <View key={tab} style={{ flex: 1, backgroundColor: 'transparent' }}>
               {!isVisited ? null : tab === 'daily' ? (
                 <DailyList
-                  ref={(el) => (listRefs.current[idx] = el)}
+                  ref={(element) => {
+                    listRefs.current[idx] = element;
+                  }}
                   insets={insets}
                   onScroll={(offset) => handleScrollUpdate(idx, offset)}
                   onRefreshStateChange={(isRefreshing) =>
@@ -478,7 +487,7 @@ export default function HomeScreen() {
               ) : tab === 'publish' ? (
                 <PublishScreen />
               ) : tab === 'profile' ? (
-                <ProfileScreen />
+                <ProfileScreen isActive={isFocused && currentPage === idx} />
               ) : !cookies && tab === 'following' ? (
                 <View style={styles.loginPrompt}>
                   <Text style={styles.loginText} type="secondary">
@@ -486,15 +495,17 @@ export default function HomeScreen() {
                   </Text>
                   <Pressable
                     style={[styles.loginBtn, { backgroundColor: tintColor }]}
-                    onPress={() => router.push('/login' as any)}
+                    onPress={() => router.push('/login')}
                   >
                     <Text style={styles.loginBtnText}>去登录</Text>
                   </Pressable>
                 </View>
               ) : (
                 <FeedList
-                  ref={(el) => (listRefs.current[idx] = el)}
-                  tab={tab as any}
+                  ref={(element) => {
+                    listRefs.current[idx] = element;
+                  }}
+                  tab={tab as FeedTabType}
                   isActive={isFocused && currentPage === idx}
                   insets={insets}
                   guestCookieReady={guestCookieReady}
@@ -657,7 +668,15 @@ function BottomTabIcon({
   size = 24,
   isScrollTop,
   width,
-}: any) {
+}: {
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  onPress: () => void;
+  color: string;
+  size?: number;
+  active?: boolean;
+  isScrollTop?: boolean;
+  width?: number;
+}) {
   // 动画状态
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
@@ -701,11 +720,11 @@ function BottomTabIcon({
 
 // FeedList 组件
 const FeedList = React.forwardRef<
-  any,
+  FeedListHandle,
   {
-    tab: TabType;
+    tab: FeedTabType;
     isActive: boolean;
-    insets: any;
+    insets: EdgeInsets;
     guestCookieReady: boolean;
     onScroll?: (offset: number) => void;
     onRefreshStateChange?: (isRefreshing: boolean) => void;
@@ -814,7 +833,7 @@ const FeedList = React.forwardRef<
 
     const [initialFeedCache, setInitialFeedCache] = useState<{
       pages: Array<{ items: FeedListItem[]; nextUrl: string | null }>;
-      pageParams: any[];
+      pageParams: string[];
     } | null>(null);
     const [isCacheCheckDone, setIsCacheCheckDone] = useState(false);
 
@@ -832,7 +851,7 @@ const FeedList = React.forwardRef<
           if (cached && cached.items.length > 0) {
             setInitialFeedCache({
               pages: [{ items: cached.items, nextUrl: cached.nextUrl }],
-              pageParams: [(FEED_URLS as any)[tab]],
+              pageParams: [FEED_URLS[tab]],
             });
           }
         })
@@ -924,13 +943,13 @@ const FeedList = React.forwardRef<
       refetch,
     } = useInfiniteQuery({
       queryKey: ['zhihu-feed', queryAccountKey, tab],
-      queryFn: async ({ pageParam = (FEED_URLS as any)[tab] }) => {
+      queryFn: async ({ pageParam = FEED_URLS[tab] }) => {
         if (!cookies && tab === 'following')
           return { items: [], nextUrl: null };
         try {
           let requestUrl = pageParam as string;
           const isInitialUrl =
-            (requestUrl === (FEED_URLS as any)[tab] ||
+            (requestUrl === FEED_URLS[tab] ||
               requestUrl === 'zhihu://local-feed' ||
               requestUrl.includes('feed/topstory/recommend')) &&
             !requestUrl.includes('action=down');
@@ -939,7 +958,9 @@ const FeedList = React.forwardRef<
             requestUrl = `${requestUrl}${sep}action=up&t=${Date.now()}`;
           }
 
-          console.log(`🌐 [queryFn] Requesting URL: ${requestUrl} (tab=${tab}, isRefreshing=${isRefreshing})`);
+          console.log(
+            `🌐 [queryFn] Requesting URL: ${requestUrl} (tab=${tab}, isRefreshing=${isRefreshing})`,
+          );
           const data = await getFeed(requestUrl);
           const rawItems = data.data || [];
           seedAnswerDetailsFromFeed(queryClient, rawItems);
@@ -960,11 +981,7 @@ const FeedList = React.forwardRef<
           const nextUrl =
             data.paging?.next?.replace('http://', 'https://') ?? null;
 
-          if (
-            launchCacheContext &&
-            isInitialUrl &&
-            items.length > 0
-          ) {
+          if (launchCacheContext && isInitialUrl && items.length > 0) {
             void feedCacheRepository
               .saveFeedCache(launchCacheContext, items, nextUrl)
               .catch((err) => console.warn('保存启动 Feed 缓存失败', err));
@@ -974,11 +991,11 @@ const FeedList = React.forwardRef<
             items,
             nextUrl,
           };
-        } catch (_e: any) {
+        } catch {
           return { items: [], nextUrl: null };
         }
       },
-      initialPageParam: (FEED_URLS as any)[tab],
+      initialPageParam: FEED_URLS[tab],
       getNextPageParam: (lastPage) => lastPage.nextUrl,
       initialData: initialFeedCache ?? undefined,
       staleTime: launchCacheContext && initialFeedCache ? 5 * 60 * 1000 : 0,
@@ -1009,9 +1026,7 @@ const FeedList = React.forwardRef<
           }
         }
         const initialParam =
-          tab === 'local'
-            ? 'zhihu://local-feed'
-            : (FEED_URLS as any)[tab];
+          tab === 'local' ? 'zhihu://local-feed' : FEED_URLS[tab];
         await refreshInfiniteQuery(
           queryClient,
           ['zhihu-feed', queryAccountKey, tab],
@@ -1127,7 +1142,7 @@ const FeedList = React.forwardRef<
     }, [isActive, localDedupEnabled, recentExposureKeys]);
 
     React.useImperativeHandle(ref, () => ({
-      scrollToOffset: (args: any) => flashListRef.current?.scrollToOffset(args),
+      scrollToOffset: (args) => flashListRef.current?.scrollToOffset(args),
       refresh: handleRefresh,
     }));
 
@@ -1275,7 +1290,12 @@ function parseFollowingData(item: RawFeedItem): FeedItem | null {
         target.author?.avatar_url ||
         'https://picx.zhimg.com/v2-abed1a8c04700ba7d72b45195223e0ff_l.jpg',
     },
-    excerpt: target.excerpt || target.content?.[0]?.content || '',
+    excerpt:
+      target.excerpt ||
+      (Array.isArray(target.content)
+        ? target.content[0]?.content
+        : target.content) ||
+      '',
     content: target.content || '',
     image:
       target.thumbnail ||
@@ -1288,7 +1308,10 @@ function parseFollowingData(item: RawFeedItem): FeedItem | null {
       target.favorite_count || target.reaction?.statistics?.favorites || 0,
     voted: target.relationship?.voting || 0,
     type: appType,
-    topics: target.topics?.map((t: any) => ({ id: t.id, name: t.name })) || [],
+    topics: target.topics?.map((topic) => ({
+      id: topic.id,
+      name: topic.name,
+    })),
   };
 }
 
@@ -1354,7 +1377,12 @@ function parseRecommendData(item: RawFeedItem): FeedItem | null {
         'https://picx.zhimg.com/v2-abed1a8c04700ba7d72b45195223e0ff_l.jpg',
       headline: target.author?.headline || '',
     },
-    excerpt: target.excerpt || target.content?.[0]?.content || '',
+    excerpt:
+      target.excerpt ||
+      (Array.isArray(target.content)
+        ? target.content[0]?.content
+        : target.content) ||
+      '',
     content: target.content || '',
     image:
       target.thumbnail ||
@@ -1370,7 +1398,10 @@ function parseRecommendData(item: RawFeedItem): FeedItem | null {
       0,
     voted: target.relationship?.voting || 0,
     type: appType,
-    topics: target.topics?.map((t: any) => ({ id: t.id, name: t.name })) || [],
+    topics: target.topics?.map((topic) => ({
+      id: topic.id,
+      name: topic.name,
+    })),
     // 本地过滤信号：实测推荐流可用字段（详见 utils/feedFilter.ts）
     // 盐选双信号取或：answer_type === 'PAID' 或 paid_info != null。
     // 大小写按接口而异——实测游客推荐流返回小写 `normal`，话题流返回大写
@@ -1393,8 +1424,8 @@ function parseRecommendData(item: RawFeedItem): FeedItem | null {
   };
 }
 
-function parseHotData(item: any, index: number): HotItem {
-  const target = (item.target || item) as any;
+function parseHotData(item: RawFeedItem, index: number): HotItem {
+  const target = item.target || (item as unknown as RawFeedTarget);
   const questionId =
     target.link?.url?.split('/').pop() || target.url?.split('/').pop() || '';
 

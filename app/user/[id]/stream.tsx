@@ -1,5 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { FlashList } from '@shopify/flash-list';
+import {
+  FlashList,
+  type FlashListRef,
+  type ListRenderItemInfo,
+  type ViewToken,
+} from '@shopify/flash-list';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,6 +22,8 @@ import {
   Animated,
   Image,
   LayoutAnimation,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   View as NativeView,
   Platform,
   Pressable,
@@ -26,20 +33,111 @@ import {
 import Reanimated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  getMember,
   getMemberActivities,
   getMemberRelations,
+  getMemberWithFallback,
 } from '@/api/zhihu';
+import type { ZhihuMemberActivity } from '@/api/zhihu/member';
 import { BouncyButton } from '@/components/BouncyButton';
 import { LikeButton } from '@/components/LikeButton';
+import { QueryErrorView } from '@/components/QueryErrorView';
 import { ShareMenu } from '@/components/ShareMenu';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { ZhihuContent } from '@/features/rich-content';
+import { useCollectionAction } from '@/hooks/useCollectionAction';
+import { useCollectionStore } from '@/store/useCollectionStore';
+import type { ZhihuMemberRelation } from '@/types/zhihu';
 import { formatDate } from '@/utils/date';
+import { getNextPageOffset } from '@/utils/userProfile';
 
-const StreamItem = forwardRef(
+type StreamTab = 'activities' | 'answers' | 'questions' | 'articles' | 'pins';
+type StreamItemType = 'answer' | 'article' | 'question' | 'pin' | 'video';
+type StreamApiItem = ZhihuMemberActivity | ZhihuMemberRelation;
+
+interface StreamContentSegment {
+  type?: string;
+  content?: string;
+  data_draft_title?: string;
+}
+
+interface StreamContentItem {
+  id: string | number;
+  type?: string;
+  url?: string;
+  title?: string;
+  content?: string | StreamContentSegment[];
+  excerpt?: string;
+  voteup_count?: number;
+  like_count?: number;
+  reaction_count?: number;
+  comment_count?: number;
+  favlists_count?: number;
+  favlistsCount?: number;
+  favorite_count?: number;
+  answer_count?: number;
+  follower_count?: number;
+  created?: number;
+  created_time?: number;
+  updated?: number;
+  updated_time?: number;
+  author?: { name?: string; headline?: string };
+  question?: { id?: string | number; title?: string };
+  relationship?: { voting?: number };
+  reaction?: {
+    statistics?: {
+      favorites?: number;
+      like_count?: number;
+    };
+  };
+}
+
+interface StreamItemHandle {
+  measureFooter: (
+    callback: (x: number, y: number, width: number, height: number) => void,
+  ) => void;
+  id: string;
+}
+
+interface StreamItemProps {
+  item: StreamContentItem;
+  type: StreamItemType;
+  isExpanded: boolean;
+  onToggle: (id: string, expanded: boolean) => void;
+  onShare: (item: StreamContentItem) => void;
+  isHighlighted: boolean;
+  isCollapsedHighlighted?: boolean;
+}
+
+function getDisplayItem(
+  item: StreamApiItem,
+  activeTab: StreamTab,
+): StreamContentItem | null {
+  const candidate =
+    activeTab === 'activities' && 'target' in item && item.target
+      ? item.target
+      : item;
+
+  if (!candidate || typeof candidate !== 'object' || !('id' in candidate)) {
+    return null;
+  }
+  if (candidate.id === null || candidate.id === undefined) return null;
+
+  return candidate as StreamContentItem;
+}
+
+function normalizeStreamTab(type: string | undefined): StreamTab {
+  return type === 'activities' ||
+    type === 'answers' ||
+    type === 'questions' ||
+    type === 'articles' ||
+    type === 'pins'
+    ? type
+    : 'answers';
+}
+
+const StreamItem = forwardRef<StreamItemHandle, StreamItemProps>(
   (
     {
       item,
@@ -48,32 +146,21 @@ const StreamItem = forwardRef(
       onToggle,
       onShare,
       isCollapsedHighlighted,
-    }: {
-      item: any;
-      type: 'answer' | 'article' | 'question' | 'pin' | 'video';
-      isExpanded: boolean;
-      onToggle: (id: string, expanded: boolean) => void;
-      onShare: (item: any) => void;
-      isHighlighted: boolean;
-      isCollapsedHighlighted?: boolean;
-    },
+    }: StreamItemProps,
     ref,
   ) => {
     const colorScheme = useColorScheme();
     const router = useRouter();
     const footerRef = useRef<NativeView>(null);
 
-    const { useCollectionStore } = require('@/store/useCollectionStore');
-    const { useCollectionAction } = require('@/hooks/useCollectionAction');
-
     const warningColor = useThemeColor({}, 'warning');
     const primaryColor = useThemeColor({}, 'primary');
     const isCollectable = type === 'answer' || type === 'article';
-    const storeCollected = useCollectionStore((state: any) =>
+    const storeCollected = useCollectionStore((state) =>
       item?.id ? state.collectedStatusMap[item.id.toString()] : false,
     );
     const isCollected = storeCollected !== undefined ? storeCollected : false;
-    const storeOffset = useCollectionStore((state: any) =>
+    const storeOffset = useCollectionStore((state) =>
       item?.id ? state.collectedCountOffsetMap[item.id.toString()] || 0 : 0,
     );
     const displayCount =
@@ -85,18 +172,18 @@ const StreamItem = forwardRef(
     const { toggleCollect } = useCollectionAction();
 
     useImperativeHandle(ref, () => ({
-      measureFooter: (cb: any) => footerRef.current?.measureInWindow(cb),
-      id: item?.id?.toString() || Math.random().toString(),
+      measureFooter: (callback) => footerRef.current?.measureInWindow(callback),
+      id: item.id.toString(),
     }));
 
     const getFullContent = () => {
       if (!item) return '';
       if (type === 'pin' && Array.isArray(item.content)) {
         return item.content
-          .map((c: any) => {
-            if (c.type === 'text') return c.content;
-            if (c.type === 'link_card')
-              return `[链接: ${c.data_draft_title || '查看详情'}]`;
+          .map((segment) => {
+            if (segment.type === 'text') return segment.content;
+            if (segment.type === 'link_card')
+              return `[链接: ${segment.data_draft_title || '查看详情'}]`;
             return '';
           })
           .join('\n')
@@ -115,8 +202,8 @@ const StreamItem = forwardRef(
       if (type === 'pin') {
         if (Array.isArray(item.content)) {
           return item.content
-            .filter((c: any) => c.type === 'text')
-            .map((c: any) => c.content)
+            .filter((segment) => segment.type === 'text')
+            .map((segment) => segment.content)
             .join('')
             .replace(/<[^>]+>/g, '')
             .substring(0, 100);
@@ -148,7 +235,7 @@ const StreamItem = forwardRef(
         router.push({
           pathname: '/video/[id]',
           params: { id: item.id, title: item.title },
-        } as any);
+        });
       } else {
         router.push({
           pathname: `/${type}/[id]`,
@@ -157,7 +244,7 @@ const StreamItem = forwardRef(
             title: item.title || item.question?.title,
             questionId: item.question?.id,
           },
-        } as any);
+        });
       }
     };
 
@@ -167,9 +254,8 @@ const StreamItem = forwardRef(
       (fullText.length > 120 ||
         (typeof item.content === 'string' &&
           (item.content.includes('<img') || item.content.includes('<figure'))));
-
-    const _displayTypeForShare =
-      type === 'answer' ? 'answer' : type === 'article' ? 'article' : 'pin';
+    const itemTimestamp =
+      item.updated_time ?? item.updated ?? item.created_time ?? item.created;
 
     return (
       <BouncyButton
@@ -356,7 +442,7 @@ const StreamItem = forwardRef(
               >
                 <Ionicons name="chatbubble-outline" size={16} color="#888" />
                 <Text className="text-[#888] ml-1 text-xs font-semibold">
-                  {item.comment_count > 0 ? item.comment_count : '评论'}
+                  {(item.comment_count ?? 0) > 0 ? item.comment_count : '评论'}
                 </Text>
               </Pressable>
               {isCollectable && (
@@ -396,17 +482,7 @@ const StreamItem = forwardRef(
               type="secondary"
               className="text-xs text-tertiary dark:text-tertiary-dark mr-3"
             >
-              {item.updated_time ||
-              item.updated ||
-              item.created_time ||
-              item.created
-                ? formatDate(
-                    item.updated_time ||
-                      item.updated ||
-                      item.created_time ||
-                      item.created,
-                  )
-                : ''}
+              {itemTimestamp ? formatDate(itemTimestamp) : ''}
             </Text>
             <BouncyButton
               onPress={() => onShare(item)}
@@ -431,54 +507,56 @@ export default function UserStreamScreen() {
   const colorScheme = useColorScheme();
   const primaryColor = useThemeColor({}, 'primary');
   const insets = useSafeAreaInsets();
-  const flashListRef = useRef<any>(null);
+  const flashListRef = useRef<FlashListRef<StreamApiItem>>(null);
   const [hasScrolledToInitial, setHasScrolledToInitial] = useState(false);
 
-  const activeTab = type || 'answers';
+  const activeTab = normalizeStreamTab(type);
 
   const { height: screenHeight } = useWindowDimensions();
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [isSharing, setIsSharing] = useState(false);
-  const [selectedAnswer, setSelectedAnswer] = useState<any>(null);
+  const [selectedAnswer, setSelectedAnswer] =
+    useState<StreamContentItem | null>(null);
 
   const footerAnim = useRef(new Animated.Value(0)).current;
   const isFloatingShown = useRef(false);
   const lastCheckTime = useRef(0);
-  const itemRefs = useRef(new Map<string, any>());
+  const itemRefs = useRef(new Map<string, StreamItemHandle | null>());
   const itemLayouts = useRef(new Map<string, { y: number; height: number }>());
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
 
-  const [activeItem, setActiveItem] = useState<any>(null);
+  const [activeItem, setActiveItem] = useState<StreamContentItem | null>(null);
   const viewableIdsRef = useRef<string[]>([]);
   const viewabilityConfig = useRef({
     viewAreaCoveragePercentThreshold: 20,
   }).current;
 
-  const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
-    const ids: string[] = [];
-    let firstActive: any = null;
+  const onViewableItemsChanged = useRef(
+    ({ viewableItems }: { viewableItems: ViewToken<StreamApiItem>[] }) => {
+      const ids: string[] = [];
+      let firstActive: StreamContentItem | null = null;
 
-    viewableItems.forEach((v: any) => {
-      if (v.item) {
-        let displayItem = v.item;
-        if (activeTab === 'activities') displayItem = v.item.target || v.item;
-        if (displayItem?.id) {
-          const idStr = displayItem.id.toString();
-          ids.push(idStr);
-          if (!firstActive) {
-            firstActive = displayItem;
+      viewableItems.forEach((viewToken) => {
+        if (viewToken.item) {
+          const displayItem = getDisplayItem(viewToken.item, activeTab);
+          if (displayItem) {
+            const idStr = displayItem.id.toString();
+            ids.push(idStr);
+            if (!firstActive) {
+              firstActive = displayItem;
+            }
           }
         }
+      });
+
+      viewableIdsRef.current = ids;
+      if (firstActive) {
+        setActiveItem(firstActive);
       }
-    });
+    },
+  ).current;
 
-    viewableIdsRef.current = ids;
-    if (firstActive) {
-      setActiveItem(firstActive);
-    }
-  }).current;
-
-  const handleScroll = (event: any) => {
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const currentY = event.nativeEvent.contentOffset.y;
     const now = Date.now();
 
@@ -523,20 +601,14 @@ export default function UserStreamScreen() {
   };
 
   // 1. Fetch User Profile Details
-  const { data: user } = useQuery({
+  const {
+    data: user,
+    isLoading: isUserLoading,
+    isError: isUserError,
+    refetch: refetchUser,
+  } = useQuery({
     queryKey: ['user-detail', id],
-    queryFn: async () => {
-      try {
-        return await getMember(id as string);
-      } catch (err: any) {
-        if (err.response?.status === 403)
-          return await getMember(
-            id as string,
-            'follower_count,headline,cover_url,description,answer_count,articles_count,question_count,pins_count',
-          );
-        return null;
-      }
-    },
+    queryFn: () => getMemberWithFallback(id),
   });
 
   // 2. Infinite Query for specific content type stream
@@ -546,45 +618,42 @@ export default function UserStreamScreen() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isError: isStreamError,
+    refetch: refetchStream,
   } = useInfiniteQuery({
     queryKey: ['user-stream', id, activeTab],
-    queryFn: async ({ pageParam = 0 }) => {
-      try {
-        const targetId = user?.url_token || id;
-        if (activeTab === 'activities')
-          return await getMemberActivities(targetId, 10, pageParam as number);
-
-        let include = '';
-        if (activeTab === 'answers')
-          include =
-            'data[*].content,data[*].voteup_count,data[*].comment_count,data[*].created_time,data[*].updated_time,data[*].excerpt,data[*].question.title,data[*].relationship.voting,data[*].relationship.is_thanked';
-        else if (activeTab === 'questions')
-          include =
-            'data[*].created,data[*].answer_count,data[*].follower_count,data[*].author,data[*].admin_closed_comment,data[*].relationship.is_following';
-        else if (activeTab === 'articles')
-          include =
-            'data[*].comment_count,data[*].content,data[*].voteup_count,data[*].created,data[*].updated,data[*].title,data[*].excerpt,data[*].relationship.voting';
-        else if (activeTab === 'pins')
-          include =
-            'data[*].content,data[*].reaction_count,data[*].comment_count,data[*].created,data[*].relationship.voting';
-
-        return await getMemberRelations(targetId, activeTab as any, {
-          limit: 10,
-          offset: pageParam as number,
-          include,
-        });
-      } catch (err) {
-        console.error(`获取${activeTab}流失败:`, err);
-        return { data: [], paging: { is_end: true } };
+    queryFn: ({ pageParam = 0 }) => {
+      const targetId = user?.url_token || id;
+      if (activeTab === 'activities') {
+        return getMemberActivities(targetId, 10, pageParam);
       }
+
+      let include = '';
+      if (activeTab === 'answers')
+        include =
+          'data[*].content,data[*].voteup_count,data[*].comment_count,data[*].created_time,data[*].updated_time,data[*].excerpt,data[*].question.title,data[*].relationship.voting,data[*].relationship.is_thanked';
+      else if (activeTab === 'questions')
+        include =
+          'data[*].created,data[*].answer_count,data[*].follower_count,data[*].author,data[*].admin_closed_comment,data[*].relationship.is_following';
+      else if (activeTab === 'articles')
+        include =
+          'data[*].comment_count,data[*].content,data[*].voteup_count,data[*].created,data[*].updated,data[*].title,data[*].excerpt,data[*].relationship.voting';
+      else if (activeTab === 'pins')
+        include =
+          'data[*].content,data[*].reaction_count,data[*].comment_count,data[*].created,data[*].relationship.voting';
+
+      return getMemberRelations(targetId, activeTab, {
+        limit: 10,
+        offset: pageParam,
+        include,
+      });
     },
-    initialPageParam: 0 as number | string,
+    initialPageParam: 0,
     getNextPageParam: (lastPage) => {
       if (!lastPage || lastPage.paging?.is_end) return undefined;
-      const match = lastPage.paging?.next?.match(/offset=(\d+)/);
-      return match ? match[1] : undefined;
+      return getNextPageOffset(lastPage.paging?.next);
     },
-    enabled: user !== undefined,
+    enabled: !!user,
   });
 
   const streamItems =
@@ -594,9 +663,8 @@ export default function UserStreamScreen() {
   useEffect(() => {
     if (initialId && streamItems.length > 0 && !hasScrolledToInitial) {
       const index = streamItems.findIndex((item) => {
-        const displayItem =
-          activeTab === 'activities' ? item.target || item : item;
-        return displayItem?.id?.toString() === initialId?.toString();
+        const displayItem = getDisplayItem(item, activeTab);
+        return displayItem?.id.toString() === initialId.toString();
       });
       if (index !== -1) {
         setHasScrolledToInitial(true);
@@ -636,11 +704,9 @@ export default function UserStreamScreen() {
 
         // Collapsing: scroll back to the item to prevent losing context
         setTimeout(() => {
-          const index = streamItems.findIndex((item: any) => {
-            let displayItem = item;
-            if (activeTab === 'activities') displayItem = item.target || item;
-            return displayItem?.id?.toString() === id;
-          });
+          const index = streamItems.findIndex(
+            (item) => getDisplayItem(item, activeTab)?.id.toString() === id,
+          );
           if (index >= 0) {
             flashListRef.current?.scrollToIndex({
               index: index,
@@ -654,10 +720,9 @@ export default function UserStreamScreen() {
     [streamItems, activeTab, insets.top],
   );
 
-  const renderItemContent = ({ item }: { item: any; index: number }) => {
-    let displayItem = item as any;
-    if (activeTab === 'activities') displayItem = item.target || item;
-    if (!displayItem || (!displayItem.id && !displayItem.url)) return null;
+  const renderItemContent = ({ item }: ListRenderItemInfo<StreamApiItem>) => {
+    const displayItem = getDisplayItem(item, activeTab);
+    if (!displayItem) return null;
 
     let itemType: 'answer' | 'article' | 'question' | 'pin' | 'video' =
       'answer';
@@ -688,26 +753,18 @@ export default function UserStreamScreen() {
       >
         <StreamItem
           ref={(r) => {
-            displayItem?.id
-              ? itemRefs.current.set(displayItem.id.toString(), r)
-              : itemRefs.current.delete(displayItem.id?.toString() || '');
+            itemRefs.current.set(displayItem.id.toString(), r);
           }}
           item={displayItem}
           type={itemType}
-          isExpanded={
-            displayItem?.id ? expandedIds.has(displayItem.id.toString()) : false
-          }
+          isExpanded={expandedIds.has(displayItem.id.toString())}
           onToggle={handleToggleExpand}
           onShare={(ans) => {
             setSelectedAnswer(ans);
             setIsSharing(true);
           }}
           isHighlighted={!!isHighlighted}
-          isCollapsedHighlighted={
-            displayItem?.id
-              ? highlightedId === displayItem.id.toString()
-              : false
-          }
+          isCollapsedHighlighted={highlightedId === displayItem.id.toString()}
         />
       </View>
     );
@@ -730,239 +787,280 @@ export default function UserStreamScreen() {
       }}
     >
       <Stack.Screen options={{ headerShown: false }} />
-      {/* 1. Header Bar */}
-      <View
-        className="flex-row items-center px-4 py-3 border-b border-gray-100 dark:border-gray-800"
-        style={{
-          paddingTop: insets.top,
-          backgroundColor: Colors[colorScheme].background,
-        }}
-      >
-        <BouncyButton
-          onPress={() => router.back()}
-          className="p-1 -ml-1 bg-transparent"
-        >
-          <Ionicons
-            name="chevron-back"
-            size={24}
-            color={Colors[colorScheme].text}
-          />
-        </BouncyButton>
-
-        {/* User Mini Profile */}
-        <Pressable
-          onPress={() => router.push(`/user/${user?.url_token || id}`)}
-          className="flex-row items-center ml-2 flex-1 bg-transparent"
-        >
-          <Image
-            source={{
-              uri:
-                user?.avatar_url ||
-                'https://picx.zhimg.com/v2-abed1a8c04702bc9e7ba3d3d82bc7591_l.jpg',
-            }}
-            className="w-8 h-8 rounded-full"
-          />
-          <View className="ml-2 bg-transparent flex-1">
-            <Text className="font-bold text-sm" numberOfLines={1}>
-              {user?.name || '加载中...'}
-            </Text>
-            <Text type="secondary" className="text-[11px]" numberOfLines={1}>
-              {user?.headline || '查看全部个人主页'}
-            </Text>
-          </View>
-        </Pressable>
-
-        {/* Content Type Badge */}
-        <View
-          className="px-2.5 py-1 rounded-full ml-2"
-          style={{ backgroundColor: 'rgba(0,132,255,0.08)' }}
-        >
-          <Text type="primary" className="text-xs font-bold">
-            {getTypeName()}流
-          </Text>
+      {isUserLoading ? (
+        <View className="flex-1 items-center justify-center bg-transparent">
+          <ActivityIndicator color={primaryColor} />
         </View>
-      </View>
-
-      {/* 2. Content Stream List */}
-      <FlashList
-        ref={flashListRef}
-        onScroll={handleScroll}
-        data={streamItems}
-        {...({ estimatedItemSize: 250 } as any)}
-        keyExtractor={(item: any, index: number) =>
-          `stream-${item.id || ''}-${index}`
-        }
-        renderItem={renderItemContent}
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig}
-        onEndReached={() => {
-          if (hasNextPage && !isFetchingNextPage) fetchNextPage();
-        }}
-        onEndReachedThreshold={0.5}
-        contentContainerStyle={{ paddingVertical: 10, paddingBottom: 50 }}
-        ListEmptyComponent={
-          streamLoading ? (
-            <ActivityIndicator
-              style={{ marginTop: 100 }}
-              color={primaryColor}
-            />
-          ) : (
-            <Text type="secondary" className="text-center mt-20 text-sm">
-              暂无内容流 喵~
-            </Text>
-          )
-        }
-        ListFooterComponent={
-          isFetchingNextPage ? (
-            <ActivityIndicator style={{ margin: 20 }} color={primaryColor} />
-          ) : streamItems.length > 0 && !hasNextPage ? (
-            <Text type="secondary" className="text-center p-5 text-xs">
-              — 已经到底了喵 —
-            </Text>
-          ) : null
-        }
-      />
-
-      <ShareMenu
-        visible={isSharing}
-        onClose={() => {
-          setIsSharing(false);
-          setSelectedAnswer(null);
-        }}
-        type={
-          selectedAnswer?.type === 'article'
-            ? 'article'
-            : selectedAnswer?.type === 'pin'
-              ? 'pin'
-              : 'answer'
-        }
-        data={
-          selectedAnswer
-            ? {
-                id: selectedAnswer.id,
-                title:
-                  selectedAnswer.title ||
-                  selectedAnswer.question?.title ||
-                  '想法',
-                author: selectedAnswer.author?.name || user?.name,
-                authorHeadline:
-                  selectedAnswer.author?.headline || user?.headline,
-                content: selectedAnswer.excerpt || selectedAnswer.content || '',
-              }
-            : null
-        }
-      />
-
-      <Animated.View
-        className="absolute left-5 right-5 h-[54px] rounded-[27px] overflow-hidden z-[1000] shadow-black/20 shadow-lg elevation-10"
-        style={[
-          {
-            bottom: insets.bottom,
-            transform: [
-              {
-                translateY: footerAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [100, 0],
-                }),
-              },
-            ],
-            opacity: footerAnim,
-          },
-        ]}
-      >
-        <BlurView
-          intensity={95}
-          tint={colorScheme}
-          className="flex-1"
-          style={{
-            backgroundColor:
-              colorScheme === 'dark'
-                ? 'rgba(26,26,26,0.8)'
-                : 'rgba(255,255,255,0.85)',
-          }}
-        >
-          <View className="flex-1 flex-row items-center px-5 justify-between bg-transparent">
-            <View className="flex-row items-center bg-transparent">
-              <LikeButton
-                id={activeItem?.id}
-                count={
-                  activeItem?.reaction?.statistics?.like_count ||
-                  activeItem?.voteup_count ||
-                  activeItem?.reaction_count ||
-                  0
-                }
-                voted={activeItem?.relationship?.voting || 0}
-                type={
-                  activeItem?.type === 'article'
-                    ? 'articles'
-                    : activeItem?.type === 'pin'
-                      ? 'pins'
-                      : 'answers'
-                }
-                variant="ghost"
+      ) : isUserError || !user ? (
+        <QueryErrorView
+          message="用户资料加载失败"
+          onRetry={() => void refetchUser()}
+        />
+      ) : (
+        <>
+          {/* 1. Header Bar */}
+          <View
+            className="flex-row items-center px-4 py-3 border-b border-gray-100 dark:border-gray-800"
+            style={{
+              paddingTop: insets.top,
+              backgroundColor: Colors[colorScheme].background,
+            }}
+          >
+            <BouncyButton
+              onPress={() => router.back()}
+              className="p-1 -ml-1 bg-transparent"
+            >
+              <Ionicons
+                name="chevron-back"
+                size={24}
+                color={Colors[colorScheme].text}
               />
-              <Pressable
-                className="flex-row items-center ml-5 bg-transparent"
-                onPress={() => {
-                  const commentType =
-                    activeItem?.type === 'article'
-                      ? 'article'
-                      : activeItem?.type === 'pin'
-                        ? 'pin'
-                        : 'answer';
-                  router.push(
-                    `/comments/${activeItem?.id}?type=${commentType}&count=${activeItem?.comment_count || 0}`,
-                  );
+            </BouncyButton>
+
+            {/* User Mini Profile */}
+            <Pressable
+              onPress={() => router.push(`/user/${user?.url_token || id}`)}
+              className="flex-row items-center ml-2 flex-1 bg-transparent"
+            >
+              <Image
+                source={{
+                  uri:
+                    user?.avatar_url ||
+                    'https://picx.zhimg.com/v2-abed1a8c04702bc9e7ba3d3d82bc7591_l.jpg',
                 }}
-              >
-                <Ionicons
-                  name="chatbubble-outline"
-                  size={20}
+                className="w-8 h-8 rounded-full"
+              />
+              <View className="ml-2 bg-transparent flex-1">
+                <Text className="font-bold text-sm" numberOfLines={1}>
+                  {user?.name || '加载中...'}
+                </Text>
+                <Text
+                  type="secondary"
+                  className="text-[11px]"
+                  numberOfLines={1}
+                >
+                  {user?.headline || '查看全部个人主页'}
+                </Text>
+              </View>
+            </Pressable>
+
+            {/* Content Type Badge */}
+            <View
+              className="px-2.5 py-1 rounded-full ml-2"
+              style={{ backgroundColor: 'rgba(0,132,255,0.08)' }}
+            >
+              <Text type="primary" className="text-xs font-bold">
+                {getTypeName()}流
+              </Text>
+            </View>
+          </View>
+
+          {/* 2. Content Stream List */}
+          <FlashList<StreamApiItem>
+            ref={flashListRef}
+            onScroll={handleScroll}
+            data={streamItems}
+            keyExtractor={(item) => {
+              const displayItem = getDisplayItem(item, activeTab);
+              return `stream-${displayItem?.id ?? item.url ?? 'unknown'}`;
+            }}
+            renderItem={renderItemContent}
+            onViewableItemsChanged={onViewableItemsChanged}
+            viewabilityConfig={viewabilityConfig}
+            onEndReached={() => {
+              if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+            }}
+            onEndReachedThreshold={0.5}
+            contentContainerStyle={{ paddingVertical: 10, paddingBottom: 50 }}
+            ListEmptyComponent={
+              streamLoading ? (
+                <ActivityIndicator
+                  style={{ marginTop: 100 }}
                   color={primaryColor}
                 />
-                <Text
-                  type="primary"
-                  className=" text-sm font-bold"
-                  style={{ color: primaryColor }}
-                >
-                  {activeItem?.comment_count || 0}
+              ) : isStreamError ? (
+                <QueryErrorView
+                  message="内容流加载失败"
+                  onRetry={() => void refetchStream()}
+                />
+              ) : (
+                <Text type="secondary" className="text-center mt-20 text-sm">
+                  暂无内容流 喵~
                 </Text>
-              </Pressable>
+              )
+            }
+            ListFooterComponent={
+              isFetchingNextPage ? (
+                <ActivityIndicator
+                  style={{ margin: 20 }}
+                  color={primaryColor}
+                />
+              ) : streamItems.length > 0 && !hasNextPage ? (
+                <Text type="secondary" className="text-center p-5 text-xs">
+                  — 已经到底了喵 —
+                </Text>
+              ) : null
+            }
+          />
 
-              {activeItem?.id && expandedIds.has(activeItem.id.toString()) && (
-                <Pressable
-                  className="flex-row items-center ml-5 bg-transparent"
-                  onPress={() =>
-                    handleToggleExpand(activeItem.id.toString(), false)
+          <ShareMenu
+            visible={isSharing}
+            onClose={() => {
+              setIsSharing(false);
+              setSelectedAnswer(null);
+            }}
+            type={
+              selectedAnswer?.type === 'article'
+                ? 'article'
+                : selectedAnswer?.type === 'pin'
+                  ? 'pin'
+                  : selectedAnswer?.type === 'question'
+                    ? 'question'
+                    : selectedAnswer?.type === 'zvideo' ||
+                        selectedAnswer?.type === 'video'
+                      ? 'video'
+                      : 'answer'
+            }
+            data={
+              selectedAnswer
+                ? {
+                    id: selectedAnswer.id,
+                    title:
+                      selectedAnswer.title ||
+                      selectedAnswer.question?.title ||
+                      '想法',
+                    author: selectedAnswer.author?.name || user?.name,
+                    authorHeadline:
+                      selectedAnswer.author?.headline || user?.headline,
+                    content:
+                      selectedAnswer.excerpt ||
+                      (typeof selectedAnswer.content === 'string'
+                        ? selectedAnswer.content
+                        : ''),
                   }
-                >
-                  <Ionicons
-                    name="chevron-up-circle-outline"
-                    size={20}
-                    color={primaryColor}
-                  />
-                  <Text
-                    type="primary"
-                    className=" text-sm font-bold"
-                    style={{ color: primaryColor }}
-                  >
-                    收起
-                  </Text>
-                </Pressable>
-              )}
-            </View>
-            <Pressable
-              className="flex-row items-center bg-transparent"
-              onPress={() => {
-                setSelectedAnswer(activeItem);
-                setIsSharing(true);
+                : null
+            }
+          />
+
+          <Animated.View
+            className="absolute left-5 right-5 h-[54px] rounded-[27px] overflow-hidden z-[1000] shadow-black/20 shadow-lg elevation-10"
+            style={[
+              {
+                bottom: insets.bottom,
+                transform: [
+                  {
+                    translateY: footerAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [100, 0],
+                    }),
+                  },
+                ],
+                opacity: footerAnim,
+              },
+            ]}
+          >
+            <BlurView
+              intensity={95}
+              tint={colorScheme}
+              className="flex-1"
+              style={{
+                backgroundColor:
+                  colorScheme === 'dark'
+                    ? 'rgba(26,26,26,0.8)'
+                    : 'rgba(255,255,255,0.85)',
               }}
             >
-              <Ionicons name="share-outline" size={22} color={primaryColor} />
-            </Pressable>
-          </View>
-        </BlurView>
-      </Animated.View>
+              <View className="flex-1 flex-row items-center px-5 justify-between bg-transparent">
+                <View className="flex-row items-center bg-transparent">
+                  {activeItem && (
+                    <LikeButton
+                      id={activeItem.id}
+                      count={
+                        activeItem.reaction?.statistics?.like_count ||
+                        activeItem.voteup_count ||
+                        activeItem.reaction_count ||
+                        0
+                      }
+                      voted={activeItem.relationship?.voting || 0}
+                      type={
+                        activeItem.type === 'article'
+                          ? 'articles'
+                          : activeItem.type === 'pin'
+                            ? 'pins'
+                            : 'answers'
+                      }
+                      variant="ghost"
+                    />
+                  )}
+                  <Pressable
+                    className="flex-row items-center ml-5 bg-transparent"
+                    onPress={() => {
+                      const commentType =
+                        activeItem?.type === 'article'
+                          ? 'article'
+                          : activeItem?.type === 'pin'
+                            ? 'pin'
+                            : 'answer';
+                      router.push(
+                        `/comments/${activeItem?.id}?type=${commentType}&count=${activeItem?.comment_count || 0}`,
+                      );
+                    }}
+                  >
+                    <Ionicons
+                      name="chatbubble-outline"
+                      size={20}
+                      color={primaryColor}
+                    />
+                    <Text
+                      type="primary"
+                      className=" text-sm font-bold"
+                      style={{ color: primaryColor }}
+                    >
+                      {activeItem?.comment_count || 0}
+                    </Text>
+                  </Pressable>
+
+                  {activeItem?.id &&
+                    expandedIds.has(activeItem.id.toString()) && (
+                      <Pressable
+                        className="flex-row items-center ml-5 bg-transparent"
+                        onPress={() =>
+                          handleToggleExpand(activeItem.id.toString(), false)
+                        }
+                      >
+                        <Ionicons
+                          name="chevron-up-circle-outline"
+                          size={20}
+                          color={primaryColor}
+                        />
+                        <Text
+                          type="primary"
+                          className=" text-sm font-bold"
+                          style={{ color: primaryColor }}
+                        >
+                          收起
+                        </Text>
+                      </Pressable>
+                    )}
+                </View>
+                <Pressable
+                  className="flex-row items-center bg-transparent"
+                  onPress={() => {
+                    setSelectedAnswer(activeItem);
+                    setIsSharing(true);
+                  }}
+                >
+                  <Ionicons
+                    name="share-outline"
+                    size={22}
+                    color={primaryColor}
+                  />
+                </Pressable>
+              </View>
+            </BlurView>
+          </Animated.View>
+        </>
+      )}
     </View>
   );
 }

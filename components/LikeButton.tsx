@@ -74,7 +74,7 @@ export const LikeButton = ({
             ? 'up'
             : 'neutral';
 
-      await voteContent(id, type, voteType as any);
+      await voteContent(id, type, voteType);
 
       setVoted(nextVoted);
       // count 可能是占位符（如 '-'），仅在数字时增减并通知外部
@@ -84,8 +84,8 @@ export const LikeButton = ({
         onVoteChange?.(nextVoted, newCount);
       }
       showToast(isUpvoted ? '已取消赞同' : '已赞同');
-    } catch (err) {
-      console.error('投票失败:', err);
+    } catch {
+      console.error('投票失败');
       showToast('操作失败，请稍后重试');
     } finally {
       setLoading(false);

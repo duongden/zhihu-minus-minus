@@ -1,6 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { FlashList } from '@shopify/flash-list';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { FlashList, type FlashListRef } from '@shopify/flash-list';
+import {
+  useInfiniteQuery,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
@@ -20,22 +24,108 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  type FeedItem,
   followMember,
   getMe,
-  getMember,
   getMemberActivities,
   getMemberRelations,
+  getMemberWithFallback,
   searchContent,
   unfollowMember,
+  type ZhihuMember,
 } from '@/api/zhihu';
 import { addReadHistory } from '@/api/zhihu/history';
 import { FeedCard } from '@/components/FeedCard';
+import { QueryErrorView } from '@/components/QueryErrorView';
 import { Text, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { useAuthStore } from '@/store/useAuthStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import type { ZhihuAuthor, ZhihuSearchResultItem } from '@/types/zhihu';
+import { refreshInfiniteQuery } from '@/utils/query';
+import {
+  getNextPageOffset,
+  isOwnMemberProfile,
+  normalizeUserFeedType,
+  type UserFeedType,
+} from '@/utils/userProfile';
 
-const AnimatedFlashList = Reanimated.createAnimatedComponent(FlashList) as any;
+const AnimatedFlashList = Reanimated.createAnimatedComponent(FlashList);
+
+interface ProfileContentSegment {
+  type?: string;
+  content?: string;
+  url?: string;
+}
+
+interface ProfileContentItem {
+  id?: string | number;
+  url?: string;
+  type?: string;
+  title?: string;
+  excerpt?: string;
+  content?: string | ProfileContentSegment[];
+  image_url?: string;
+  thumbnail?: string;
+  voteup_count?: number;
+  reaction_count?: number;
+  like_count?: number;
+  comment_count?: number;
+  favlists_count?: number;
+  favorite_count?: number;
+  answer_count?: number;
+  follower_count?: number;
+  author?: Partial<ZhihuAuthor>;
+  question?: {
+    id?: string | number;
+    title?: string;
+    name?: string;
+  };
+  relationship?: {
+    voting?: number;
+  };
+  reaction?: {
+    statistics?: {
+      comments?: number;
+      favorites?: number;
+    };
+  };
+  thumbnail_info?: {
+    thumbnails?: Array<{ url?: string }>;
+  };
+}
+
+interface ProfileActivityItem {
+  id?: string | number;
+  url?: string;
+  target?: ProfileContentItem;
+}
+
+function getProfileContentItem(
+  item: unknown,
+  tabKey: ProfileTabKey,
+): ProfileContentItem | null {
+  if (!item || typeof item !== 'object') return null;
+  const activityItem = item as ProfileActivityItem;
+  const displayItem =
+    tabKey === 'activities'
+      ? activityItem.target || activityItem
+      : activityItem;
+  if (!displayItem.id && !displayItem.url) return null;
+  return displayItem;
+}
+
+function getProfileListItemKey(item: unknown) {
+  if (!item || typeof item !== 'object') return 'invalid-profile-item';
+  const profileItem = item as ProfileActivityItem;
+  return String(
+    profileItem.id ||
+      profileItem.target?.id ||
+      profileItem.url ||
+      profileItem.target?.url,
+  );
+}
 
 const PROFILE_TABS = [
   { key: 'activities', label: '动态', countKey: undefined },
@@ -47,16 +137,35 @@ const PROFILE_TABS = [
 
 type ProfileTabKey = (typeof PROFILE_TABS)[number]['key'];
 
+function getInitialProfileTab(tab: string | undefined): ProfileTabKey {
+  return PROFILE_TABS.some((profileTab) => profileTab.key === tab)
+    ? (tab as ProfileTabKey)
+    : 'answers';
+}
+
 export default function UserDetailScreen() {
   const colorScheme = useColorScheme();
   const _insets = useSafeAreaInsets();
-  const { id, avatar: initialAvatar } = useLocalSearchParams();
+  const {
+    id,
+    avatar: initialAvatar,
+    tab: initialTabParam,
+  } = useLocalSearchParams<{
+    id: string;
+    avatar?: string;
+    tab?: string;
+  }>();
   const router = useRouter();
   const navigation = useNavigation();
+  const queryClient = useQueryClient();
+  const initialTab = getInitialProfileTab(initialTabParam);
+  const initialTabIndex = PROFILE_TABS.findIndex(
+    (profileTab) => profileTab.key === initialTab,
+  );
 
-  const [activeTab, setActiveTab] = useState<ProfileTabKey>('answers');
+  const [activeTab, setActiveTab] = useState<ProfileTabKey>(initialTab);
   const [visitedTabs, setVisitedTabs] = useState<Record<string, boolean>>({
-    answers: true,
+    [initialTab]: true,
   });
   const [sortBy, setSortBy] = useState<'created' | 'voteups'>('created');
   const [followLoading, setFollowLoading] = useState(false);
@@ -78,12 +187,18 @@ export default function UserDetailScreen() {
   const scrollYPins = useSharedValue(0);
 
   // 2. 列表引用，用于程序控制滚动以对齐 Header 高度
-  const listRefs = useRef<(any | null)[]>([null, null, null, null, null]);
+  const listRefs = useRef<Array<FlashListRef<unknown> | null>>([
+    null,
+    null,
+    null,
+    null,
+    null,
+  ]);
 
   // 3. 当前活跃的 Tab 索引与 PagerView 滑动状态
-  const activeIndex = useSharedValue(1); // 默认是 'answers' (index 1)
-  const activeIndexRef = useRef(1);
-  const pagerPosition = useSharedValue(1);
+  const activeIndex = useSharedValue(initialTabIndex);
+  const activeIndexRef = useRef(initialTabIndex);
+  const pagerPosition = useSharedValue(initialTabIndex);
   const pagerOffset = useSharedValue(0);
 
   // 获取对应 Tab 索引的 shared value
@@ -159,7 +274,7 @@ export default function UserDetailScreen() {
       currentScrollY,
       [0, maxScroll.value],
       [0, -maxScroll.value],
-      'clamp' as any,
+      'clamp',
     );
 
     return {
@@ -222,53 +337,50 @@ export default function UserDetailScreen() {
   const { primaryColor: customPrimaryColor } = useSettingsStore();
   const primaryColor = customPrimaryColor || '#0084ff';
 
-  const { data: me } = useQuery({ queryKey: ['me'], queryFn: () => getMe() });
-  const isMe = me?.id === id;
-
-  const { data: user, refetch: refetchUser } = useQuery({
-    queryKey: ['user-detail', id],
-    queryFn: async () => {
-      try {
-        return await getMember(id as string);
-      } catch (err: any) {
-        if (err.response?.status === 403)
-          return await getMember(
-            id as string,
-            'follower_count,headline,cover_url,description,answer_count,articles_count,question_count,pins_count',
-          );
-        return null;
-      }
-    },
+  const { cookies, me: storedMe } = useAuthStore();
+  const { data: fetchedMe } = useQuery({
+    queryKey: ['me'],
+    queryFn: () => getMe(),
+    enabled: !!cookies,
   });
+  const me = fetchedMe || storedMe;
+
+  const {
+    data: user,
+    isLoading: isUserLoading,
+    isError: isUserError,
+    refetch: refetchUser,
+  } = useQuery({
+    queryKey: ['user-detail', id],
+    queryFn: () => getMemberWithFallback(id),
+    enabled: !!id,
+  });
+  const isMe = isOwnMemberProfile(id, me, user);
 
   const enableBrowseHistory = useSettingsStore((s) => s.enableBrowseHistory);
 
   useEffect(() => {
-    if (enableBrowseHistory && user?.id) {
-      addReadHistory({
+    if (cookies && enableBrowseHistory && user?.id) {
+      void addReadHistory({
         content_token: String(user.id),
         content_type: 'profile',
+      }).catch(() => {
+        console.warn('记录用户主页浏览历史失败');
       });
     }
-  }, [enableBrowseHistory, user?.id]);
+  }, [cookies, enableBrowseHistory, user?.id]);
 
   // 1. 动态 Query
   const activitiesQuery = useInfiniteQuery({
     queryKey: ['user-activities', id],
-    queryFn: async ({ pageParam = 0 }) => {
+    queryFn: ({ pageParam = 0 }) => {
       const targetId = (user?.url_token || id) as string;
-      try {
-        return await getMemberActivities(targetId, 20, pageParam as number);
-      } catch (err) {
-        console.error('获取动态失败:', err);
-        return { data: [], paging: { is_end: true } };
-      }
+      return getMemberActivities(targetId, 20, pageParam);
     },
     initialPageParam: 0,
-    getNextPageParam: (lastPage: any) => {
+    getNextPageParam: (lastPage) => {
       if (!lastPage || lastPage.paging?.is_end) return undefined;
-      const match = lastPage.paging?.next?.match(/offset=(\d+)/);
-      return match ? parseInt(match[1], 10) : undefined;
+      return getNextPageOffset(lastPage.paging?.next);
     },
     enabled: !!user && (visitedTabs.activities || activeTab === 'activities'),
   });
@@ -276,27 +388,21 @@ export default function UserDetailScreen() {
   // 2. 回答 Query
   const answersQuery = useInfiniteQuery({
     queryKey: ['user-answers', id, sortBy],
-    queryFn: async ({ pageParam = 0 }) => {
+    queryFn: ({ pageParam = 0 }) => {
       const targetId = (user?.url_token || id) as string;
       const include =
         'data[*].is_normal,admin_closed_comment,content,voteup_count,comment_count,favlists_count,created_time,updated_time,excerpt,reaction,relationship.voting,relationship.is_author,relationship.is_thanked;data[*].author;data[*].question.title';
-      try {
-        return await getMemberRelations(targetId, 'answers', {
-          limit: 20,
-          offset: pageParam as number,
-          include,
-          sort_by: sortBy,
-        });
-      } catch (err) {
-        console.error('获取回答失败:', err);
-        return { data: [], paging: { is_end: true } };
-      }
+      return getMemberRelations(targetId, 'answers', {
+        limit: 20,
+        offset: pageParam,
+        include,
+        sort_by: sortBy,
+      });
     },
     initialPageParam: 0,
-    getNextPageParam: (lastPage: any) => {
+    getNextPageParam: (lastPage) => {
       if (!lastPage || lastPage.paging?.is_end) return undefined;
-      const match = lastPage.paging?.next?.match(/offset=(\d+)/);
-      return match ? parseInt(match[1], 10) : undefined;
+      return getNextPageOffset(lastPage.paging?.next);
     },
     enabled: !!user && (visitedTabs.answers || activeTab === 'answers'),
   });
@@ -304,26 +410,20 @@ export default function UserDetailScreen() {
   // 3. 提问 Query
   const questionsQuery = useInfiniteQuery({
     queryKey: ['user-questions', id],
-    queryFn: async ({ pageParam = 0 }) => {
+    queryFn: ({ pageParam = 0 }) => {
       const targetId = (user?.url_token || id) as string;
       const include =
         'data[*].created,answer_count,follower_count,admin_closed_comment,title,reaction,relationship.is_following;data[*].author';
-      try {
-        return await getMemberRelations(targetId, 'questions', {
-          limit: 20,
-          offset: pageParam as number,
-          include,
-        });
-      } catch (err) {
-        console.error('获取提问失败:', err);
-        return { data: [], paging: { is_end: true } };
-      }
+      return getMemberRelations(targetId, 'questions', {
+        limit: 20,
+        offset: pageParam,
+        include,
+      });
     },
     initialPageParam: 0,
-    getNextPageParam: (lastPage: any) => {
+    getNextPageParam: (lastPage) => {
       if (!lastPage || lastPage.paging?.is_end) return undefined;
-      const match = lastPage.paging?.next?.match(/offset=(\d+)/);
-      return match ? parseInt(match[1], 10) : undefined;
+      return getNextPageOffset(lastPage.paging?.next);
     },
     enabled: !!user && (visitedTabs.questions || activeTab === 'questions'),
   });
@@ -331,26 +431,20 @@ export default function UserDetailScreen() {
   // 4. 文章 Query
   const articlesQuery = useInfiniteQuery({
     queryKey: ['user-articles', id],
-    queryFn: async ({ pageParam = 0 }) => {
+    queryFn: ({ pageParam = 0 }) => {
       const targetId = (user?.url_token || id) as string;
       const include =
         'data[*].comment_count,content,voteup_count,favlists_count,created,updated,title,excerpt,reaction,relationship.voting;data[*].author';
-      try {
-        return await getMemberRelations(targetId, 'articles', {
-          limit: 20,
-          offset: pageParam as number,
-          include,
-        });
-      } catch (err) {
-        console.error('获取文章失败:', err);
-        return { data: [], paging: { is_end: true } };
-      }
+      return getMemberRelations(targetId, 'articles', {
+        limit: 20,
+        offset: pageParam,
+        include,
+      });
     },
     initialPageParam: 0,
-    getNextPageParam: (lastPage: any) => {
+    getNextPageParam: (lastPage) => {
       if (!lastPage || lastPage.paging?.is_end) return undefined;
-      const match = lastPage.paging?.next?.match(/offset=(\d+)/);
-      return match ? parseInt(match[1], 10) : undefined;
+      return getNextPageOffset(lastPage.paging?.next);
     },
     enabled: !!user && (visitedTabs.articles || activeTab === 'articles'),
   });
@@ -358,26 +452,20 @@ export default function UserDetailScreen() {
   // 5. 想法 Query
   const pinsQuery = useInfiniteQuery({
     queryKey: ['user-pins', id],
-    queryFn: async ({ pageParam = 0 }) => {
+    queryFn: ({ pageParam = 0 }) => {
       const targetId = (user?.url_token || id) as string;
       const include =
         'data[*].content,reaction_count,comment_count,created,reaction,relationship.voting;data[*].author';
-      try {
-        return await getMemberRelations(targetId, 'pins', {
-          limit: 20,
-          offset: pageParam as number,
-          include,
-        });
-      } catch (err) {
-        console.error('获取想法失败:', err);
-        return { data: [], paging: { is_end: true } };
-      }
+      return getMemberRelations(targetId, 'pins', {
+        limit: 20,
+        offset: pageParam,
+        include,
+      });
     },
     initialPageParam: 0,
-    getNextPageParam: (lastPage: any) => {
+    getNextPageParam: (lastPage) => {
       if (!lastPage || lastPage.paging?.is_end) return undefined;
-      const match = lastPage.paging?.next?.match(/offset=(\d+)/);
-      return match ? parseInt(match[1], 10) : undefined;
+      return getNextPageOffset(lastPage.paging?.next);
     },
     enabled: !!user && (visitedTabs.pins || activeTab === 'pins'),
   });
@@ -386,10 +474,12 @@ export default function UserDetailScreen() {
     switch (tabKey) {
       case 'activities':
         return {
+          queryKey: ['user-activities', id] as const,
           data:
             activitiesQuery.data?.pages.flatMap((page) => page.data || []) ||
             [],
           isLoading: activitiesQuery.isLoading,
+          isError: activitiesQuery.isError,
           isFetchingNextPage: activitiesQuery.isFetchingNextPage,
           hasNextPage: activitiesQuery.hasNextPage,
           fetchNextPage: activitiesQuery.fetchNextPage,
@@ -398,9 +488,11 @@ export default function UserDetailScreen() {
         };
       case 'answers':
         return {
+          queryKey: ['user-answers', id, sortBy] as const,
           data:
             answersQuery.data?.pages.flatMap((page) => page.data || []) || [],
           isLoading: answersQuery.isLoading,
+          isError: answersQuery.isError,
           isFetchingNextPage: answersQuery.isFetchingNextPage,
           hasNextPage: answersQuery.hasNextPage,
           fetchNextPage: answersQuery.fetchNextPage,
@@ -409,9 +501,11 @@ export default function UserDetailScreen() {
         };
       case 'articles':
         return {
+          queryKey: ['user-articles', id] as const,
           data:
             articlesQuery.data?.pages.flatMap((page) => page.data || []) || [],
           isLoading: articlesQuery.isLoading,
+          isError: articlesQuery.isError,
           isFetchingNextPage: articlesQuery.isFetchingNextPage,
           hasNextPage: articlesQuery.hasNextPage,
           fetchNextPage: articlesQuery.fetchNextPage,
@@ -420,9 +514,11 @@ export default function UserDetailScreen() {
         };
       case 'questions':
         return {
+          queryKey: ['user-questions', id] as const,
           data:
             questionsQuery.data?.pages.flatMap((page) => page.data || []) || [],
           isLoading: questionsQuery.isLoading,
+          isError: questionsQuery.isError,
           isFetchingNextPage: questionsQuery.isFetchingNextPage,
           hasNextPage: questionsQuery.hasNextPage,
           fetchNextPage: questionsQuery.fetchNextPage,
@@ -431,8 +527,10 @@ export default function UserDetailScreen() {
         };
       case 'pins':
         return {
+          queryKey: ['user-pins', id] as const,
           data: pinsQuery.data?.pages.flatMap((page) => page.data || []) || [],
           isLoading: pinsQuery.isLoading,
+          isError: pinsQuery.isError,
           isFetchingNextPage: pinsQuery.isFetchingNextPage,
           hasNextPage: pinsQuery.hasNextPage,
           fetchNextPage: pinsQuery.fetchNextPage,
@@ -448,10 +546,13 @@ export default function UserDetailScreen() {
     hasNextPage: hasNextSearchPage,
     isFetchingNextPage: isFetchingNextSearchPage,
     isLoading: searchLoading,
+    isError: isSearchError,
+    isRefetching: isRefetchingSearch,
+    refetch: refetchSearch,
   } = useInfiniteQuery({
     queryKey: ['user-creations-search', user?.id, debouncedSearchQuery],
     queryFn: ({ pageParam = 0 }) =>
-      searchContent(debouncedSearchQuery, pageParam as number, 20, 'general', {
+      searchContent(debouncedSearchQuery, pageParam, 20, 'general', {
         restricted_scene: 'member',
         restricted_field: 'member_hash_id',
         restricted_value: user?.id,
@@ -460,8 +561,7 @@ export default function UserDetailScreen() {
     initialPageParam: 0,
     getNextPageParam: (lastPage) => {
       if (lastPage.paging?.is_end) return undefined;
-      const match = lastPage.paging?.next?.match(/offset=(\d+)/);
-      return match ? parseInt(match[1], 10) : undefined;
+      return getNextPageOffset(lastPage.paging?.next);
     },
   });
 
@@ -502,13 +602,15 @@ export default function UserDetailScreen() {
     );
   };
 
-  const parseSearchResult = (item: any) => {
-    const obj = item.object;
-    if (!obj) return null;
+  const parseSearchResult = (item: ZhihuSearchResultItem): FeedItem | null => {
+    const obj = item.object as ProfileContentItem;
+    if (!obj || obj.id === null || obj.id === undefined) return null;
+    const feedType = normalizeUserFeedType(obj.type);
+    if (!feedType) return null;
     const highlight = item.highlight || {};
     return {
-      id: obj.id,
-      type: `${obj.type}s`,
+      id: String(obj.id),
+      type: feedType,
       title: highlight.title
         ? HighlightText(highlight.title)
         : obj.question?.name || obj.title || '无标题',
@@ -520,33 +622,89 @@ export default function UserDetailScreen() {
       voteCount: obj.voteup_count || 0,
       commentCount: obj.comment_count || 0,
       author: {
-        id: obj.author?.id,
-        name: obj.author?.name || '匿名用户',
-        avatar: obj.author?.avatar_url,
-        url_token: obj.author?.url_token,
+        id: obj.author?.id || user?.id || '',
+        name: obj.author?.name || user?.name || '匿名用户',
+        avatar: obj.author?.avatar_url || user?.avatar_url || '',
+        url_token: obj.author?.url_token || user?.url_token,
       },
-      questionId: obj.question?.id || obj.id,
+      questionId:
+        obj.question?.id !== undefined
+          ? String(obj.question.id)
+          : obj.id !== undefined
+            ? String(obj.id)
+            : undefined,
       voted: obj.relationship?.voting || 0,
+      favlistsCount: obj.favlists_count || obj.favorite_count || 0,
     };
   };
 
   const isSearching = debouncedSearchQuery.length > 0;
   const currentListItems = isSearching
     ? searchResults?.pages.flatMap(
-        (page) => page.data?.map(parseSearchResult).filter(Boolean) || [],
+        (page) =>
+          page.data
+            ?.map(parseSearchResult)
+            .filter((item): item is FeedItem => item !== null) || [],
       ) || []
     : [];
 
+  const refreshSearch = React.useCallback(() => {
+    return refreshInfiniteQuery(
+      queryClient,
+      ['user-creations-search', user?.id, debouncedSearchQuery],
+      refetchSearch,
+    );
+  }, [debouncedSearchQuery, queryClient, refetchSearch, user?.id]);
+
   const handleFollow = async () => {
-    if (followLoading) return;
+    if (followLoading || !user) return;
+    if (!cookies) {
+      router.push('/login');
+      return;
+    }
     setFollowLoading(true);
     try {
       const targetId = (user?.url_token || id) as string;
-      if (user?.is_following) await unfollowMember(targetId);
-      else await followMember(targetId);
-      refetchUser();
-    } catch (err) {
-      console.error('关注操作失败:', err);
+      const nextIsFollowing = !user.is_following;
+      const response = user.is_following
+        ? await unfollowMember(targetId)
+        : await followMember(targetId);
+      queryClient.setQueryData<ZhihuMember>(
+        ['user-detail', id],
+        (currentMember) =>
+          currentMember
+            ? {
+                ...currentMember,
+                is_following: nextIsFollowing,
+                follower_count:
+                  response.follower_count ??
+                  Math.max(
+                    0,
+                    (currentMember.follower_count || 0) +
+                      (nextIsFollowing ? 1 : -1),
+                  ),
+              }
+            : currentMember,
+      );
+      void refetchUser();
+
+      const myIdentifiers = [me?.id, me?.url_token].filter(
+        (identifier): identifier is string => typeof identifier === 'string',
+      );
+      await Promise.all(
+        myIdentifiers.flatMap((identifier) => [
+          queryClient.invalidateQueries({
+            queryKey: ['me-detail', identifier],
+            exact: true,
+          }),
+          queryClient.invalidateQueries({
+            queryKey: ['user-following-users', identifier],
+            exact: true,
+          }),
+        ]),
+      );
+    } catch {
+      console.error('关注操作失败');
       Alert.alert('提示', '操作失败，请重试');
     } finally {
       setFollowLoading(false);
@@ -631,7 +789,7 @@ export default function UserDetailScreen() {
             onPress={() => router.push(`/user/${user?.url_token || id}/mutual`)}
           >
             <Text className="text-[13px]">
-              <Text className="font-bold">{user.mutual_followees_count}</Text>{' '}
+              <Text className="font-bold">{user?.mutual_followees_count}</Text>{' '}
               位共同关注
             </Text>
             <Image
@@ -705,7 +863,7 @@ export default function UserDetailScreen() {
           onChangeText={setSearchQuery}
           returnKeyType="search"
         />
-        {isSearching && searchQuery.length > 0 && (
+        {searchQuery.length > 0 && (
           <Pressable onPress={() => setSearchQuery('')} className="p-[5px]">
             <Ionicons
               name="close-circle"
@@ -721,7 +879,7 @@ export default function UserDetailScreen() {
   const renderTabsSelector = () => (
     <View className="flex-row bg-transparent my-1 border-b border-gray-100 dark:border-gray-800">
       {PROFILE_TABS.map((tab, idx) => {
-        const count = tab.countKey ? (user as any)?.[tab.countKey] : undefined;
+        const count = tab.countKey ? user?.[tab.countKey] : undefined;
         const countStr = count !== undefined && count > 0 ? ` ${count}` : '';
         const isActive = activeTab === tab.key;
         return (
@@ -759,13 +917,15 @@ export default function UserDetailScreen() {
         className="flex-row px-[15px] py-2.5 bg-transparent"
         style={{ borderBottomWidth: 0 }}
       >
-        {[
-          { key: 'created', label: '最新' },
-          { key: 'voteups', label: '赞同' },
-        ].map((item) => (
+        {(
+          [
+            { key: 'created', label: '最新' },
+            { key: 'voteups', label: '赞同' },
+          ] as const
+        ).map((item) => (
           <Pressable
             key={item.key}
-            onPress={() => setSortBy(item.key as any)}
+            onPress={() => setSortBy(item.key)}
             className="px-3 py-1 mr-2.5 rounded"
             style={[
               sortBy === item.key && {
@@ -786,25 +946,18 @@ export default function UserDetailScreen() {
     );
   };
 
-  const renderItemContent = (item: any, tabKey: ProfileTabKey) => {
-    let displayItem = item as any;
-    if (tabKey === 'activities') {
-      displayItem = item.target || item;
-    }
-    if (!displayItem || (!displayItem.id && !displayItem.url)) return null;
+  const renderItemContent = (item: unknown, tabKey: ProfileTabKey) => {
+    const displayItem = getProfileContentItem(item, tabKey);
+    if (!displayItem) return null;
 
     const rawType = displayItem.type;
-    let mappedType: 'answers' | 'articles' | 'questions' | 'pins' = 'answers';
-    if (rawType === 'article') mappedType = 'articles';
-    else if (rawType === 'question') mappedType = 'questions';
-    else if (rawType === 'pin') mappedType = 'pins';
-    else if (rawType === 'zvideo' || rawType === 'video')
-      mappedType = 'answers';
+    const mappedType: UserFeedType =
+      normalizeUserFeedType(rawType) || 'answers';
 
     const getExcerptText = () => {
       if (rawType === 'pin') {
         if (Array.isArray(displayItem.content)) {
-          return (displayItem.content as any[])
+          return displayItem.content
             .filter((c) => c.type === 'text')
             .map((c) => c.content)
             .join('')
@@ -817,7 +970,7 @@ export default function UserDetailScreen() {
             .substring(0, 150);
         }
       }
-      const raw = (displayItem as any).excerpt || displayItem.content || '';
+      const raw = displayItem.excerpt || displayItem.content || '';
       if (typeof raw === 'string')
         return raw.replace(/<[^>]+>/g, '').substring(0, 150);
       return '';
@@ -827,12 +980,12 @@ export default function UserDetailScreen() {
       displayItem.image_url ||
       displayItem.thumbnail ||
       (rawType === 'pin' && Array.isArray(displayItem.content)
-        ? displayItem.content.find((c: any) => c.type === 'image')?.url
+        ? displayItem.content.find((content) => content.type === 'image')?.url
         : null) ||
       null;
 
-    const feedItem: any = {
-      id: displayItem.id?.toString() || Math.random().toString(),
+    const feedItem: FeedItem = {
+      id: displayItem.id?.toString() || String(displayItem.url),
       title: displayItem.question?.title || displayItem.title || '',
       questionId:
         displayItem.question?.id?.toString() ||
@@ -874,22 +1027,20 @@ export default function UserDetailScreen() {
       className="flex-1"
       style={{ backgroundColor: Colors[colorScheme].background }}
     >
-      {isSearching ? (
-        <FlashList
+      {isUserLoading ? (
+        <View className="flex-1 items-center justify-center bg-transparent">
+          <ActivityIndicator color={primaryColor} />
+        </View>
+      ) : isUserError || !user ? (
+        <QueryErrorView
+          message="用户资料加载失败"
+          onRetry={() => void refetchUser()}
+        />
+      ) : isSearching ? (
+        <FlashList<FeedItem>
           data={currentListItems}
-          renderItem={({ item }: { item: any }) => {
-            const rawType = item.type;
-            let mappedType: 'answers' | 'articles' | 'questions' | 'pins' =
-              'answers';
-            if (rawType === 'articles') mappedType = 'articles';
-            else if (rawType === 'questions') mappedType = 'questions';
-            else if (rawType === 'pins') mappedType = 'pins';
-            return <FeedCard item={{ ...item, type: mappedType }} />;
-          }}
-          keyExtractor={(item: any, index: number) =>
-            `user-search-item-${item.id || ''}-${index}`
-          }
-          {...({ estimatedItemSize: 200 } as any)}
+          renderItem={({ item }) => <FeedCard item={item} />}
+          keyExtractor={(item) => `user-search-item-${item.id}`}
           scrollEventThrottle={16}
           ListHeaderComponent={
             <View className="bg-transparent">
@@ -911,13 +1062,25 @@ export default function UserDetailScreen() {
               ) : null}
             </View>
           }
+          ListEmptyComponent={
+            searchLoading ? null : isSearchError ? (
+              <QueryErrorView
+                message="搜索结果加载失败"
+                onRetry={() => void refreshSearch()}
+              />
+            ) : (
+              <View className="items-center py-20 bg-transparent">
+                <Text type="secondary">没有找到相关创作</Text>
+              </View>
+            )
+          }
           onEndReached={() => {
             if (hasNextSearchPage && !isFetchingNextSearchPage)
               fetchNextSearchPage();
           }}
           onEndReachedThreshold={0.5}
-          onRefresh={refetchUser}
-          refreshing={followLoading}
+          onRefresh={() => void refreshSearch()}
+          refreshing={isRefetchingSearch}
         />
       ) : (
         <View style={{ flex: 1 }}>
@@ -969,7 +1132,7 @@ export default function UserDetailScreen() {
           <PagerView
             ref={pagerRef}
             style={{ flex: 1 }}
-            initialPage={1} // 默认是 'answers'
+            initialPage={initialTabIndex}
             onPageScroll={(e) => {
               pagerPosition.value = e.nativeEvent.position;
               pagerOffset.value = e.nativeEvent.offset;
@@ -1010,17 +1173,16 @@ export default function UserDetailScreen() {
               return (
                 <NativeView key={tab.key} className="flex-1">
                   <AnimatedFlashList
-                    ref={(ref: any) => {
+                    ref={(ref: FlashListRef<unknown> | null) => {
                       listRefs.current[idx] = ref;
                     }}
                     data={query.data}
-                    renderItem={({ item }: any) =>
+                    renderItem={({ item }: { item: unknown }) =>
                       renderItemContent(item, tab.key)
                     }
-                    keyExtractor={(item: any, index: number) =>
-                      `user-item-${tab.key}-${item.id || ''}-${index}`
+                    keyExtractor={(item: unknown) =>
+                      `user-item-${tab.key}-${getProfileListItemKey(item)}`
                     }
-                    {...({ estimatedItemSize: 200 } as any)}
                     contentContainerStyle={{ paddingTop: headerHeight }}
                     scrollEventThrottle={16}
                     drawDistance={1000}
@@ -1056,13 +1218,31 @@ export default function UserDetailScreen() {
                         ) : null}
                       </View>
                     }
+                    ListEmptyComponent={
+                      query.isLoading ? null : query.isError ? (
+                        <QueryErrorView
+                          message={`${tab.label}加载失败`}
+                          onRetry={() => void query.refetch()}
+                        />
+                      ) : (
+                        <View className="items-center py-20 bg-transparent">
+                          <Text type="secondary">暂无{tab.label}内容</Text>
+                        </View>
+                      )
+                    }
                     onEndReached={() => {
                       if (query.hasNextPage && !query.isFetchingNextPage) {
                         query.fetchNextPage();
                       }
                     }}
                     onEndReachedThreshold={0.5}
-                    onRefresh={query.refetch}
+                    onRefresh={() =>
+                      void refreshInfiniteQuery(
+                        queryClient,
+                        query.queryKey,
+                        query.refetch,
+                      )
+                    }
                     refreshing={query.isRefetching}
                   />
                 </NativeView>

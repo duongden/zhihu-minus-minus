@@ -74,6 +74,10 @@ function normalizeSupportedPath(path: string): string | null {
       buildPath: (match) => `/pin/${match[1]}`,
     },
     {
+      pattern: /^\/(?:zvideos?|videos?)\/(\d+)$/,
+      buildPath: (match) => `/video/${match[1]}`,
+    },
+    {
       pattern:
         /^\/(?:people|users?)\/([^/]+)(?:\/(followers|following|mutual|stream))?$/,
       buildPath: (match) =>

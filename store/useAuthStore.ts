@@ -1,22 +1,32 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import type { ZhihuMeInfo } from '@/api/zhihu/me';
 import { clearLocalAccountData } from '@/storage/localAccountData';
 import { resolveLocalAccountKey } from '@/utils/localAccount';
 
 // 适配器：使用 Expo FileSystem 代替 SecureStore 存储大数据
 // Android SecureStore 有 2048 字节的硬限制，存储多个账号信息时极易导致崩溃
 const AUTH_STORAGE_PATH = `${FileSystem.documentDirectory}auth-storage.json`;
+let authStorageExistedOnFirstRead: boolean | undefined;
+
+/** Only a missing auth file is eligible for the one-time legacy cookie import. */
+export function shouldImportLegacySession() {
+  return authStorageExistedOnFirstRead === false;
+}
 
 const fileStorage = {
   getItem: async (_name: string) => {
     try {
       const info = await FileSystem.getInfoAsync(AUTH_STORAGE_PATH);
+      authStorageExistedOnFirstRead ??= info.exists;
       if (info.exists) {
         return await FileSystem.readAsStringAsync(AUTH_STORAGE_PATH);
       }
       return null;
     } catch (e) {
+      // A read failure must not make an old native cookie authoritative.
+      authStorageExistedOnFirstRead ??= true;
       console.error('读取存储失败:', e);
       return null;
     }
@@ -24,6 +34,7 @@ const fileStorage = {
   setItem: async (_name: string, value: string) => {
     try {
       await FileSystem.writeAsStringAsync(AUTH_STORAGE_PATH, value);
+      authStorageExistedOnFirstRead = true;
     } catch (e) {
       console.error('写入存储失败:', e);
     }
@@ -39,7 +50,7 @@ const fileStorage = {
 
 export interface Account {
   cookies: string;
-  me: any;
+  me: ZhihuMeInfo;
   last_updated?: number; // 添加更新时间戳
 }
 
@@ -57,13 +68,26 @@ interface AuthState {
   accounts: Account[];
   activeAccountIndex: number;
   cookies: string | null;
-  me: any | null; // 存储个人详细信息
+  me: ZhihuMeInfo | null; // 存储个人详细信息
   setCookies: (cookies: string) => void;
-  setMe: (me: any) => void;
-  addAccount: (cookies: string, me: any) => void;
+  setMe: (me: ZhihuMeInfo) => void;
+  addAccount: (cookies: string, me: ZhihuMeInfo) => void;
   switchAccount: (index: number) => void;
   removeAccount: (index: number) => void;
   logout: () => void;
+}
+
+interface PersistedAuthState {
+  accounts?: Account[];
+  activeAccountIndex?: number;
+  cookies?: string | null;
+  me?: ZhihuMeInfo | null;
+}
+
+function normalizePersistedAuthState(value: unknown): PersistedAuthState {
+  return value && typeof value === 'object'
+    ? (value as PersistedAuthState)
+    : {};
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -193,9 +217,9 @@ export const useAuthStore = create<AuthState>()(
       name: 'auth-storage',
       storage: createJSONStorage(() => fileStorage),
       version: 2, // 升级版本以支持 last_updated 结构（虽然是可选的）
-      migrate: (persistedState: any, version: number) => {
+      migrate: (persistedState: unknown, version: number) => {
+        const state = normalizePersistedAuthState(persistedState);
         if (version === 0) {
-          const state = persistedState as any;
           if (state.cookies && state.me) {
             return {
               ...state,
@@ -211,9 +235,9 @@ export const useAuthStore = create<AuthState>()(
         }
         if (version === 1) {
           // v1 -> v2: 主要是增加了 last_updated，现有数据继续使用即可
-          return persistedState;
+          return state as AuthState;
         }
-        return persistedState;
+        return state as AuthState;
       },
     },
   ),
