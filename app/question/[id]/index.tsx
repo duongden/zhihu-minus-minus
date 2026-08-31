@@ -1,6 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  type InfiniteData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
@@ -38,7 +43,7 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import client from '@/api/client';
-import { deleteAnswer } from '@/api/zhihu/answer';
+import { type AnswerDetail, deleteAnswer } from '@/api/zhihu/answer';
 import { addReadHistory } from '@/api/zhihu/history';
 import { followMember, unfollowMember } from '@/api/zhihu/member';
 import {
@@ -63,6 +68,14 @@ import { useSettingsStore } from '@/store/useSettingsStore';
 import { formatDate } from '@/utils/date';
 import { refreshInfiniteQuery } from '@/utils/query';
 
+interface QuestionAnswersPage {
+  data?: AnswerDetail[];
+  paging?: {
+    is_end?: boolean;
+    next?: string;
+  };
+}
+
 const AnswerItem = forwardRef(
   (
     {
@@ -70,6 +83,8 @@ const AnswerItem = forwardRef(
       isExpanded,
       onToggle,
       onShare,
+      questionId,
+      sortBy,
       screenTranslateX,
       onSwipeStart,
       onSwipeComplete,
@@ -256,7 +271,10 @@ const AnswerItem = forwardRef(
       </View>
     ) : null;
 
-    const followMutation = useOptimisticToggle({
+    const followMutation = useOptimisticToggle<
+      InfiniteData<QuestionAnswersPage, number>
+    >({
+      queryKey: ['question-answers', questionId, sortBy],
       mutationFn: async () => {
         const pid = item.author?.url_token || item.author?.id;
         if (!pid) return;
@@ -264,8 +282,24 @@ const AnswerItem = forwardRef(
         return followMember(pid);
       },
       isActive: item.author?.is_following,
+      onUpdateCache: (old) => ({
+        ...old,
+        pages: old.pages.map((page) => ({
+          ...page,
+          data: page.data?.map((answer) =>
+            answer.id.toString() === item.id?.toString()
+              ? {
+                  ...answer,
+                  author: {
+                    ...answer.author,
+                    is_following: !answer.author.is_following,
+                  },
+                }
+              : answer,
+          ),
+        })),
+      }),
       successMessage: (isActive) => (isActive ? '已取消关注' : '已关注'),
-      invalidateQueries: [['question-answers']],
     });
 
     const deleteMutation = useMutation({

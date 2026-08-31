@@ -15,7 +15,7 @@ import {
 } from 'react-native';
 import { SharedTransition } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { deleteAnswer, getAnswer } from '@/api/zhihu';
+import { type AnswerDetail, deleteAnswer, getAnswer } from '@/api/zhihu';
 import {
   fastCollectAnswer,
   getAnswerCollectionStatus,
@@ -99,7 +99,8 @@ export const AnswerDetailView = ({
       err?.response?.status === 404 ? false : failureCount < 2,
   });
 
-  const followMutation = useOptimisticToggle({
+  const followMutation = useOptimisticToggle<AnswerDetail>({
+    queryKey: ['answer-detail', id],
     mutationFn: async () => {
       const author = answer?.author;
       if (!author) throw new Error('回答尚未加载');
@@ -108,8 +109,14 @@ export const AnswerDetailView = ({
       return followMember(author.url_token || author.id);
     },
     isActive: answer?.author?.is_following,
+    onUpdateCache: (old) => ({
+      ...old,
+      author: {
+        ...old.author,
+        is_following: !old.author.is_following,
+      },
+    }),
     successMessage: (isActive) => (isActive ? '已取消关注' : '已关注'),
-    invalidateQueries: [['answer-detail', id]],
   });
 
   const deleteMutation = useMutation({

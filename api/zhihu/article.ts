@@ -1,7 +1,12 @@
+import type { ZhihuArticle } from '@/types/zhihu';
 import apiClient from '../client';
 
-export const getArticle = async (id: string | number) => {
-  const res = await apiClient.get(`/articles/${id}`);
+export const getArticle = async (
+  id: string | number,
+): Promise<ZhihuArticle> => {
+  const res = await apiClient.get(`/articles/${id}`, {
+    params: { include: 'author.is_following' },
+  });
   return res.data;
 };
 

@@ -5,9 +5,9 @@ import {
 } from '@tanstack/react-query';
 import { showToast } from '@/utils/toast';
 
-export interface UseOptimisticToggleOptions<TData = any> {
+export interface UseOptimisticToggleOptions<TData = unknown> {
   queryKey?: QueryKey;
-  mutationFn: () => Promise<any>;
+  mutationFn: () => Promise<unknown>;
   onUpdateCache?: (oldData: TData) => TData;
   successMessage?: ((isActive: boolean) => string) | string;
   errorMessage?: string;
@@ -16,7 +16,7 @@ export interface UseOptimisticToggleOptions<TData = any> {
   invalidateQueries?: QueryKey[];
 }
 
-export function useOptimisticToggle<TData = any>({
+export function useOptimisticToggle<TData = unknown>({
   queryKey,
   mutationFn,
   onUpdateCache,
@@ -31,28 +31,31 @@ export function useOptimisticToggle<TData = any>({
   return useMutation({
     mutationFn,
     onMutate: async () => {
-      if (!queryKey || !onUpdateCache) return { previous: undefined };
+      const wasActive = isActive;
+      if (!queryKey || !onUpdateCache) {
+        return { previous: undefined, wasActive };
+      }
 
       await queryClient.cancelQueries({ queryKey });
       const previous = queryClient.getQueryData<TData>(queryKey);
 
-      if (previous) {
+      if (previous !== undefined) {
         queryClient.setQueryData<TData>(queryKey, onUpdateCache(previous));
       }
 
-      return { previous };
+      return { previous, wasActive };
     },
     onError: (_err, _variables, context) => {
-      if (context?.previous && queryKey) {
+      if (context?.previous !== undefined && queryKey) {
         queryClient.setQueryData(queryKey, context.previous);
       }
       showToast(errorMessage);
     },
-    onSuccess: () => {
+    onSuccess: (_data, _variables, context) => {
       if (successMessage) {
         const msg =
           typeof successMessage === 'function'
-            ? successMessage(isActive)
+            ? successMessage(context.wasActive)
             : successMessage;
         showToast(msg);
       }

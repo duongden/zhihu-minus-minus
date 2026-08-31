@@ -62,7 +62,7 @@ export const getAnswer = async (
   include?: string,
 ): Promise<AnswerDetail> => {
   const defaultInclude =
-    'content,paid_info,can_comment,excerpt,thanks_count,voteup_count,comment_count,visited_count,reaction,ip_info,question.topics,reaction.relation.voting,segment_infos,favlists_count';
+    'content,paid_info,can_comment,excerpt,thanks_count,voteup_count,comment_count,visited_count,reaction,ip_info,question.topics,author.is_following,reaction.relation.voting,segment_infos,favlists_count';
   const res = await apiClient.get(
     `/answers/${id}?include=${include || defaultInclude}`,
   );
