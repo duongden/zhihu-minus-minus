@@ -1,8 +1,9 @@
 # 🐱 知乎-- (Zhihu Minus Minus)
 
 > [!IMPORTANT]
-> **🚧 项目声明**：本项目目前核心功能基本稳定，但仍有许多不完善，且知乎 API 也可能发生变动导致功能失效。  
-> 欢迎 PR Issue 或者 fork 去改。  也可以去看看其他软件：  
+> **🚧 项目声明**：本项目目前核心功能基本稳定，但仍有不完善之处；知乎 API 的变动也可能导致部分功能失效。
+>
+> 欢迎提交 Issue、Pull Request 或 Fork 参与改进。也可以看看其他客户端：
 > - <https://github.com/zhihulite/Hydrogen>  
 > - <https://github.com/zly2006/zhihu-plus-plus>
 
@@ -19,7 +20,7 @@
   - **首页**: 热榜、推荐、关注动态。顶部 Tab 实时联动，底部 Tab 支持点击刷新。
   - **滑动浏览**: 首页子频道、发布中心、个人中心通过统一的水平滑动轴无缝切换；问题详情页支持**左右滑动快速切换回答**。
   - **搜索**: 全站与个人主页深度搜索，支持联想词、综合搜索、用户搜索及关键词高亮。
-  - **内容渲染**: 优雅的原生排版，深度解析并支持知乎的各种内容形式，以及段落互动。
+  - **内容渲染**: 集中维护的富文本渲染模块，支持图片、公式、链接卡片、段落互动与回答详情预取。
   - **互动交流**: 完善的评论区交互（支持查看图片、二级回复），支持文章 (Articles)、想法与话题 (Topics) 的展示与评论。
   - **个人中心**: 个人主页展示。支持**多收藏夹管理**、**浏览历史记录云端同步**（可选开启/多选删除/一键清空）、全面的关注列表（用户/专栏/话题/收藏夹）。
 - **深度链接 (Deep Linking)**: 完整支持 `zhihu.com` 外部链接及 `zhihu://` 协议唤起应用，知乎内部链接智能归一化跳转。
@@ -64,25 +65,24 @@
 ## 📦 下载与安装
 
 ### 🤖 Android
-你可以直接前往 [GitHub Releases](https://github.com/huamurui/zhihu-minus-minus/releases) 下载最新的 APK 文件进行安装。
-> [!NOTE]
-> 注意 apk 名称，目前提供的 20mb 左右的 APK 只能在 `arm64` 的安卓设备上运行（只要不是太老的古董设备都可以）。  
 
-或者
+你可以直接前往 [GitHub Releases](https://github.com/huamurui/zhihu-minus-minus/releases) 下载最新的 APK 文件进行安装。
+
+> [!NOTE]
+> 请留意 APK 文件名。当前 preview 构建只包含 `arm64-v8a`，不支持 32 位或 x86 设备。
+
+也可以从源码构建：
 
 1. `git clone` 本仓库。
 2. 安装环境（参考下方的 **快速开始**）。
-3. ~~难蚌 expo 搞的只有 Linux/macOS 才能本地打包安卓...~~ 或者，看看 **[这里](./BUILD_WINDOWS.md)**，Windows 开发指南。
+3. 生成原生工程并运行本地 EAS 构建：
 
-`npm run prebuild`
+```bash
+npm run prebuild
+eas build --platform android --profile preview --local
+```
 
-`eas build --platform android --profile preview --local`
-
-这个还没试过：
-
-`cd android && ./gradlew assembleRelease`
-
-或者修改 app.json 信息，注册 expo 账号使用 expo 服务器打包。
+Windows 无法运行 `eas build --local`，请使用 [Windows 本地构建指南](./BUILD_WINDOWS.md) 中的 Gradle 流程。
 
 ### 🍎 iOS
 
@@ -92,13 +92,16 @@
 - rn 打的 ipa 包 ios 最低要求 ios15.1，但具体什么情况不清楚喵...
 
 如果你有 mac，可以试试自己打包：
+
 1. `git clone` 本仓库。
 2. 安装环境（参考下方的 **快速开始**）。
 3. 使用自己的 Apple ID 在 Xcode 中进行签名并编译到真机。
 
-`cd ios && pod install`
-
-`npx expo run:ios --configuration Release --device`
+```bash
+npm run prebuild -- --platform ios
+cd ios && pod install
+npx expo run:ios --configuration Release --device
+```
 
 ⬆️ 这个在 ios26 也不好用了，建议 Xcode 里 build。
 
@@ -106,62 +109,71 @@
 
 ## 🚀 快速开始
 
-**特别的，关于在 windwos 启动项目并调试打包 Android 应用，可以参考 [这里](./BUILD_WINDOWS.md)**
+Windows 上启动、调试和打包 Android 应用，请参考 [Windows 本地构建指南](./BUILD_WINDOWS.md)。
 
 本项目涉及到一些原生库，推荐使用 **Development Build** 进行开发。
 
-基础环境:
-- node, npm
-- eas cli
-- 安卓
-  - Android Studio/或者至少 adb sdk
-  - Java JDK 17, maven...
-- iOS
-  - Xcode
-  - cocoapods ...
+基础环境：
 
-对于本项目:
+- Node.js 20 或更高版本、npm；
+- Android：JDK 17、Android SDK、ADB 或模拟器；
+- iOS：macOS、Xcode、CocoaPods；
+- EAS CLI 仅在使用 EAS 构建时需要。
 
-1. **准备环境**
+1. **安装依赖**
 
 ```bash
-npm install -g expo-cli
+npm ci
 ```
 
-2. **安装依赖**
-```bash
-npm install
-```
-
-2.1 **生成原生项目目录**
+2. **生成原生项目目录**
 
 ```bash
 npm run prebuild
 ```
 
-3. **运行 Android** (需要 ADB 或模拟器环境)
+`android/` 与 `ios/` 是生成物且不会提交到仓库。修改原生依赖、原生配置或 `app.json` 后需要重新运行 prebuild。
+
+3. **运行 Android**（需要 ADB 或模拟器环境）
+
 ```bash
 npm run android
 ```
 
-4. **运行 iOS** (需要 Mac 且安装 Xcode, idb)
+4. **运行 iOS**（需要 Mac 且安装 Xcode）
+
 ```bash
 npm run ios
 ```
 
+### 提交前验证
+
+```bash
+./node_modules/.bin/tsc --noEmit
+npm run test:rich-content
+./node_modules/.bin/biome check path/to/changed-file.ts
+```
+
+全仓检查可运行 `./node_modules/.bin/biome check .`。截至 2026-08-31，全仓仍有存量 Hook 依赖、格式和宽泛类型诊断，详情见 [代码审查记录](./docs/CODE_REVIEW_2026-08-31.md)。当前 `npm run lint` 带有 `--write`，会直接修改文件，不应用作只读检查。
+
+富文本模块的目录约定、fixture 与专项命令见 [features/rich-content/README.md](./features/rich-content/README.md)。面向自动化开发者的维护规则见 [AGENTS.md](./AGENTS.md)。
+
 ## 📦 GitHub Actions 自动打包发布
 
 本项目已配置 GitHub Actions 自动化构建工作流：
+
 - **Android APK 构建与 Release**（[`.github/workflows/build.yaml`](.github/workflows/build.yaml)）
 - **iOS 未签名 IPA 构建**（[`.github/workflows/build-ios.yaml`](.github/workflows/build-ios.yaml)）
 
 ### 1. 前置准备 (Fork 与 Secrets 配置)
+
 1. **Fork 仓库**：点击项目右上角的 **Fork** 按钮，将仓库复制到你自己的 GitHub 账号下。
 2. **启用 Actions**：进入你 Fork 的仓库，点击 **Actions** 标签页，点击 *“I understand my workflows, go ahead and enable them”* 开启工作流权限。
 3. **配置密钥 (Secrets)**：在 Fork 仓库设置中（`Settings` -> `Secrets and variables` -> `Actions`）点击 **New repository secret** 添加：
    - `EXPO_TOKEN` *(Android 构建必填)*: 你的 Expo Token（需先在 [Expo 官网](https://expo.dev) 注册账号，然后在 [Access Tokens](https://expo.dev/settings/access-tokens) 页面新建并复制 Token）。
 
 ### 2. 触发打包步骤
+
 1. 进入你 Fork 的仓库页面，点击 **Actions** 标签页。
 2. 在左侧侧边栏中选择目标工作流：
    - 打包 Android：选择 **Build and Release**
@@ -174,6 +186,7 @@ npm run ios
 ## 🔐 登录说明
 
 由于知乎 API 的安全性限制（X-ZSE-96 等），目前采用 WebView 自动拦截方案：
+
 - 打开应用 -> 进入“我的” -> 点击登录按钮。
 - 在弹出的登录界面完成登录。
 
@@ -193,4 +206,4 @@ npm run ios
 </a>
 
 ---
-**Version**: v0.4.0 | **Last Updated**: 2026-08-22
+**Version**: v0.4.2 | **Last Updated**: 2026-08-31

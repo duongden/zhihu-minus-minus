@@ -1,18 +1,13 @@
-import type {
-  InfiniteData,
-  QueryClient,
-  QueryKey,
-} from '@tanstack/react-query';
+import type { QueryClient, QueryKey } from '@tanstack/react-query';
 
 /**
- * Custom refresh handler for TanStack useInfiniteQuery.
- * Instead of refetching all pages loaded so far, it trims the query cache to just the first page
- * and then triggers refetch. This dramatically reduces unnecessary API calls and avoids
- * "refetching multiple pages in parallel" on pull-to-refresh.
+ * Reset one TanStack infinite query to its initial state and refetch active observers.
+ * resetQueries clears every cached page/pageParam for the exact key, so pull-to-refresh
+ * requests only the initial page instead of refetching every page loaded so far.
  *
  * @param queryClient The active QueryClient instance
  * @param queryKey The query key of the infinite query
- * @param refetch The refetch function returned from useInfiniteQuery
+ * The optional trailing arguments remain for compatibility with existing callers.
  */
 export async function refreshInfiniteQuery(
   queryClient: QueryClient,

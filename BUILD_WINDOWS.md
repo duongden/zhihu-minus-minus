@@ -151,7 +151,7 @@ Pop-Location
 
 产物：`android/app/build/outputs/apk/release/app-release.apk`（约 22 MB，内置 JS，可离线运行）。增量构建约 7 分钟。
 
-> 注意：项目的 release 也使用 debug.keystore 签名，因此本地 release 包与官方 CI 发布包签名一致，可互相覆盖安装（applicationId `com.huamu013.ZhihuMinusMinus`）。
+> 注意：`expo prebuild` 生成的本地 Android 工程通常使用本机的 debug keystore 为这个 release 变体签名；GitHub Actions 中的 EAS preview 构建可能使用 EAS 管理的另一份凭据。只有两个 APK 的 applicationId 与签名证书都一致时才能互相覆盖安装。若签名不同，需要先卸载旧包（会清除应用数据），或显式为两条构建链配置同一份 keystore。
 
 **坑**：release 构建期间不要同时开着 Metro——编译原生 C++ 时会在 `node_modules/*/android/.cxx` 下快速创建/删除临时目录，Metro 的文件扫描器会撞上 ENOENT 直接崩溃，等构建完再启动 Metro。
 
