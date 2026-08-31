@@ -21,8 +21,20 @@ interface FeedCardPreviewProps {
   item: FeedItem;
 }
 
+function getResponseStatus(error: unknown) {
+  if (!error || typeof error !== 'object' || !('response' in error)) {
+    return undefined;
+  }
+  const response = error.response;
+  if (!response || typeof response !== 'object' || !('status' in response)) {
+    return undefined;
+  }
+  return typeof response.status === 'number' ? response.status : undefined;
+}
+
 export function FeedCardPreview({ item }: FeedCardPreviewProps) {
   const colorScheme = useColorScheme();
+  const isVideo = item.type === 'videos';
   const typeKey =
     item.type === 'answers'
       ? 'answer'
@@ -33,7 +45,12 @@ export function FeedCardPreview({ item }: FeedCardPreviewProps) {
           : 'question';
   const inlineContent = item.content as unknown;
   const hasInlineContent = hasInlineRichContent(inlineContent);
-  const queryKey = getRichContentQueryKey(item.type, item.id);
+  const queryKey = isVideo
+    ? ['video-preview', item.id]
+    : getRichContentQueryKey(
+        item.type as Exclude<typeof item.type, 'videos'>,
+        item.id,
+      );
 
   const { data: fullData, isLoading } = useQuery({
     queryKey,
@@ -52,14 +69,14 @@ export function FeedCardPreview({ item }: FeedCardPreviewProps) {
           return await getQuestion(item.id);
         }
         return null;
-      } catch (err: any) {
-        if (err.response?.status === 404) {
+      } catch (error: unknown) {
+        if (getResponseStatus(error) === 404) {
           return null;
         }
-        throw err;
+        throw error;
       }
     },
-    enabled: !hasInlineContent,
+    enabled: !isVideo && !hasInlineContent,
     placeholderData: hasInlineContent ? { content: inlineContent } : undefined,
     staleTime: RICH_CONTENT_STALE_TIME,
     retry: false,
@@ -110,7 +127,11 @@ export function FeedCardPreview({ item }: FeedCardPreviewProps) {
         style={styles.scrollContainer}
         showsVerticalScrollIndicator={true}
       >
-        {isLoading ? (
+        {isVideo ? (
+          <Text type="secondary" className="leading-6">
+            {item.excerpt || '点击卡片打开视频'}
+          </Text>
+        ) : isLoading ? (
           <View className="py-10 justify-center items-center bg-transparent">
             <ActivityIndicator size="small" color="#0084ff" />
             <Text className="mt-2 text-xs opacity-60">正在获取完整内容...</Text>

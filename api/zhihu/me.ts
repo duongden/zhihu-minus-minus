@@ -1,3 +1,4 @@
+import type { ZhihuMemberRelation, ZhihuPaging } from '@/types/zhihu';
 import apiClient from '../client';
 
 export interface ZhihuMeInfo {
@@ -21,14 +22,14 @@ export interface ZhihuMeInfo {
     is_vip: boolean;
     vip_type: number;
     rename_days: string;
-    entrance_v2: any;
+    entrance_v2: unknown;
     rename_frequency: number;
     rename_await_days: number;
   };
   kvip_info: {
     is_vip: boolean;
   };
-  account_status: any[];
+  account_status: unknown[];
   is_force_renamed: boolean;
   is_destroy_waiting: boolean;
   answer_count: number;
@@ -45,7 +46,7 @@ export interface ZhihuMeInfo {
   line_comment_only_count: number;
   following_question_count: number;
   available_medals_count: number;
-  org_verify_status: any;
+  org_verify_status: unknown;
   uid: string;
   email: string;
   renamed_fullname: string;
@@ -61,7 +62,7 @@ export interface ZhihuMeInfo {
   has_add_baike_summary_permission: boolean;
   editor_info: string[];
   available_message_types: string[];
-  ai_assistant_info: any;
+  ai_assistant_info: unknown;
   can_create_sub_account: boolean;
   account_type: number;
   sub_account_control_status: number;
@@ -78,11 +79,14 @@ export const getMyLikes = async (
   type: 'answers' | 'articles',
   limit = 20,
   offset = 0,
-) => {
+): Promise<{ data: ZhihuMemberRelation[]; paging: ZhihuPaging }> => {
   const endpoint = type === 'answers' ? 'voted_answers' : 'voted_articles';
   const include =
     'data[*].content,voteup_count,comment_count,created_time,updated_time,excerpt,question.title,relationship.voting';
-  const res = await apiClient.get(
+  const res = await apiClient.get<{
+    data: ZhihuMemberRelation[];
+    paging: ZhihuPaging;
+  }>(
     `/members/me/${endpoint}?limit=${limit}&offset=${offset}&include=${include}`,
   );
   return res.data;

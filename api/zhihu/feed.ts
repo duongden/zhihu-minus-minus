@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import apiClient from '../client';
@@ -15,22 +16,30 @@ export interface FeedTopic {
   name: string;
 }
 
+export interface FeedContentSegment {
+  type: string;
+  content?: string;
+  url?: string;
+  data_draft_title?: string;
+  data_draft_cover?: string;
+}
+
 export interface FeedItem {
   id: string;
   isIdStable?: boolean;
-  title: any;
+  title: ReactNode;
   questionId?: string;
   actionText?: string;
   author: FeedAuthor;
-  excerpt: any;
-  content: string;
+  excerpt: ReactNode;
+  content?: string | FeedContentSegment[];
   image: string | null;
   voteCount: number;
   commentCount: number;
   favlistsCount?: number;
   voted: number;
-  type: 'answers' | 'articles' | 'pins' | 'questions';
-  topics: FeedTopic[];
+  type: 'answers' | 'articles' | 'pins' | 'questions' | 'videos';
+  topics?: FeedTopic[];
   rank?: number;
   hotValue?: string;
   titleString?: string;
@@ -60,7 +69,7 @@ export interface RawFeedTarget {
   type: string;
   title?: string;
   excerpt?: string;
-  content?: any;
+  content?: string | FeedContentSegment[];
   thumbnail?: string;
   content_img?: string[];
   voteup_count?: number;
@@ -163,6 +172,8 @@ export interface RawFeedItem {
     thumbnail?: string;
   }>;
   image_url?: string;
+  detail_text?: string;
+  debut?: boolean;
   // Hot List specific fields
   card_id?: string;
   card_label?: {
@@ -190,7 +201,7 @@ export const FEED_URLS = {
   recommend: 'https://www.zhihu.com/api/v3/feed/topstory/recommend?limit=10',
   local: 'zhihu://local-feed',
   hot: 'https://www.zhihu.com/api/v3/feed/topstory/hot-lists/total?limit=50',
-};
+} as const;
 
 export const getFeed = async (url: string): Promise<ZhihuFeedResponse> => {
   let finalUrl = url;
@@ -209,12 +220,13 @@ export const getFeed = async (url: string): Promise<ZhihuFeedResponse> => {
   if (url === 'zhihu://local-feed') {
     // 1. Fetch sections to find the local section ID
     try {
-      const sectionsRes = await apiClient.get(
-        'https://api.zhihu.com/feed-root/sections/query/v2',
-      );
+      const sectionsRes = await apiClient.get<{
+        data?: Array<{ section_id?: string; section_name?: string }>;
+      }>('https://api.zhihu.com/feed-root/sections/query/v2');
       const sections = sectionsRes.data?.data || [];
       const localSection = sections.find(
-        (s: any) => s.section_name?.includes('同城') || s.section_id,
+        (section) =>
+          section.section_name?.includes('同城') || section.section_id,
       );
 
       if (localSection?.section_id) {
@@ -227,8 +239,8 @@ export const getFeed = async (url: string): Promise<ZhihuFeedResponse> => {
       } else {
         throw new Error('未找到同城版块');
       }
-    } catch (err) {
-      console.warn('获取同城版块失败，回退到推荐流', err);
+    } catch {
+      console.warn('获取同城版块失败，回退到推荐流');
       finalUrl = FEED_URLS.recommend;
     }
   } else if (url.startsWith('zhihu://local-feed/')) {

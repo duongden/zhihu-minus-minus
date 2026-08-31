@@ -1,14 +1,30 @@
+import { type QueryKey, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, Image, Pressable } from 'react-native';
-import { followMember, unfollowMember } from '@/api/zhihu';
+import {
+  followMember,
+  unfollowMember,
+  type ZhihuMember,
+  type ZhihuMemberListItem,
+} from '@/api/zhihu';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { useAuthStore } from '@/store/useAuthStore';
 import type { ZhihuBadge } from '@/types/zhihu';
+import { showToast } from '@/utils/toast';
 import { Text, useThemeColor, View } from './Themed';
-export const UserCard = ({ user }: { user: any }) => {
+
+interface UserCardProps {
+  user: ZhihuMemberListItem;
+  invalidateQueryKeys?: readonly QueryKey[];
+}
+
+export const UserCard = ({ user, invalidateQueryKeys = [] }: UserCardProps) => {
   const router = useRouter();
-  const [isFollowing, setIsFollowing] = useState(user.is_following);
+  const queryClient = useQueryClient();
+  const cookies = useAuthStore((state) => state.cookies);
+  const [isFollowing, setIsFollowing] = useState(Boolean(user.is_following));
   const [followerCount, setFollowerCount] = useState(user.follower_count || 0);
   const [loading, setLoading] = useState(false);
   const colorScheme = useColorScheme();
@@ -19,24 +35,58 @@ export const UserCard = ({ user }: { user: any }) => {
   const textSecondaryColor = Colors[colorScheme].textSecondary;
   const bgColor = Colors[colorScheme].background;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: FlashList recycles the component; identity changes must reset derived state even when the visible counts happen to match.
+  useEffect(() => {
+    setIsFollowing(Boolean(user.is_following));
+    setFollowerCount(user.follower_count || 0);
+  }, [user.follower_count, user.id, user.is_following, user.url_token]);
+
   const handleFollow = async () => {
     if (loading) return;
+    if (!cookies) {
+      router.push('/login');
+      return;
+    }
     const targetId = user.url_token || user.id;
     setLoading(true);
     try {
+      const nextIsFollowing = !isFollowing;
+      let nextFollowerCount = followerCount;
       if (isFollowing) {
         const data = await unfollowMember(targetId);
-        setIsFollowing(false);
-        if (data.follower_count !== undefined)
-          setFollowerCount(data.follower_count);
+        nextFollowerCount =
+          data.follower_count ?? Math.max(0, followerCount - 1);
       } else {
         const data = await followMember(targetId);
-        setIsFollowing(true);
-        if (data.follower_count !== undefined)
-          setFollowerCount(data.follower_count);
+        nextFollowerCount = data.follower_count ?? followerCount + 1;
       }
-    } catch (err) {
-      console.error('关注操作失败:', err);
+      setFollowerCount(nextFollowerCount);
+      setIsFollowing(nextIsFollowing);
+
+      const memberIdentifiers = Array.from(
+        new Set([String(user.id), user.url_token].filter(Boolean)),
+      );
+      for (const identifier of memberIdentifiers) {
+        queryClient.setQueryData<ZhihuMember>(
+          ['user-detail', identifier],
+          (currentMember) =>
+            currentMember
+              ? {
+                  ...currentMember,
+                  is_following: nextIsFollowing,
+                  follower_count: nextFollowerCount,
+                }
+              : currentMember,
+        );
+      }
+      await Promise.all(
+        invalidateQueryKeys.map((queryKey) =>
+          queryClient.invalidateQueries({ queryKey, exact: true }),
+        ),
+      );
+    } catch {
+      console.error('关注操作失败');
+      showToast('操作失败，请稍后重试');
     } finally {
       setLoading(false);
     }
@@ -78,7 +128,13 @@ export const UserCard = ({ user }: { user: any }) => {
         </View>
       </View>
       <Pressable
-        onPress={handleFollow}
+        accessibilityRole="button"
+        accessibilityState={{ busy: loading, selected: isFollowing }}
+        disabled={loading}
+        onPress={(event) => {
+          event.stopPropagation();
+          void handleFollow();
+        }}
         className="px-4 py-1.5 rounded-2xl justify-center items-center"
         style={
           isFollowing

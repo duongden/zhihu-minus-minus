@@ -27,6 +27,11 @@ export const FeedCard = ({ item, tab }: { item: FeedItem; tab?: string }) => {
   const [menuVisible, setMenuVisible] = useState(false);
   const isQuestionType = item.type === 'questions';
   const isPinType = item.type === 'pins';
+  const isVideoType = item.type === 'videos';
+  const engagementType: 'answers' | 'articles' | 'pins' | null =
+    item.type === 'answers' || item.type === 'articles' || item.type === 'pins'
+      ? item.type
+      : null;
   const isGuest = !cookies;
   const colorScheme = useColorScheme();
 
@@ -52,6 +57,47 @@ export const FeedCard = ({ item, tab }: { item: FeedItem; tab?: string }) => {
   const warningColor = useThemeColor({}, 'warning');
   const secondaryColor = useThemeColor({}, 'textSecondary');
 
+  const cleanTitle =
+    typeof item.title === 'string' ? item.title : item.titleString || '';
+  const openDetail = () => {
+    if (isVideoType) {
+      router.push({
+        pathname: '/video/[id]',
+        params: { id: item.id, title: cleanTitle },
+      });
+      return;
+    }
+    if (isGuest) {
+      router.push({
+        pathname: '/guest/detail',
+        params: {
+          item: JSON.stringify({
+            ...item,
+            title: cleanTitle,
+            excerpt: typeof item.excerpt === 'string' ? item.excerpt : '',
+          }),
+        },
+      });
+      return;
+    }
+
+    const params = {
+      id: item.id,
+      title: cleanTitle,
+      questionId: item.questionId,
+      ...(tab ? { source: 'feed', tab } : {}),
+    };
+    if (item.type === 'answers') {
+      router.push({ pathname: '/answer/[id]', params });
+    } else if (item.type === 'articles') {
+      router.push({ pathname: '/article/[id]', params });
+    } else if (item.type === 'pins') {
+      router.push({ pathname: '/pin/[id]', params });
+    } else {
+      router.push({ pathname: '/question/[id]', params });
+    }
+  };
+
   const [previewVisible, setPreviewVisible] = useState(false);
   const containerRef = useRef<RNView>(null);
   const [originLayout, setOriginLayout] = useState<{
@@ -62,7 +108,7 @@ export const FeedCard = ({ item, tab }: { item: FeedItem; tab?: string }) => {
   } | null>(null);
 
   const menuOptions: MenuOption[] = [
-    ...(!isQuestionType
+    ...(engagementType
       ? [
           {
             key: 'like',
@@ -80,12 +126,12 @@ export const FeedCard = ({ item, tab }: { item: FeedItem; tab?: string }) => {
                     : nextVoted === 1
                       ? 'up'
                       : 'neutral';
-                await voteContent(item.id, item.type, voteType as any);
+                await voteContent(item.id, engagementType, voteType);
                 setVoted(nextVoted);
                 setVoteCount(nextCount);
                 showToast(nextVoted === 1 ? '已赞同' : '已取消赞同');
-              } catch (err) {
-                console.error('投票失败:', err);
+              } catch {
+                console.error('投票失败');
                 showToast('操作失败，请稍后重试');
               }
             },
@@ -127,12 +173,12 @@ export const FeedCard = ({ item, tab }: { item: FeedItem; tab?: string }) => {
       icon: 'share-outline',
       onPress: async () => {
         try {
-          const routeType = item.type.slice(0, -1);
+          const routeType = isVideoType ? 'zvideo' : item.type.slice(0, -1);
           const link = `https://www.zhihu.com/${routeType}/${item.id}`;
           await Share.share({
             message: link,
             url: link,
-            title: item.title || '知乎分享',
+            title: cleanTitle || '知乎分享',
           });
         } catch (_error) {
           showToast('分享失败');
@@ -145,7 +191,7 @@ export const FeedCard = ({ item, tab }: { item: FeedItem; tab?: string }) => {
     <RNView ref={containerRef} className="w-full bg-transparent">
       <BouncyButton
         onLongPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           containerRef.current?.measureInWindow(
             (x: number, y: number, width: number, height: number) => {
               setOriginLayout({ x, y, width, height });
@@ -153,32 +199,7 @@ export const FeedCard = ({ item, tab }: { item: FeedItem; tab?: string }) => {
             },
           );
         }}
-        onPress={() => {
-          if (isGuest) {
-            router.push({
-              pathname: '/guest/detail',
-              params: { item: JSON.stringify(item) },
-            } as any);
-            return;
-          }
-          const routeType = item.type.slice(0, -1);
-          const cleanTitle =
-            typeof item.title === 'string'
-              ? item.title
-              : item.titleString || '';
-          const params: any = {
-            title: cleanTitle,
-            questionId: item.questionId,
-          };
-          if (tab) {
-            params.source = 'feed';
-            params.tab = tab;
-          }
-          router.push({
-            pathname: `/${routeType}/${item.id}`,
-            params,
-          } as any);
-        }}
+        onPress={openDetail}
         style={[
           {
             backgroundColor: Colors[colorScheme].backgroundSecondary,
@@ -203,9 +224,12 @@ export const FeedCard = ({ item, tab }: { item: FeedItem; tab?: string }) => {
         <BouncyButton
           onPress={() =>
             router.push({
-              pathname: `/user/${item.author.url_token || item.author.id}`,
-              params: { avatar: item.author.avatar },
-            } as any)
+              pathname: '/user/[id]',
+              params: {
+                id: item.author.url_token || item.author.id,
+                avatar: item.author.avatar,
+              },
+            })
           }
           className="flex-row items-center mb-2"
         >
@@ -222,10 +246,15 @@ export const FeedCard = ({ item, tab }: { item: FeedItem; tab?: string }) => {
         {/* 话题标签 */}
         {item.topics && item.topics.length > 0 && (
           <View className="flex-row flex-wrap mb-2 bg-transparent">
-            {item.topics.map((topic: any) => (
+            {item.topics.map((topic) => (
               <BouncyButton
                 key={topic.id}
-                onPress={() => router.push(`/topic/${topic.id}` as any)}
+                onPress={() =>
+                  router.push({
+                    pathname: '/topic/[id]',
+                    params: { id: topic.id },
+                  })
+                }
                 className="px-2 py-0.5 rounded-sm mr-2 mb-1"
                 style={{ backgroundColor: 'rgba(0,0,132,0.05)' }}
               >
@@ -241,34 +270,11 @@ export const FeedCard = ({ item, tab }: { item: FeedItem; tab?: string }) => {
         {item.title ? (
           <BouncyButton
             onPress={() => {
-              if (isGuest) {
-                router.push({
-                  pathname: '/guest/detail',
-                  params: { item: JSON.stringify(item) },
-                } as any);
-                return;
-              }
               if (item.type === 'answers' && item.questionId) {
                 router.push(`/question/${item.questionId}`);
                 return;
               }
-              const routeType = item.type.slice(0, -1);
-              const cleanTitle =
-                typeof item.title === 'string'
-                  ? item.title
-                  : item.titleString || '';
-              const params: any = {
-                title: cleanTitle,
-                questionId: item.questionId,
-              };
-              if (tab) {
-                params.source = 'feed';
-                params.tab = tab;
-              }
-              router.push({
-                pathname: `/${routeType}/${item.id}`,
-                params,
-              } as any);
+              openDetail();
             }}
           >
             <Animated.View
@@ -290,7 +296,7 @@ export const FeedCard = ({ item, tab }: { item: FeedItem; tab?: string }) => {
         <View className="flex-row mt-1 bg-transparent">
           <View className="flex-1 bg-transparent">
             {isPinType && Array.isArray(item.content) ? (
-              <FeedExcerpt contentArray={item.content as any[]} />
+              <FeedExcerpt contentArray={item.content} />
             ) : item.excerpt ? (
               <FeedExcerpt html={item.excerpt} />
             ) : null}
@@ -305,13 +311,13 @@ export const FeedCard = ({ item, tab }: { item: FeedItem; tab?: string }) => {
         </View>
 
         {/* 热区4：底部操作栏 - 问题关注类动态不显示 */}
-        {!isQuestionType && (
-          <View className="flex-row items-center bg-transparen">
+        {engagementType && (
+          <View className="flex-row items-center bg-transparent">
             <LikeButton
               id={item.id}
               count={voteCount}
               voted={voted}
-              type={item.type as any}
+              type={engagementType}
               variant="ghost"
               onVoteChange={(newVoted, newCount) => {
                 setVoted(newVoted);
@@ -388,13 +394,19 @@ export const FeedCard = ({ item, tab }: { item: FeedItem; tab?: string }) => {
         <ShareMenu
           visible={menuVisible}
           onClose={() => setMenuVisible(false)}
-          type={item.type.slice(0, -1) as ShareContentType}
+          type={
+            (isVideoType ? 'video' : item.type.slice(0, -1)) as ShareContentType
+          }
           data={{
             id: item.id,
-            title: item.title,
+            title: cleanTitle,
             author: item.author?.name,
             authorHeadline: item.author?.headline,
-            excerpt: item.excerpt,
+            excerpt:
+              typeof item.excerpt === 'string' ? item.excerpt : undefined,
+            url: isVideoType
+              ? `https://www.zhihu.com/zvideo/${item.id}`
+              : undefined,
           }}
         />
       </BouncyButton>

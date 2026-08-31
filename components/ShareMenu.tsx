@@ -9,16 +9,21 @@ import { MenuOption } from './MenuOption';
 import { Text, View } from './Themed';
 import { useColorScheme } from './useColorScheme';
 
-export type ShareContentType = 'answer' | 'question' | 'pin' | 'article';
+export type ShareContentType =
+  | 'answer'
+  | 'question'
+  | 'pin'
+  | 'article'
+  | 'video';
 
 interface ShareData {
   id: string | number;
-  title?: any;
+  title?: string;
   author?: string;
   authorHeadline?: string;
   content?: string;
   url?: string;
-  excerpt?: any;
+  excerpt?: string;
 }
 
 interface ShareMenuProps {
@@ -54,6 +59,8 @@ export function ShareMenu({ visible, onClose, type, data }: ShareMenuProps) {
         return `https://www.zhihu.com/pin/${data.id}`;
       case 'article':
         return `https://zhuanlan.zhihu.com/p/${data.id}`;
+      case 'video':
+        return `https://www.zhihu.com/zvideo/${data.id}`;
       default:
         return '';
     }
@@ -101,6 +108,9 @@ export function ShareMenu({ visible, onClose, type, data }: ShareMenuProps) {
         break;
       case 'article':
         text = `### ${title}\n**${author}**${headline} 的文章\n\n${link}`;
+        break;
+      case 'video':
+        text = `### ${title}\n**${author}**${headline} 的视频\n\n${link}`;
         break;
     }
 

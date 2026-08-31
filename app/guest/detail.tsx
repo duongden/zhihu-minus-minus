@@ -65,16 +65,28 @@ export default function GuestDetailScreen() {
   const isArticle = item.type === 'articles';
   const isPin = item.type === 'pins';
   const isAnswer = item.type === 'answers';
+  const isVideo = item.type === 'videos';
+  const isQuestion = item.type === 'questions';
 
-  const typeLabel = isArticle
-    ? '专栏文章'
+  const typeLabel = isVideo
+    ? '知乎视频'
+    : isArticle
+      ? '专栏文章'
+      : isPin
+        ? '精选想法'
+        : isAnswer
+          ? '知乎回答'
+          : '热门问题';
+
+  const routeType = isArticle
+    ? 'article'
     : isPin
-      ? '精选想法'
-      : isAnswer
-        ? '知乎回答'
-        : '热门问题';
-
-  const routeType = isArticle ? 'article' : isPin ? 'pin' : 'answer';
+      ? 'pin'
+      : isVideo
+        ? 'video'
+        : isQuestion
+          ? 'question'
+          : 'answer';
 
   const navigateToComments = () => {
     router.push(
@@ -215,25 +227,27 @@ export default function GuestDetailScreen() {
                   </Text>
                 </View>
               )}
-              {item.commentCount !== undefined && item.commentCount > 0 && (
-                <BouncyButton
-                  onPress={navigateToComments}
-                  className="flex-row items-center px-3 py-1.5 rounded-full"
-                  style={{ backgroundColor: `${secondaryTextColor}08` }}
-                >
-                  <Ionicons
-                    name="chatbubble-ellipses-outline"
-                    size={14}
-                    color={secondaryTextColor}
-                  />
-                  <Text
-                    className="text-xs font-semibold ml-1"
-                    style={{ color: secondaryTextColor }}
+              {!isVideo &&
+                item.commentCount !== undefined &&
+                item.commentCount > 0 && (
+                  <BouncyButton
+                    onPress={navigateToComments}
+                    className="flex-row items-center px-3 py-1.5 rounded-full"
+                    style={{ backgroundColor: `${secondaryTextColor}08` }}
                   >
-                    {item.commentCount} 评论
-                  </Text>
-                </BouncyButton>
-              )}
+                    <Ionicons
+                      name="chatbubble-ellipses-outline"
+                      size={14}
+                      color={secondaryTextColor}
+                    />
+                    <Text
+                      className="text-xs font-semibold ml-1"
+                      style={{ color: secondaryTextColor }}
+                    >
+                      {item.commentCount} 评论
+                    </Text>
+                  </BouncyButton>
+                )}
             </View>
           )}
 
@@ -252,7 +266,12 @@ export default function GuestDetailScreen() {
           <View className="px-5 mt-3 bg-transparent">
             {item.content ? (
               <ZhihuContent
-                content={item.content}
+                content={
+                  typeof item.content === 'string' ? item.content : undefined
+                }
+                contentArray={
+                  Array.isArray(item.content) ? item.content : undefined
+                }
                 objectId={item.id}
                 type={isArticle ? 'article' : isPin ? 'pin' : 'answer'}
                 useNative={true}
@@ -270,31 +289,33 @@ export default function GuestDetailScreen() {
           </View>
 
           {/* 4.5 查看全部评论大按钮 */}
-          {item.commentCount !== undefined && item.commentCount > 0 && (
-            <View className="px-5 mt-6 mb-2 bg-transparent">
-              <BouncyButton
-                onPress={navigateToComments}
-                className="w-full h-12 rounded-xl flex-row items-center justify-center border"
-                style={{
-                  borderColor: tintColor,
-                  backgroundColor: `${tintColor}05`,
-                }}
-              >
-                <Ionicons
-                  name="chatbubble-ellipses-outline"
-                  size={16}
-                  color={tintColor}
-                  style={{ marginRight: 6 }}
-                />
-                <Text
-                  className="font-bold text-[14px]"
-                  style={{ color: tintColor }}
+          {!isVideo &&
+            item.commentCount !== undefined &&
+            item.commentCount > 0 && (
+              <View className="px-5 mt-6 mb-2 bg-transparent">
+                <BouncyButton
+                  onPress={navigateToComments}
+                  className="w-full h-12 rounded-xl flex-row items-center justify-center border"
+                  style={{
+                    borderColor: tintColor,
+                    backgroundColor: `${tintColor}05`,
+                  }}
                 >
-                  查看全部 {item.commentCount} 条评论
-                </Text>
-              </BouncyButton>
-            </View>
-          )}
+                  <Ionicons
+                    name="chatbubble-ellipses-outline"
+                    size={16}
+                    color={tintColor}
+                    style={{ marginRight: 6 }}
+                  />
+                  <Text
+                    className="font-bold text-[14px]"
+                    style={{ color: tintColor }}
+                  >
+                    查看全部 {item.commentCount} 条评论
+                  </Text>
+                </BouncyButton>
+              </View>
+            )}
         </Animated.View>
 
         {/* 5. 游客提示卡片 */}
@@ -323,7 +344,7 @@ export default function GuestDetailScreen() {
 
           {/* 登录按钮 */}
           <BouncyButton
-            onPress={() => router.push('/login' as any)}
+            onPress={() => router.push('/login')}
             className="w-full h-12 rounded-full items-center justify-center mb-3.5"
             style={{ backgroundColor: tintColor }}
           >

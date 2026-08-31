@@ -5,10 +5,12 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet } from 'react-native';
 import { getMyLikes } from '@/api/zhihu';
 import { CreationCard } from '@/components/CreationCard';
+import { QueryErrorView } from '@/components/QueryErrorView';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useZhihuInfiniteQuery } from '@/hooks/useZhihuInfiniteQuery';
+import type { ZhihuMemberRelation } from '@/types/zhihu';
 import { refreshInfiniteQuery } from '@/utils/query';
 
 export default function MyLikesScreen() {
@@ -29,6 +31,7 @@ export default function MyLikesScreen() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isError,
     refetch,
     isRefetching,
   } = useZhihuInfiniteQuery({
@@ -42,7 +45,7 @@ export default function MyLikesScreen() {
     return refreshInfiniteQuery(queryClient, ['my-likes', activeTab], refetch);
   }, [queryClient, activeTab, refetch]);
 
-  const listItems = data?.pages.flatMap((page: any) => page.data) || [];
+  const listItems = data?.pages.flatMap((page) => page.data) || [];
 
   return (
     <View className="flex-1">
@@ -87,15 +90,15 @@ export default function MyLikesScreen() {
         </Pressable>
       </View>
 
-      <FlashList
+      <FlashList<ZhihuMemberRelation>
         data={listItems}
-        renderItem={({ item }: { item: any }) => (
+        keyExtractor={(item) => String(item.id)}
+        renderItem={({ item }) => (
           <CreationCard
             item={item}
             type={activeTab === 'answers' ? 'answer' : 'article'}
           />
         )}
-        {...({ estimatedItemSize: 150 } as any)}
         onEndReached={() => {
           if (hasNextPage && !isFetchingNextPage) fetchNextPage();
         }}
@@ -105,6 +108,12 @@ export default function MyLikesScreen() {
           <View className="flex-1 p-[100px] items-center">
             {isLoading ? (
               <ActivityIndicator color={primaryColor} />
+            ) : isError ? (
+              <QueryErrorView
+                compact
+                message="点赞内容加载失败"
+                onRetry={() => void handleRefresh()}
+              />
             ) : (
               <Text type="secondary">还没有点赞过内容喵</Text>
             )}

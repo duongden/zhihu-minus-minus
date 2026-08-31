@@ -11,6 +11,7 @@
     "analyze:rich-content": "node features/rich-content/tools/analyze-fixtures.mjs",
     "analyze:rich-content:inbox": "node features/rich-content/tools/analyze-fixtures.mjs --inbox",
     "test:rich-content": "node --test features/rich-content/tests/*.test.mjs",
+    "test:user-profile": "node --experimental-strip-types --test tests/userProfile.test.mjs",
     "postinstall": "patch-package",
     "format": "biome format . --write",
     "lint": "biome check . --write"

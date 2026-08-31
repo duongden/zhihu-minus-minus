@@ -1,7 +1,7 @@
 import CookieManager from '@react-native-cookies/cookies';
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import { useAuthStore } from '@/store/useAuthStore';
+import { shouldImportLegacySession, useAuthStore } from '@/store/useAuthStore';
 import { useVerificationStore } from '@/store/useVerificationStore';
 import { signRequest96, ZSE_VERSION } from './zse96/index';
 
@@ -46,16 +46,32 @@ function getXsrf(cookie: string) {
   return match ? match[1] : null;
 }
 
+function hasAuthenticationCookie(cookie: string) {
+  return /(?:^|;\s*)z_c0=/.test(cookie);
+}
+
 apiClient.interceptors.request.use(async (config) => {
   const requestId = getRequestId(config);
   console.log(
     `🌐 [API ${requestId}] ${config.method?.toUpperCase()} ${getSafePath(config.url)}`,
   );
-  // 优先从 AuthStore 获取，如果没有再尝试从 SecureStore (向下兼容)
-  let cookie =
-    useAuthStore.getState().cookies ||
-    (await SecureStore.getItemAsync('user_cookies')) ||
-    '';
+  // The file-backed auth store is the source of truth. Waiting for hydration
+  // prevents a stale legacy SecureStore cookie from winning during startup.
+  if (!useAuthStore.persist.hasHydrated()) {
+    await useAuthStore.persist.rehydrate();
+  }
+
+  // A hydrated guest state is authoritative. Legacy cookie stores are read
+  // only when no file-backed auth state has ever existed on this install.
+  let cookie = useAuthStore.getState().cookies || '';
+  const shouldImportLegacyCookie = !cookie && shouldImportLegacySession();
+
+  if (shouldImportLegacyCookie) {
+    cookie = (await SecureStore.getItemAsync('user_cookies')) || '';
+    if (cookie) {
+      useAuthStore.getState().setCookies(cookie);
+    }
+  }
 
   if (!cookie) {
     try {
@@ -64,12 +80,27 @@ apiClient.interceptors.request.use(async (config) => {
         true,
       );
       if (nativeCookies) {
-        cookie = Object.entries(nativeCookies)
+        const nativeCookie = Object.entries(nativeCookies)
           .map(([name, c]) => `${name}=${c.value}`)
           .join('; ');
+        // Anonymous cookies are required by the guest feed. An authenticated
+        // native cookie is authoritative only during first-install migration.
+        if (
+          shouldImportLegacyCookie ||
+          !hasAuthenticationCookie(nativeCookie)
+        ) {
+          cookie = nativeCookie;
+          if (
+            cookie &&
+            shouldImportLegacyCookie &&
+            hasAuthenticationCookie(cookie)
+          ) {
+            useAuthStore.getState().setCookies(cookie);
+          }
+        }
       }
-    } catch (e) {
-      console.warn('获取原生 cookie 失败', e);
+    } catch {
+      console.warn('获取原生 Cookie 失败');
     }
   }
 

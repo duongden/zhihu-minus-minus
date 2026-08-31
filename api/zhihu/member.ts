@@ -1,22 +1,90 @@
+import type {
+  ZhihuAuthor,
+  ZhihuMemberRelation,
+  ZhihuPaging,
+} from '@/types/zhihu';
 import apiClient from '../client';
 
 export const MEMBER_INCLUDE =
   'url_token,answer_count,articles_count,question_count,pins_count,follower_count,following_count,headline,cover_url,description,voteup_count,thanked_count,favorited_count,is_following,mutual_followees_count';
 
-export const getMember = async (id: string | number, include?: string) => {
-  const res = await apiClient.get(
+const MEMBER_FALLBACK_INCLUDE =
+  'id,url_token,name,avatar_url,follower_count,following_count,headline,cover_url,description,answer_count,articles_count,question_count,pins_count,voteup_count,is_following,mutual_followees_count';
+
+export interface ZhihuMember extends ZhihuAuthor {
+  answer_count?: number;
+  articles_count?: number;
+  question_count?: number;
+  pins_count?: number;
+  follower_count?: number;
+  following_count?: number;
+  cover_url?: string;
+  description?: string;
+  voteup_count?: number;
+  thanked_count?: number;
+  favorited_count?: number;
+  mutual_followees_count?: number;
+}
+
+export interface ZhihuMemberListItem extends ZhihuMember {
+  is_followed?: boolean;
+}
+
+export interface ZhihuListResponse<T> {
+  data: T[];
+  paging: ZhihuPaging;
+}
+
+export interface ZhihuMemberActivity {
+  id?: string | number;
+  target?: ZhihuMemberRelation;
+  type?: string;
+  url?: string;
+}
+
+export interface ZhihuFollowResponse {
+  follower_count?: number;
+}
+
+function getErrorStatus(error: unknown) {
+  if (!error || typeof error !== 'object' || !('response' in error)) {
+    return undefined;
+  }
+  const response = error.response;
+  if (!response || typeof response !== 'object' || !('status' in response)) {
+    return undefined;
+  }
+  return typeof response.status === 'number' ? response.status : undefined;
+}
+
+export const getMember = async (
+  id: string | number,
+  include?: string,
+): Promise<ZhihuMember> => {
+  const res = await apiClient.get<ZhihuMember>(
     `/members/${id}?include=${include || MEMBER_INCLUDE}`,
   );
   return res.data;
+};
+
+export const getMemberWithFallback = async (id: string | number) => {
+  try {
+    return await getMember(id);
+  } catch (error: unknown) {
+    if (getErrorStatus(error) === 403) {
+      return getMember(id, MEMBER_FALLBACK_INCLUDE);
+    }
+    throw error;
+  }
 };
 
 export const getMemberActivities = async (
   id: string | number,
   limit = 20,
   offset = 0,
-) => {
+): Promise<ZhihuListResponse<ZhihuMemberActivity>> => {
   const url = `https://www.zhihu.com/api/v3/moments/${id}/activities?limit=${limit}&offset=${offset}`;
-  const res = await apiClient.get(url, {
+  const res = await apiClient.get<ZhihuListResponse<ZhihuMemberActivity>>(url, {
     headers: {
       'x-api-version': '3.0.40',
     },
@@ -33,19 +101,30 @@ export const getMemberRelations = async (
     include?: string;
     sort_by?: string;
   },
-) => {
+): Promise<ZhihuListResponse<ZhihuMemberRelation>> => {
   const endpoint = `/members/${id}/${type}`;
-  const res = await apiClient.get(endpoint, { params });
+  const res = await apiClient.get<ZhihuListResponse<ZhihuMemberRelation>>(
+    endpoint,
+    { params },
+  );
   return res.data;
 };
 
-export const followMember = async (id: string | number) => {
-  const res = await apiClient.post(`/members/${id}/followers`);
+export const followMember = async (
+  id: string | number,
+): Promise<ZhihuFollowResponse> => {
+  const res = await apiClient.post<ZhihuFollowResponse>(
+    `/members/${id}/followers`,
+  );
   return res.data;
 };
 
-export const unfollowMember = async (id: string | number) => {
-  const res = await apiClient.delete(`/members/${id}/followers`);
+export const unfollowMember = async (
+  id: string | number,
+): Promise<ZhihuFollowResponse> => {
+  const res = await apiClient.delete<ZhihuFollowResponse>(
+    `/members/${id}/followers`,
+  );
   return res.data;
 };
 
@@ -53,10 +132,10 @@ export const getMemberFollowers = async (
   id: string | number,
   limit = 20,
   offset = 0,
-) => {
+): Promise<ZhihuListResponse<ZhihuMemberListItem>> => {
   const include =
     'data[*].answer_count,articles_count,gender,follower_count,is_followed,is_following,badge[?(type=best_answerer)].topics';
-  const res = await apiClient.get(
+  const res = await apiClient.get<ZhihuListResponse<ZhihuMemberListItem>>(
     `/members/${id}/followers?include=${include}&limit=${limit}&offset=${offset}`,
   );
   return res.data;
@@ -66,10 +145,10 @@ export const getMemberFollowing = async (
   id: string | number,
   limit = 20,
   offset = 0,
-) => {
+): Promise<ZhihuListResponse<ZhihuMemberListItem>> => {
   const include =
     'data[*].answer_count,articles_count,gender,follower_count,is_followed,is_following,badge[?(type=best_answerer)].topics';
-  const res = await apiClient.get(
+  const res = await apiClient.get<ZhihuListResponse<ZhihuMemberListItem>>(
     `/members/${id}/followees?include=${include}&limit=${limit}&offset=${offset}`,
   );
   return res.data;
@@ -79,10 +158,10 @@ export const getMemberMutual = async (
   id: string | number,
   limit = 20,
   offset = 0,
-) => {
+): Promise<ZhihuListResponse<ZhihuMemberListItem>> => {
   const include =
     'data[*].answer_count,articles_count,gender,follower_count,is_followed,is_following,badge[?(type=best_answerer)].topics';
-  const res = await apiClient.get(
+  const res = await apiClient.get<ZhihuListResponse<ZhihuMemberListItem>>(
     `/members/${id}/relations/mutuals?include=${include}&limit=${limit}&offset=${offset}`,
   );
   return res.data;
