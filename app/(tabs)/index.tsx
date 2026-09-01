@@ -97,6 +97,12 @@ const TABS = [
 type TabType = (typeof TABS)[number];
 type FeedTabType = keyof typeof FEED_URLS;
 type FeedListItem = FeedItem | HotItem | CollapsedGroup;
+const AUTO_HIDE_NAV_TABS: readonly TabType[] = [
+  'following',
+  'recommend',
+  'hot',
+  'daily',
+];
 
 function isTabType(value: string): value is TabType {
   return (TABS as readonly string[]).includes(value);
@@ -109,6 +115,12 @@ interface TabListHandle {
 
 interface FeedListHandle extends TabListHandle {
   refresh: () => void;
+}
+
+interface ScrollMotion {
+  direction: 'up' | 'down' | null;
+  directionStartOffset: number;
+  lastOffset: number;
 }
 
 // 隐藏模式下被过滤项不占行，一页内容可能所剩无几甚至为空——列表不足一屏时
@@ -164,6 +176,7 @@ export default function HomeScreen() {
 
   // 核心状态：共享滚动位置
   const scrollX = useSharedValue(initialPageIndex);
+  const chromeVisibility = useSharedValue(1);
   const pagerRef = useRef<PagerView>(null);
   const { cookies } = useAuthStore();
 
@@ -214,15 +227,29 @@ export default function HomeScreen() {
     {},
   );
   const listRefs = useRef<Array<TabListHandle | null>>([]);
+  const scrollMotionRef = useRef<Record<number, ScrollMotion>>({});
+  const isChromeHiddenRef = useRef(false);
+
+  const setChromeHidden = useCallback(
+    (hidden: boolean) => {
+      if (isChromeHiddenRef.current === hidden) return;
+      isChromeHiddenRef.current = hidden;
+      chromeVisibility.value = withTiming(hidden ? 0 : 1, { duration: 180 });
+    },
+    [chromeVisibility],
+  );
 
   const handleRefreshStateChange = useCallback(
     (pageIndex: number, isRefreshing: boolean) => {
+      if (isRefreshing && pageIndex === currentPage) {
+        setChromeHidden(false);
+      }
       setRefreshingTabs((prev) => {
         if (prev[pageIndex] === isRefreshing) return prev;
         return { ...prev, [pageIndex]: isRefreshing };
       });
     },
-    [],
+    [currentPage, setChromeHidden],
   );
 
   const isCurrentRefreshing = refreshingTabs[currentPage] || false;
@@ -245,8 +272,45 @@ export default function HomeScreen() {
         if (currentlyScrolled === nextScrolled) return prev;
         return { ...prev, [pageIndex]: nextScrolled };
       });
+
+      const previousMotion = scrollMotionRef.current[pageIndex] ?? {
+        direction: null,
+        directionStartOffset: offset,
+        lastOffset: offset,
+      };
+      const delta = offset - previousMotion.lastOffset;
+      const direction =
+        delta > 1 ? 'down' : delta < -1 ? 'up' : previousMotion.direction;
+
+      if (direction !== previousMotion.direction) {
+        previousMotion.direction = direction;
+        previousMotion.directionStartOffset = offset;
+      }
+      previousMotion.lastOffset = offset;
+      scrollMotionRef.current[pageIndex] = previousMotion;
+
+      if (pageIndex !== currentPage) return;
+      const currentTab = currentTabs[pageIndex];
+      if (!currentTab || !AUTO_HIDE_NAV_TABS.includes(currentTab)) {
+        setChromeHidden(false);
+        return;
+      }
+
+      if (offset <= 24) {
+        setChromeHidden(false);
+        return;
+      }
+
+      const directionDistance = Math.abs(
+        offset - previousMotion.directionStartOffset,
+      );
+      if (direction === 'down' && offset > 80 && directionDistance >= 24) {
+        setChromeHidden(true);
+      } else if (direction === 'up' && directionDistance >= 16) {
+        setChromeHidden(false);
+      }
     },
-    [],
+    [currentPage, currentTabs, setChromeHidden],
   );
 
   const handleHomeTabPress = () => {
@@ -301,10 +365,33 @@ export default function HomeScreen() {
       [0, -100],
       Extrapolate.CLAMP,
     );
+    const scrollTranslateY = interpolate(
+      chromeVisibility.value,
+      [0, 1],
+      [-80, 0],
+      Extrapolate.CLAMP,
+    );
     return {
-      opacity,
+      opacity: opacity * chromeVisibility.value,
+      transform: [{ translateY: translateY + scrollTranslateY }],
+      pointerEvents:
+        scrollX.value > fadeStart + 0.5 || chromeVisibility.value < 0.5
+          ? 'none'
+          : 'auto',
+    };
+  });
+
+  const bottomNavAnimStyle = useAnimatedStyle(() => {
+    const translateY = interpolate(
+      chromeVisibility.value,
+      [0, 1],
+      [96, 0],
+      Extrapolate.CLAMP,
+    );
+    return {
+      opacity: chromeVisibility.value,
       transform: [{ translateY }],
-      pointerEvents: scrollX.value > fadeStart + 0.5 ? 'none' : 'auto',
+      pointerEvents: chromeVisibility.value < 0.5 ? 'none' : 'auto',
     };
   });
 
@@ -466,6 +553,7 @@ export default function HomeScreen() {
           scrollX.value = e.nativeEvent.position + e.nativeEvent.offset;
         }}
         onPageSelected={(e) => {
+          setChromeHidden(false);
           setCurrentPage(e.nativeEvent.position);
         }}
       >
@@ -521,10 +609,11 @@ export default function HomeScreen() {
       </PagerView>
 
       {/* 3. 底部悬浮导航栏 (Custom TabBar) */}
-      <View
+      <Animated.View
         style={[
           styles.bottomBarContainer,
           { bottom: insets.bottom, width: containerWidth },
+          bottomNavAnimStyle,
         ]}
       >
         <BlurView
@@ -622,7 +711,7 @@ export default function HomeScreen() {
             )}
           </View>
         </BlurView>
-      </View>
+      </Animated.View>
       {!cookies && !guestCookieReady && (
         <View
           style={{
