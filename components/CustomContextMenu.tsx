@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
-import * as Haptics from 'expo-haptics';
 import React, { useEffect } from 'react';
 import { Dimensions, Modal, Pressable, StyleSheet } from 'react-native';
 import Animated, {
@@ -12,6 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { ImpactFeedbackStyle, impactAsync } from '@/utils/haptics';
 import { Text, View } from './Themed';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -209,7 +209,7 @@ export function CustomContextMenu({
               <React.Fragment key={option.key}>
                 <Pressable
                   onPress={() => {
-                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    void impactAsync(ImpactFeedbackStyle.Light);
                     option.onPress();
                     handleClose();
                   }}

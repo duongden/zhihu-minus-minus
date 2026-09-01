@@ -1,7 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import CookieManager from '@react-native-cookies/cookies';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import {
@@ -26,6 +25,7 @@ import { useSettingsStore } from '@/store/useSettingsStore';
 import { useThemeStore } from '@/store/useThemeStore';
 import { useVerificationStore } from '@/store/useVerificationStore';
 import { syncNativeSessionCookies } from '@/utils/authSession';
+import { ImpactFeedbackStyle, impactAsync } from '@/utils/haptics';
 
 interface ProfileScreenProps {
   isActive?: boolean;
@@ -177,7 +177,7 @@ export default function ProfileScreen({ isActive = true }: ProfileScreenProps) {
   const handleSwitchAccount = async (index: number) => {
     if (index === activeAccountIndex || sessionChangeInFlight.current) return;
 
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    void impactAsync(ImpactFeedbackStyle.Medium);
     useVerificationStore.getState().hide();
     sessionChangeInFlight.current = true;
     setSessionChanging(true);
@@ -230,7 +230,7 @@ export default function ProfileScreen({ isActive = true }: ProfileScreenProps) {
   };
 
   const onToggleTheme = () => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    void impactAsync(ImpactFeedbackStyle.Light);
     toggleTheme();
   };
 

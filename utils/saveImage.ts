@@ -1,14 +1,19 @@
 import * as Clipboard from 'expo-clipboard';
 import * as FileSystem from 'expo-file-system/legacy';
-import * as Haptics from 'expo-haptics';
 import * as Sharing from 'expo-sharing';
+import {
+  ImpactFeedbackStyle,
+  impactAsync,
+  NotificationFeedbackType,
+  notificationAsync,
+} from '@/utils/haptics';
 import { showToast } from '@/utils/toast';
 
 // 动态安全加载 expo-media-library 原生模块，避免在 Expo Go 或未编译原生包时崩溃
 let MediaLibrary: typeof import('expo-media-library') | null = null;
 try {
   MediaLibrary = require('expo-media-library');
-} catch (e) {
+} catch (_e) {
   console.warn(
     '[saveImage] ExpoMediaLibrary 原生模块未就绪，将降级使用系统分享组件保存',
   );
@@ -19,7 +24,7 @@ try {
  */
 export async function saveImageToGallery(imageUrl: string): Promise<boolean> {
   try {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    void impactAsync(ImpactFeedbackStyle.Medium);
 
     // 1. 下载图片到本地临时目录
     showToast('正在准备图片...');
@@ -48,7 +53,7 @@ export async function saveImageToGallery(imageUrl: string): Promise<boolean> {
       const { status, granted } = await MediaLibrary.requestPermissionsAsync();
       if (granted || status === 'granted') {
         await MediaLibrary.saveToLibraryAsync(targetUri);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        void notificationAsync(NotificationFeedbackType.Success);
         showToast('图片已保存至系统相册');
         cleanupTempFile(targetUri, imageUrl);
         return true;
@@ -81,7 +86,7 @@ export async function saveImageToGallery(imageUrl: string): Promise<boolean> {
  */
 export async function shareImage(imageUrl: string): Promise<boolean> {
   try {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    void impactAsync(ImpactFeedbackStyle.Light);
 
     const isAvailable = await Sharing.isAvailableAsync();
     if (!isAvailable) {
@@ -128,7 +133,7 @@ export async function shareImage(imageUrl: string): Promise<boolean> {
  */
 export async function copyImageUrl(imageUrl: string): Promise<boolean> {
   try {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    void impactAsync(ImpactFeedbackStyle.Light);
     await Clipboard.setStringAsync(imageUrl);
     showToast('图片链接已复制到剪贴板');
     return true;

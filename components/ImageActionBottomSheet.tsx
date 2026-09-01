@@ -1,19 +1,20 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
-import React, { useEffect, useRef } from 'react';
+import type React from 'react';
+import { useEffect, useRef } from 'react';
 import {
   Animated,
   Image,
   Modal,
   Pressable,
+  View as RNView,
   StyleSheet,
   TouchableWithoutFeedback,
-  View as RNView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { ImpactFeedbackStyle, impactAsync } from '@/utils/haptics';
 import { copyImageUrl, saveImageToGallery } from '@/utils/saveImage';
 
 export interface ImageActionBottomSheetProps {
@@ -36,7 +37,7 @@ export const ImageActionBottomSheet: React.FC<ImageActionBottomSheetProps> = ({
 
   useEffect(() => {
     if (visible) {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      void impactAsync(ImpactFeedbackStyle.Medium);
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,

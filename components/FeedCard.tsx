@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Platform, View as RNView, Share } from 'react-native';
@@ -10,6 +9,7 @@ import Colors from '@/constants/Colors';
 import { useCollectionAction } from '@/hooks/useCollectionAction';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useCollectionStore } from '@/store/useCollectionStore';
+import { ImpactFeedbackStyle, impactAsync } from '@/utils/haptics';
 import { showToast } from '@/utils/toast';
 import { BouncyButton } from './BouncyButton';
 import { CustomContextMenu, type MenuOption } from './CustomContextMenu';
@@ -191,7 +191,7 @@ export const FeedCard = ({ item, tab }: { item: FeedItem; tab?: string }) => {
     <RNView ref={containerRef} className="w-full bg-transparent">
       <BouncyButton
         onLongPress={() => {
-          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          void impactAsync(ImpactFeedbackStyle.Medium);
           containerRef.current?.measureInWindow(
             (x: number, y: number, width: number, height: number) => {
               setOriginLayout({ x, y, width, height });

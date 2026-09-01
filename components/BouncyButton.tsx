@@ -15,6 +15,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import { ImpactFeedbackStyle, impactAsync } from '@/utils/haptics';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -73,6 +74,9 @@ export function BouncyButton({
         scale.value = withSpring(pressScale, { damping: 35, stiffness: 800 });
         opacity.value = withTiming(pressOpacity, { duration: 50 });
       }
+      if (hapticFeedback) {
+        void impactAsync(ImpactFeedbackStyle.Light);
+      }
       if (onPressIn) onPressIn(e);
     },
     [
@@ -86,6 +90,7 @@ export function BouncyButton({
       androidFeedbackType,
       enableRipple,
       rippleColor,
+      hapticFeedback,
     ],
   );
 

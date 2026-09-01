@@ -63,6 +63,8 @@ export interface AppSettings {
   pressScale: number;
   /** 安卓按压反馈类型: ripple (水波纹), scale-opacity (透明度+缩放) */
   androidFeedbackType: 'ripple' | 'scale-opacity';
+  /** 是否开启应用内震动反馈 */
+  enableHapticFeedback: boolean;
   /** 是否开启浏览历史记录 */
   enableBrowseHistory: boolean;
   /** 是否在本地记录并过滤近期看过的推荐内容 */
@@ -122,6 +124,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   pressOpacity: 0.82,
   pressScale: 0.98,
   androidFeedbackType: 'ripple',
+  enableHapticFeedback: true,
   enableBrowseHistory: true,
   enableLocalFeedDedup: false,
   enableFeedCacheOnLaunch: false,
@@ -179,7 +182,7 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'zhihu-settings-storage',
       storage: createJSONStorage(() => settingsStorage),
-      version: 8,
+      version: 9,
       migrate: (persistedState: any, version: number) => {
         // 清理历史脏数据：null 或非法 hex 都退回默认蓝
         const sanitized = sanitizeColor(persistedState?.primaryColor);
@@ -247,6 +250,11 @@ export const useSettingsStore = create<SettingsState>()(
             persistedState.filterKeepFollowing ?? true;
           persistedState.filterKeepUpvotedByFollowee =
             persistedState.filterKeepUpvotedByFollowee ?? true;
+        }
+
+        if (version < 9) {
+          persistedState.enableHapticFeedback =
+            persistedState.enableHapticFeedback ?? true;
         }
 
         return persistedState as SettingsState;

@@ -1,8 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
   LayoutAnimation,
   PanResponder,
   Platform,
@@ -60,6 +59,7 @@ export default function AppearanceSettings() {
     useWebView,
     enablePrivateMessaging,
     enableBrowseHistory,
+    enableHapticFeedback,
     pressOpacity,
     pressScale,
     androidFeedbackType,
@@ -295,6 +295,20 @@ export default function AppearanceSettings() {
 
         {/* 3. 按压反馈 */}
         <Section title="交互与反馈" colorScheme={colorScheme}>
+          <SettingItem
+            label="震动反馈"
+            icon="phone-portrait-outline"
+            colorScheme={colorScheme}
+          >
+            <Switch
+              value={enableHapticFeedback}
+              onValueChange={(val) =>
+                updateSettings({ enableHapticFeedback: val })
+              }
+              trackColor={{ true: tintColor }}
+            />
+          </SettingItem>
+
           {Platform.OS === 'android' && (
             <SettingItem
               label="反馈类型"
@@ -476,7 +490,7 @@ export default function AppearanceSettings() {
             icon="play-circle-outline"
             colorScheme={colorScheme}
           >
-            <BouncyButton hapticFeedback={false} style={[styles.previewBtn]}>
+            <BouncyButton hapticFeedback style={[styles.previewBtn]}>
               <Text style={{ fontSize: 13, fontWeight: 'bold' }}>按我测试</Text>
             </BouncyButton>
           </SettingItem>
@@ -792,8 +806,12 @@ function ColorPickerSection({ primaryColor, onColorChange }: any) {
     const target = primaryColor || '#0084ff';
     setHexText(target);
     const newHsl = hexToHsl(target);
-    const currentHex = hslToHex(hsl.h, hsl.s, hsl.l);
-    if (currentHex.toLowerCase() !== target.toLowerCase()) setHsl(newHsl);
+    setHsl((currentHsl) => {
+      const currentHex = hslToHex(currentHsl.h, currentHsl.s, currentHsl.l);
+      return currentHex.toLowerCase() === target.toLowerCase()
+        ? currentHsl
+        : newHsl;
+    });
   }, [primaryColor]);
 
   const applyHslLocal = (newHsl: any) => {
