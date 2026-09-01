@@ -28,14 +28,13 @@ import {
   getComment,
 } from '@/api/zhihu';
 import { BouncyButton } from '@/components/BouncyButton';
+import { CommentActionSheet } from '@/components/CommentActionSheet';
 import { CommentContent } from '@/components/CommentContent';
 import { LikeButton } from '@/components/LikeButton';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
-import { copyToClipboard } from '@/utils/clipboard';
 import { formatDate } from '@/utils/date';
-import { showToast } from '@/utils/toast';
 
 export default function ReplyDetailScreen() {
   const { id, parent } = useLocalSearchParams<{
@@ -46,6 +45,10 @@ export default function ReplyDetailScreen() {
   const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(
     null,
   );
+  const [commentAction, setCommentAction] = useState<{
+    htmlContent: string;
+    authorName: string;
+  } | null>(null);
   const inputRef = useRef<TextInput>(null);
   const router = useRouter();
   const _queryClient = useQueryClient();
@@ -159,30 +162,13 @@ export default function ReplyDetailScreen() {
     if (urlToken) router.push(`/user/${urlToken}`);
   };
 
-  // 提取 HTML 评论的纯文本（用于长按复制）
-  const extractPlainText = (html: string) => {
-    const imageRegex =
-      /<a[^>]+class="comment_img"[^>]*href="([^"]+)"[^>]*>.*?<\/a>|<a[^>]+href="([^"]+)"[^>]*class="comment_img"[^>]*>.*?<\/a>/gi;
-    return html
-      .replace(imageRegex, '[\u56fe\u7247]')
-      .replace(/<[^>]+>/g, '')
-      .trim();
-  };
-
-  const handleLongPressComment = async (html: string, authorName: string) => {
-    const text = extractPlainText(html);
-    if (!text) return;
-    const ok = await copyToClipboard(text);
-    if (ok) showToast(`已复制 @${authorName} 的评论`);
+  const handleLongPressComment = (htmlContent: string, authorName: string) => {
+    setCommentAction({ htmlContent, authorName });
   };
 
   const renderReply = ({ item }: { item: CommentItem }) => {
     return (
-      <BouncyButton
-        onLongPress={() =>
-          handleLongPressComment(item.content, item.author.member.name)
-        }
-        delayLongPress={400}
+      <View
         style={{
           borderBottomWidth: StyleSheet.hairlineWidth,
           borderBottomColor: borderColor,
@@ -230,9 +216,15 @@ export default function ReplyDetailScreen() {
                 </Text>
               )}
             </Text>
-            <View className="mt-1 bg-transparent">
+            <BouncyButton
+              onLongPress={() =>
+                handleLongPressComment(item.content, item.author.member.name)
+              }
+              delayLongPress={400}
+              style={{ marginTop: 4, borderRadius: 4 }}
+            >
               <CommentContent htmlContent={item.content} width={contentWidth} />
-            </View>
+            </BouncyButton>
 
             <View className="flex-row justify-between items-center bg-transparent">
               <Text
@@ -275,7 +267,7 @@ export default function ReplyDetailScreen() {
             </View>
           </View>
         </View>
-      </BouncyButton>
+      </View>
     );
   };
 
@@ -317,12 +309,21 @@ export default function ReplyDetailScreen() {
                 {parentComment.author.member.name}
               </Text>
             </View>
-            <View className="mt-1 bg-transparent">
+            <BouncyButton
+              onLongPress={() =>
+                handleLongPressComment(
+                  parentComment.content,
+                  parentComment.author.member.name,
+                )
+              }
+              delayLongPress={400}
+              style={{ marginTop: 4, borderRadius: 4 }}
+            >
               <CommentContent
                 htmlContent={parentComment.content}
                 width={contentWidth}
               />
-            </View>
+            </BouncyButton>
 
             <View className="flex-row justify-between items-center bg-transparent">
               <Text
@@ -513,6 +514,13 @@ export default function ReplyDetailScreen() {
           </View>
         </BlurView>
       </Animated.View>
+
+      <CommentActionSheet
+        visible={commentAction !== null}
+        htmlContent={commentAction?.htmlContent ?? null}
+        authorName={commentAction?.authorName ?? null}
+        onClose={() => setCommentAction(null)}
+      />
     </View>
   );
 }
