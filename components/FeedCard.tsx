@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { View as RNView, Share } from 'react-native';
+import { Platform, View as RNView, Share } from 'react-native';
 import Animated, { SharedTransition } from 'react-native-reanimated';
 import { type FeedItem, voteContent } from '@/api/zhihu';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -205,10 +205,11 @@ export const FeedCard = ({ item, tab }: { item: FeedItem; tab?: string }) => {
             backgroundColor: Colors[colorScheme].backgroundSecondary,
             borderRadius: 12,
             opacity: previewVisible ? 0 : 1,
+            elevation: Platform.OS === 'android' ? 1 : 0,
           },
           isQuestionType ? { paddingBottom: 10 } : undefined,
         ]}
-        className="p-4 pb-2 mb-2 mx-1.5 shadow-sm"
+        className="p-4 pb-2 mb-2 mx-1.5"
       >
         {/* 动态动作提示 (针对关注流) */}
         {item.actionText && (
