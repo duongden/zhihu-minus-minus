@@ -245,7 +245,7 @@ export const CreationCard = React.forwardRef<
             elevation: 5,
           },
         ]}
-        className="p-4 mb-2.5 shadow-sm"
+        className="p-4 mb-2.5"
       >
         <BouncyButton
           onPress={() => {

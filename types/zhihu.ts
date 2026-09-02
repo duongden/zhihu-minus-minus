@@ -1,6 +1,19 @@
+export interface ZhihuTopic {
+  id: string | number;
+  name: string;
+  type?: string;
+  url?: string;
+  token?: string;
+  description?: string;
+  avatar_path?: string;
+  avatar_url?: string;
+  priority?: number;
+}
+
 export interface ZhihuBadge {
   type: string;
   description: string;
+  topics?: ZhihuTopic[];
 }
 
 export interface ZhihuDetailBadge {
@@ -52,6 +65,27 @@ export interface ZhihuAuthor {
   badge_v2?: ZhihuBadgeV2;
 }
 
+export interface ZhihuSegmentInfo {
+  pid: string;
+  text: string;
+  marks: Array<{
+    start_index: number;
+    end_index: number;
+    seg_info?: {
+      like_count: number;
+      comment_count: number;
+      is_like: boolean;
+      seg_ids?: string[];
+    };
+    master_seg_info?: {
+      like_count: number;
+      comment_count: number;
+      is_like: boolean;
+      seg_ids?: string[];
+    };
+  }>;
+}
+
 export interface ZhihuQuestion {
   id: string | number;
   title: string;
@@ -62,10 +96,19 @@ export interface ZhihuQuestion {
   url?: string;
   answer_count?: number;
   follower_count?: number;
+  comment_count?: number;
+  visit_count?: number;
+  detail?: string;
+  excerpt?: string;
+  topics?: ZhihuTopic[];
   author?: ZhihuAuthor;
   relationship?: {
     voting?: number;
     is_following?: boolean;
+    is_author?: boolean;
+    is_anonymous?: boolean;
+    is_thanked?: boolean;
+    is_nothelp?: boolean;
   };
 }
 

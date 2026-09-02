@@ -1,67 +1,33 @@
-import type { ZhihuAuthor } from '@/types/zhihu';
+import type { ZhihuPaging, ZhihuQuestion } from '@/types/zhihu';
 import apiClient from '../client';
+import type {
+  AnswerDetail,
+  AnswerQuestion,
+  QuestionAnswersResponse,
+} from './answer';
 
-export interface ZhihuQuestionBrief {
-  created: number;
-  id: string | number;
-  question_type: string;
-  relationship: any;
-  title: string;
-  type: 'question';
-  updated_time: number;
-  url: string;
-}
+export type ZhihuQuestionBrief = AnswerQuestion;
+export type ZhihuAnswer = AnswerDetail;
+export type ZhihuAnswersPaging = ZhihuPaging;
+export type ZhihuAnswersResponse = QuestionAnswersResponse;
 
-export interface ZhihuAnswerRelationship {
-  upvoted_followees: any[];
-  voting?: number;
-  is_author?: boolean;
-}
-
-export interface ZhihuAnswer {
-  allow_segment_interaction: number;
-  answer_type: string;
-  author: ZhihuAuthor;
-  comment_count: number;
-  content: string;
-  content_need_truncated: boolean;
-  created_time: number;
-  extras: string;
-  force_login_when_click_read_more: boolean;
-  id: string | number;
-  is_collapsed: boolean;
-  is_copyable: boolean;
-  is_jump_native: boolean;
-  question: ZhihuQuestionBrief;
-  relationship: ZhihuAnswerRelationship;
-  type: 'answer';
-  updated_time: number;
-  url: string;
-  voteup_count: number;
-  thumbnail?: string;
-  content_img?: string[];
-  segment_infos?: any[];
-}
-
-export interface ZhihuAnswersPaging {
-  is_end: boolean;
-  is_start: boolean;
-  next: string;
-  previous: string;
-  totals: number;
-}
-
-export interface ZhihuAnswersResponse {
-  data: ZhihuAnswer[];
-  paging: ZhihuAnswersPaging;
-  read_count: number;
+export interface ZhihuQuestionDetail extends ZhihuQuestion {
+  detail?: string;
+  excerpt?: string;
+  answer_count?: number;
+  comment_count?: number;
+  follower_count?: number;
+  visit_count?: number;
 }
 
 export const QUESTION_INCLUDE =
   'detail,excerpt,answer_count,comment_count,follower_count,visit_count,topics,relationship.is_following,relationship.is_author,relationship.is_anonymous,relationship.voting,relationship.is_thanked,relationship.is_nothelp';
 
-export const getQuestion = async (id: string | number, include?: string) => {
-  const res = await apiClient.get(
+export const getQuestion = async (
+  id: string | number,
+  include?: string,
+): Promise<ZhihuQuestionDetail> => {
+  const res = await apiClient.get<ZhihuQuestionDetail>(
     `/questions/${id}?include=${include || QUESTION_INCLUDE}`,
   );
   return res.data;
