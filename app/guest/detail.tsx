@@ -321,7 +321,7 @@ export default function GuestDetailScreen() {
         {/* 5. 游客提示卡片 */}
         <Animated.View
           entering={FadeInDown.delay(100).duration(500)}
-          className="mx-5 mt-8 p-6 rounded-[24px] shadow-sm items-center border"
+          className="mx-5 mt-8 p-6 rounded-[24px] items-center border"
           style={{
             backgroundColor: cardBg,
             borderColor,

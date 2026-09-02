@@ -329,7 +329,7 @@ const AnswerItem = forwardRef(
           borderRadius: 12,
           position: 'relative',
         }}
-        className="p-4 mb-2.5 mx-1.5 shadow-sm"
+        className="p-4 mb-2.5 mx-1.5"
       >
         {/* Glowing border hint overlay */}
         <Reanimated.View
