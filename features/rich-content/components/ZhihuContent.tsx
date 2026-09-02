@@ -13,11 +13,9 @@ import {
   Dimensions,
   Image,
   Linking,
-  Modal,
   Pressable,
   View as RNView,
   StyleSheet,
-  TouchableWithoutFeedback,
   useWindowDimensions,
 } from 'react-native';
 import RenderHtml, {
@@ -38,6 +36,7 @@ import { getQuestion } from '@/api/zhihu/question';
 import { BouncyButton } from '@/components/BouncyButton';
 import { ImageActionBottomSheet } from '@/components/ImageActionBottomSheet';
 import { ImagePreviewModal } from '@/components/ImagePreviewModal';
+import { ActionSheet } from '@/components/overlays/ActionSheet';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
@@ -1126,141 +1125,82 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
           </View>
         )}
 
-        {modalVisible && (
-          <Modal
-            visible={modalVisible}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setModalVisible(false)}
-          >
-            <TouchableWithoutFeedback onPress={() => setModalVisible(false)}>
-              <View className="flex-1 bg-black/10 justify-center items-center">
-                <TouchableWithoutFeedback>
-                  <View
-                    className="p-4 rounded-[20px] w-4/5"
-                    style={[
-                      {
-                        backgroundColor: surfaceColor,
-                        shadowColor: '#000',
-                        shadowOffset: { width: 0, height: 4 },
-                        shadowOpacity: 0.15,
-                        shadowRadius: 12,
-                        elevation: 8,
-                      },
-                    ]}
-                  >
-                    <View className="flex-row items-center justify-around mb-4 bg-transparent">
-                      <Pressable
-                        className="flex-row items-center bg-transparent"
-                        onPress={() => toggleSegmentLikeMutation.mutate()}
-                        disabled={toggleSegmentLikeMutation.isPending}
-                      >
-                        <Ionicons
-                          name={
-                            activeSegment?.is_like ? 'heart' : 'heart-outline'
-                          }
-                          size={24}
-                          color={activeSegment?.is_like ? '#ff4d4f' : textColor}
-                        />
-                        <Text
-                          className="text-[15px] font-semibold ml-2"
-                          style={[
-                            activeSegment?.is_like && { color: '#ff4d4f' },
-                          ]}
-                        >
-                          {activeSegment?.like_count || 0} 赞同
-                        </Text>
-                      </Pressable>
-                      <View className="w-[1px] h-5 bg-[rgba(150,150,150,0.2)]" />
-                      <Pressable
-                        className="flex-row items-center bg-transparent"
-                        onPress={() => {
-                          setModalVisible(false);
-                          const { seg_ids, text, startIndex, endIndex } =
-                            activeSegment || {};
-                          const segId = Array.isArray(seg_ids)
-                            ? seg_ids[0]
-                            : seg_ids;
-                          let segText = text || '';
-                          if (
-                            typeof startIndex === 'number' &&
-                            typeof endIndex === 'number' &&
-                            endIndex > startIndex
-                          ) {
-                            const sliced = segText
-                              .slice(startIndex, endIndex)
-                              .trim();
-                            if (sliced) segText = sliced;
-                          }
-                          const queryParams = [
-                            `type=${type}`,
-                            segId ? `segmentId=${segId}` : null,
-                            segText
-                              ? `text=${encodeURIComponent(segText)}`
-                              : null,
-                          ]
-                            .filter(Boolean)
-                            .join('&');
-                          router.push(`/comments/${objectId}?${queryParams}`);
-                        }}
-                      >
-                        <Ionicons
-                          name="chatbubble-outline"
-                          size={22}
-                          color={primaryColor}
-                        />
-                        <Text className="text-[15px] font-semibold ml-2">
-                          {activeSegment?.comment_count || 0} 评论
-                        </Text>
-                      </Pressable>
-                    </View>
-                    <Pressable
-                      className="flex-row items-center justify-center py-2.5 bg-transparent"
-                      style={{
-                        borderTopWidth: StyleSheet.hairlineWidth,
-                        borderTopColor: 'rgba(150,150,150,0.1)',
-                      }}
-                      onPress={() => {
-                        setModalVisible(false);
-                        const { text, startIndex, endIndex } =
-                          activeSegment || {};
-                        let segText = text || '';
-                        if (
-                          typeof startIndex === 'number' &&
-                          typeof endIndex === 'number' &&
-                          endIndex > startIndex
-                        ) {
-                          const sliced = segText
-                            .slice(startIndex, endIndex)
-                            .trim();
-                          if (sliced) segText = sliced;
-                        }
-                        const queryParams = [
-                          `type=${type}`,
-                          segText
-                            ? `text=${encodeURIComponent(segText)}`
-                            : null,
-                        ]
-                          .filter(Boolean)
-                          .join('&');
-                        router.push(`/comments/${objectId}?${queryParams}`);
-                      }}
-                    >
-                      <Text type="primary" className="text-sm font-bold mr-1">
-                        查看详细讨论
-                      </Text>
-                      <Ionicons
-                        name="chevron-forward"
-                        size={16}
-                        color={primaryColor}
-                      />
-                    </Pressable>
-                  </View>
-                </TouchableWithoutFeedback>
-              </View>
-            </TouchableWithoutFeedback>
-          </Modal>
-        )}
+        <ActionSheet
+          visible={modalVisible && Boolean(activeSegment)}
+          onClose={() => setModalVisible(false)}
+          title="段落操作"
+          subtitle={(() => {
+            if (!activeSegment) return undefined;
+            const { text, startIndex, endIndex } = activeSegment;
+            const selected = text
+              .slice(startIndex || 0, endIndex || text.length)
+              .trim();
+            return selected || text;
+          })()}
+          options={
+            activeSegment
+              ? [
+                  {
+                    key: 'like',
+                    icon: activeSegment.is_like
+                      ? ('heart' as const)
+                      : ('heart-outline' as const),
+                    label: `${activeSegment.like_count || 0} 赞同`,
+                    color: activeSegment.is_like
+                      ? Colors[colorScheme].danger
+                      : undefined,
+                    disabled: toggleSegmentLikeMutation.isPending,
+                    onPress: () => toggleSegmentLikeMutation.mutate(),
+                  },
+                  {
+                    key: 'comments',
+                    icon: 'chatbubble-outline' as const,
+                    label: `${activeSegment.comment_count || 0} 评论`,
+                    onPress: () => {
+                      const { seg_ids, text, startIndex, endIndex } =
+                        activeSegment;
+                      const segmentId = Array.isArray(seg_ids)
+                        ? seg_ids[0]
+                        : seg_ids;
+                      const selected = text
+                        .slice(startIndex || 0, endIndex || text.length)
+                        .trim();
+                      const queryParams = [
+                        `type=${type}`,
+                        segmentId ? `segmentId=${segmentId}` : null,
+                        selected
+                          ? `text=${encodeURIComponent(selected)}`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join('&');
+                      router.push(`/comments/${objectId}?${queryParams}`);
+                    },
+                  },
+                  {
+                    key: 'discussion',
+                    icon: 'chatbubbles-outline' as const,
+                    label: '查看详细讨论',
+                    onPress: () => {
+                      const { text, startIndex, endIndex } = activeSegment;
+                      const selected = text
+                        .slice(startIndex || 0, endIndex || text.length)
+                        .trim();
+                      const queryParams = [
+                        `type=${type}`,
+                        selected
+                          ? `text=${encodeURIComponent(selected)}`
+                          : null,
+                      ]
+                        .filter(Boolean)
+                        .join('&');
+                      router.push(`/comments/${objectId}?${queryParams}`);
+                    },
+                  },
+                ]
+              : []
+          }
+        />
 
         <ImagePreviewModal
           visible={viewerVisible && Boolean(viewerImage)}

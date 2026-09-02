@@ -6,17 +6,8 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { useNavigation, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Alert,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Switch,
-  TextInput,
-} from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Alert, Pressable, StyleSheet } from 'react-native';
 import {
   createCollection,
   deleteCollection,
@@ -24,9 +15,21 @@ import {
   updateCollection,
 } from '@/api/zhihu';
 import { BouncyButton } from '@/components/BouncyButton';
+import { CollectionEditorForm } from '@/components/CollectionEditorForm';
+import { ActionSheet } from '@/components/overlays/ActionSheet';
+import { BottomSheet } from '@/components/overlays/BottomSheet';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+
+interface CollectionItem {
+  id: string | number;
+  title: string;
+  description?: string;
+  is_public: boolean;
+  answer_count?: number;
+  follower_count?: number;
+}
 
 export default function MyCollectionsScreen() {
   const colorScheme = useColorScheme();
@@ -36,25 +39,12 @@ export default function MyCollectionsScreen() {
 
   const primaryColor = useThemeColor({}, 'primary');
   const borderColor = Colors[colorScheme].border;
-  const surfaceColor = colorScheme === 'dark' ? '#1c1c1e' : '#fff';
-  const tintColor = Colors[colorScheme].tint;
-
   const [modalVisible, setModalVisible] = useState(false);
-  const [editingItem, setEditingItem] = useState<any>(null);
+  const [editingItem, setEditingItem] = useState<CollectionItem | null>(null);
+  const [actionItem, setActionItem] = useState<CollectionItem | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [isPublic, setIsPublic] = useState(true);
-
-  useEffect(() => {
-    navigation.setOptions({
-      title: '我的收藏夹',
-      headerRight: () => (
-        <Pressable onPress={() => openModal()} style={{ marginRight: 15 }}>
-          <Ionicons name="add" size={28} color={primaryColor} />
-        </Pressable>
-      ),
-    });
-  }, [navigation, primaryColor]);
 
   const {
     data,
@@ -84,7 +74,10 @@ export default function MyCollectionsScreen() {
     },
   });
   const updateMutation = useMutation({
-    mutationFn: (vars: any) => updateCollection(vars.id, vars.data),
+    mutationFn: (vars: {
+      id: string | number;
+      data: { title: string; description: string; is_public: boolean };
+    }) => updateCollection(vars.id, vars.data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['my-collections'] });
       closeModal();
@@ -96,7 +89,7 @@ export default function MyCollectionsScreen() {
       queryClient.invalidateQueries({ queryKey: ['my-collections'] }),
   });
 
-  const openModal = (item?: any) => {
+  const openModal = useCallback((item?: CollectionItem) => {
     if (item) {
       setEditingItem(item);
       setTitle(item.title);
@@ -109,7 +102,18 @@ export default function MyCollectionsScreen() {
       setIsPublic(true);
     }
     setModalVisible(true);
-  };
+  }, []);
+
+  useEffect(() => {
+    navigation.setOptions({
+      title: '我的收藏夹',
+      headerRight: () => (
+        <Pressable onPress={() => openModal()} style={{ marginRight: 15 }}>
+          <Ionicons name="add" size={28} color={primaryColor} />
+        </Pressable>
+      ),
+    });
+  }, [navigation, openModal, primaryColor]);
   const closeModal = () => {
     setModalVisible(false);
     setEditingItem(null);
@@ -125,7 +129,7 @@ export default function MyCollectionsScreen() {
     else createMutation.mutate(data);
   };
 
-  const handleDelete = (item: any) => {
+  const handleDelete = (item: CollectionItem) => {
     Alert.alert(
       '确认删除',
       `确定要删除"${item.title}"吗喵？内部的内容也会一并移出。`,
@@ -140,9 +144,12 @@ export default function MyCollectionsScreen() {
     );
   };
 
-  const collections = data?.pages.flatMap((page) => page.data) || [];
+  const collections =
+    (data?.pages.flatMap((page) => page.data) as
+      | CollectionItem[]
+      | undefined) || [];
 
-  const renderItem = ({ item }: { item: any }) => (
+  const renderItem = ({ item }: { item: CollectionItem }) => (
     <BouncyButton
       className="flex-row p-[15px] items-center"
       style={{
@@ -150,17 +157,7 @@ export default function MyCollectionsScreen() {
         borderBottomColor: borderColor,
       }}
       onPress={() => router.push(`/collections/${item.id}`)}
-      onLongPress={() => {
-        Alert.alert(item.title, '选择操作', [
-          { text: '编辑', onPress: () => openModal(item) },
-          {
-            text: '删除',
-            style: 'destructive',
-            onPress: () => handleDelete(item),
-          },
-          { text: '取消', style: 'cancel' },
-        ]);
-      }}
+      onLongPress={() => setActionItem(item)}
     >
       <View
         className="w-12 h-12 rounded-lg justify-center items-center relative"
@@ -199,7 +196,7 @@ export default function MyCollectionsScreen() {
           {item.answer_count || 0} 内容 · {item.follower_count || 0} 关注
         </Text>
       </View>
-      <Pressable onPress={() => openModal(item)} className="p-2.5">
+      <Pressable onPress={() => setActionItem(item)} className="p-2.5">
         <Ionicons name="ellipsis-horizontal" size={18} color="#ccc" />
       </Pressable>
     </BouncyButton>
@@ -228,93 +225,49 @@ export default function MyCollectionsScreen() {
         )}
       />
 
-      <Modal
-        animationType="slide"
-        transparent={true}
+      <BottomSheet
         visible={modalVisible}
-        onRequestClose={closeModal}
+        onClose={closeModal}
+        title={editingItem ? '编辑收藏夹' : '新建收藏夹'}
+        height="72%"
+        keyboardAvoiding
       >
-        <View
-          className="flex-1 justify-end"
-          style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
-        >
-          <View
-            className="rounded-t-3xl p-5 h-[70%]"
-            style={{ backgroundColor: surfaceColor }}
-          >
-            <View className="flex-row justify-between items-center mb-5">
-              <Text className="text-lg font-bold">
-                {editingItem ? '编辑收藏夹' : '新建收藏夹'}
-              </Text>
-              <Pressable onPress={closeModal}>
-                <Ionicons name="close" size={24} color="#999" />
-              </Pressable>
-            </View>
+        <CollectionEditorForm
+          title={title}
+          description={description}
+          isPublic={isPublic}
+          onTitleChange={setTitle}
+          onDescriptionChange={setDescription}
+          onPublicChange={setIsPublic}
+          onSubmit={handleSave}
+          pending={createMutation.isPending || updateMutation.isPending}
+        />
+      </BottomSheet>
 
-            <ScrollView className="flex-1">
-              <Text className="text-[15px] font-semibold mb-2 mt-[15px]">
-                标题
-              </Text>
-              <TextInput
-                className="rounded-lg p-3 text-base"
-                style={{ borderWidth: 1, borderColor, color: tintColor }}
-                value={title}
-                onChangeText={setTitle}
-                placeholder="输入标题"
-                placeholderTextColor="#999"
-              />
-
-              <Text className="text-[15px] font-semibold mb-2 mt-[15px]">
-                描述 (可选)
-              </Text>
-              <TextInput
-                className="rounded-lg p-3 text-base h-20"
-                style={{
-                  borderWidth: 1,
-                  borderColor,
-                  color: tintColor,
-                  textAlignVertical: 'top',
-                }}
-                value={description}
-                onChangeText={setDescription}
-                placeholder="输入描述"
-                placeholderTextColor="#999"
-                multiline
-                numberOfLines={3}
-              />
-
-              <View className="flex-row justify-between items-center mt-5 mb-[30px]">
-                <View>
-                  <Text className="text-[15px] font-semibold mb-2 mt-[15px]">
-                    公开收藏夹
-                  </Text>
-                  <Text type="secondary" className="text-xs">
-                    公开后其他用户可见
-                  </Text>
-                </View>
-                <Switch
-                  value={isPublic}
-                  onValueChange={setIsPublic}
-                  trackColor={{ false: '#ddd', true: primaryColor }}
-                />
-              </View>
-            </ScrollView>
-
-            <Pressable
-              className="h-[50px] rounded-[25px] justify-center items-center mt-2.5 mb-5"
-              style={{ backgroundColor: primaryColor }}
-              onPress={handleSave}
-              disabled={createMutation.isPending || updateMutation.isPending}
-            >
-              {createMutation.isPending || updateMutation.isPending ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text className="text-white text-base font-bold">完成</Text>
-              )}
-            </Pressable>
-          </View>
-        </View>
-      </Modal>
+      <ActionSheet
+        visible={Boolean(actionItem)}
+        onClose={() => setActionItem(null)}
+        title={actionItem?.title || '收藏夹操作'}
+        options={
+          actionItem
+            ? [
+                {
+                  key: 'edit',
+                  icon: 'create-outline',
+                  label: '编辑收藏夹',
+                  onPress: () => openModal(actionItem),
+                },
+                {
+                  key: 'delete',
+                  icon: 'trash-outline',
+                  label: '删除收藏夹',
+                  destructive: true,
+                  onPress: () => handleDelete(actionItem),
+                },
+              ]
+            : []
+        }
+      />
     </View>
   );
 }
