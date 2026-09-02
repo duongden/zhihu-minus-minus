@@ -302,12 +302,6 @@ function RootLayout() {
                   animation: 'slide_from_right',
                 }}
               />
-
-              {/* 其他 Modal 弹窗 */}
-              <Stack.Screen
-                name="modal"
-                options={{ presentation: 'modal', title: '提示' }}
-              />
             </Stack>
 
             {/* 全局状态栏和底部安全区渐变模糊遮罩 */}

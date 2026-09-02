@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
+import { StatusBar } from 'expo-status-bar';
 import { Modal, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
@@ -39,13 +40,17 @@ export const VerificationModal = () => {
       onRequestClose={hide}
     >
       <SafeAreaView style={styles.container}>
+        <StatusBar style="dark" backgroundColor="#fff" />
         <View style={styles.header}>
-          <Text style={styles.title}>安全验证</Text>
+          <Text lightColor="#1a1a1a" darkColor="#1a1a1a" style={styles.title}>
+            安全验证
+          </Text>
           <BouncyButton onPress={hide} style={styles.closeButton}>
             <Ionicons name="close" size={24} color="#666" />
           </BouncyButton>
         </View>
         <WebView
+          style={styles.webView}
           source={{ uri: verificationUrl }}
           onNavigationStateChange={handleNavigationStateChange}
           javaScriptEnabled={true}
@@ -80,5 +85,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 15,
     padding: 5,
+  },
+  webView: {
+    backgroundColor: '#fff',
   },
 });

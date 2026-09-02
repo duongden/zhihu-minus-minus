@@ -8,7 +8,6 @@ import {
   Alert,
   Animated,
   Image,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -25,7 +24,7 @@ import { followMember, unfollowMember } from '@/api/zhihu/member';
 import { BouncyButton } from '@/components/BouncyButton';
 import { DownvoteButton } from '@/components/DownvoteButton';
 import { LikeButton } from '@/components/LikeButton';
-import { MenuOption } from '@/components/MenuOption';
+import { ActionSheet } from '@/components/overlays/ActionSheet';
 import { ShareMenu } from '@/components/ShareMenu';
 import { Text, ThemedIcon, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -57,7 +56,6 @@ export const AnswerDetailView = ({
   const insets = useSafeAreaInsets();
 
   const colorScheme = useColorScheme();
-  const surfaceColor = Colors[colorScheme].surface;
   const backgroundColor = Colors[colorScheme].background;
   const _textColor = Colors[colorScheme].text;
 
@@ -514,78 +512,44 @@ export const AnswerDetailView = ({
         }
       />
 
-      {/* 操作菜单 */}
-      {menuVisible && !isSharing && (
-        <Modal
-          visible={menuVisible && !isSharing}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setMenuVisible(false)}
-        >
-          <Pressable
-            className="flex-1 justify-end bg-black/40"
-            onPress={() => setMenuVisible(false)}
-          >
-            <View
-              className="rounded-t-[24px] px-5 pt-2.5"
-              style={{
-                backgroundColor: surfaceColor,
-                paddingBottom: insets.bottom + 20,
-              }}
-            >
-              <View className="items-center py-2.5 bg-transparent">
-                <View className="w-10 h-1.5 rounded-[3px] bg-[#ddd]" />
-              </View>
-
-              <View className="py-2.5 bg-transparent">
-                <MenuOption
-                  icon={isLiked ? 'heart' : 'heart-outline'}
-                  label={isLiked ? '取消喜欢' : '加入喜欢'}
-                  color={isLiked ? Colors[colorScheme].danger : undefined}
-                  onPress={() => {
-                    setIsLiked(!isLiked);
-                    setMenuVisible(false);
-                  }}
-                />
-                <MenuOption
-                  icon={isCollected ? 'star' : 'star-outline'}
-                  label={isCollected ? '取消收藏' : '移至收藏'}
-                  color={isCollected ? warningColor : undefined}
-                  onPress={() => {
-                    collectMutation.mutate();
-                    setMenuVisible(false);
-                  }}
-                />
-                <MenuOption
-                  icon="share-social-outline"
-                  label="分享回答"
-                  onPress={() => setIsSharing(true)}
-                />
-                {answer?.relationship?.is_author && (
-                  <View className="h-px my-1.5 bg-[rgba(150,150,150,0.15)]" />
-                )}
-                {answer?.relationship?.is_author && (
-                  <MenuOption
-                    icon="trash-outline"
-                    label="删除回答"
-                    color={Colors[colorScheme].danger}
-                    onPress={() => {
-                      handleDelete();
-                      setMenuVisible(false);
-                    }}
-                  />
-                )}
-              </View>
-              <Pressable
-                className="py-[18px] mt-2.5 items-center"
-                onPress={() => setMenuVisible(false)}
-              >
-                <Text className="text-base font-bold">取消</Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Modal>
-      )}
+      <ActionSheet
+        visible={menuVisible && !isSharing}
+        onClose={() => setMenuVisible(false)}
+        title="回答操作"
+        options={[
+          {
+            key: 'like',
+            icon: isLiked ? 'heart' : 'heart-outline',
+            label: isLiked ? '取消喜欢' : '加入喜欢',
+            color: isLiked ? Colors[colorScheme].danger : undefined,
+            onPress: () => setIsLiked(!isLiked),
+          },
+          {
+            key: 'collection',
+            icon: isCollected ? 'star' : 'star-outline',
+            label: isCollected ? '取消收藏' : '移至收藏',
+            color: isCollected ? warningColor : undefined,
+            onPress: () => collectMutation.mutate(),
+          },
+          {
+            key: 'share',
+            icon: 'share-social-outline',
+            label: '分享回答',
+            onPress: () => setIsSharing(true),
+          },
+          ...(answer?.relationship?.is_author
+            ? [
+                {
+                  key: 'delete',
+                  icon: 'trash-outline' as const,
+                  label: '删除回答',
+                  destructive: true,
+                  onPress: handleDelete,
+                },
+              ]
+            : []),
+        ]}
+      />
     </View>
   );
 };

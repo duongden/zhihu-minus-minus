@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   Animated,
   Image,
-  Modal,
   Pressable,
   StyleSheet,
 } from 'react-native';
@@ -27,7 +26,7 @@ import { addReadHistory } from '@/api/zhihu/history';
 import { followMember, unfollowMember } from '@/api/zhihu/member';
 import { DownvoteButton } from '@/components/DownvoteButton';
 import { LikeButton } from '@/components/LikeButton';
-import { MenuOption } from '@/components/MenuOption';
+import { ActionSheet } from '@/components/overlays/ActionSheet';
 import { ShareMenu } from '@/components/ShareMenu';
 import { Text, ThemedIcon, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -49,7 +48,6 @@ export default function ArticleDetail() {
   const router = useRouter();
 
   const isDaily = source === 'daily';
-  const surfaceColor = Colors[colorScheme].surface;
   const textColor = Colors[colorScheme].text;
   const isDark = colorScheme === 'dark';
 
@@ -567,67 +565,33 @@ export default function ArticleDetail() {
         }
       />
 
-      {/* Options Menu Modal */}
-      {menuVisible && !isSharing && (
-        <Modal
-          visible={menuVisible && !isSharing}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setMenuVisible(false)}
-        >
-          <Pressable
-            className="flex-1 justify-end bg-black/40"
-            onPress={() => setMenuVisible(false)}
-          >
-            <View
-              className="rounded-t-[24px] px-5 pt-2.5"
-              style={{
-                backgroundColor: surfaceColor,
-                paddingBottom: insets.bottom + 20,
-              }}
-            >
-              <View className="items-center py-2.5 bg-transparent">
-                <View className="w-10 h-1.5 rounded-[3px] bg-[#ddd]" />
-              </View>
-
-              <View className="py-2.5 bg-transparent">
-                <MenuOption
-                  icon={isLiked ? 'heart' : 'heart-outline'}
-                  label={isLiked ? '取消喜欢' : '加入喜欢'}
-                  color={isLiked ? Colors[colorScheme].danger : undefined}
-                  onPress={() => {
-                    setIsLiked(!isLiked);
-                    setMenuVisible(false);
-                  }}
-                />
-                <MenuOption
-                  icon={isCollected ? 'star' : 'star-outline'}
-                  label={isCollected ? '取消收藏' : '移至收藏'}
-                  color={isCollected ? warningColor : undefined}
-                  onPress={() => {
-                    collectMutation.mutate();
-                    setMenuVisible(false);
-                  }}
-                />
-                <MenuOption
-                  icon="share-social-outline"
-                  label="分享文章"
-                  onPress={() => {
-                    setIsSharing(true);
-                    setMenuVisible(false);
-                  }}
-                />
-              </View>
-              <Pressable
-                className="py-[18px] mt-2.5 items-center"
-                onPress={() => setMenuVisible(false)}
-              >
-                <Text className="text-base font-bold">取消</Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Modal>
-      )}
+      <ActionSheet
+        visible={menuVisible && !isSharing}
+        onClose={() => setMenuVisible(false)}
+        title="文章操作"
+        options={[
+          {
+            key: 'like',
+            icon: isLiked ? 'heart' : 'heart-outline',
+            label: isLiked ? '取消喜欢' : '加入喜欢',
+            color: isLiked ? Colors[colorScheme].danger : undefined,
+            onPress: () => setIsLiked(!isLiked),
+          },
+          {
+            key: 'collection',
+            icon: isCollected ? 'star' : 'star-outline',
+            label: isCollected ? '取消收藏' : '移至收藏',
+            color: isCollected ? warningColor : undefined,
+            onPress: () => collectMutation.mutate(),
+          },
+          {
+            key: 'share',
+            icon: 'share-social-outline',
+            label: '分享文章',
+            onPress: () => setIsSharing(true),
+          },
+        ]}
+      />
     </View>
   );
 }

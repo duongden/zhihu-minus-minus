@@ -10,18 +10,10 @@ import * as SecureStore from 'expo-secure-store';
 import * as Sharing from 'expo-sharing';
 import * as WebBrowser from 'expo-web-browser';
 import type React from 'react';
-import { useEffect, useState } from 'react';
-import {
-  Alert,
-  Linking,
-  Modal,
-  Platform,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Linking, Platform, StyleSheet, View } from 'react-native';
+import { AppDialog } from '@/components/overlays/AppDialog';
 import { Text, useThemeColor } from '@/components/Themed';
-import { useColorScheme } from '@/components/useColorScheme';
-import Colors from '@/constants/Colors';
 import { showToast } from '@/utils/toast';
 
 const GITHUB_RELEASE_API =
@@ -31,6 +23,12 @@ const IGNORED_VERSION_KEY = 'ignored_version_tag';
 export const useCheckUpdate = (
   onUpdate?: (url: string, version: string) => void,
 ) => {
+  const onUpdateRef = useRef(onUpdate);
+
+  useEffect(() => {
+    onUpdateRef.current = onUpdate;
+  }, [onUpdate]);
+
   useEffect(() => {
     const checkUpdate = async () => {
       // 延迟检查，避免干扰首屏路由
@@ -76,8 +74,11 @@ export const useCheckUpdate = (
               buttons.push({
                 text: '直接更新',
                 onPress: () => {
-                  if (onUpdate) {
-                    onUpdate(apkAsset.browser_download_url, latestVersionTag);
+                  if (onUpdateRef.current) {
+                    onUpdateRef.current(
+                      apkAsset.browser_download_url,
+                      latestVersionTag,
+                    );
                   } else {
                     downloadAndInstallApk(
                       apkAsset.browser_download_url,
@@ -246,7 +247,6 @@ function isVersionNewer(latest: string, current: string): boolean {
 export const UpdateChecker: React.FC = () => {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
-  const colorScheme = useColorScheme();
   const primaryColor = useThemeColor({}, 'primary');
 
   useCheckUpdate((url, version) => {
@@ -256,55 +256,40 @@ export const UpdateChecker: React.FC = () => {
   if (!isDownloading) return null;
 
   return (
-    <Modal transparent visible={isDownloading} animationType="fade">
-      <View style={styles.modalBg}>
-        <View
-          style={[
-            styles.container,
-            { backgroundColor: Colors[colorScheme].background },
-          ]}
-        >
-          <Text style={styles.title}>正在下载更新</Text>
-          <View style={styles.progressTrack}>
-            <View
-              style={[
-                styles.progressBar,
-                {
-                  width: `${downloadProgress * 100}%`,
-                  backgroundColor: primaryColor,
-                },
-              ]}
-            />
-          </View>
-          <Text style={styles.percentText}>
-            {(downloadProgress * 100).toFixed(1)}%
-          </Text>
-          <Text type="secondary" style={styles.hint}>
-            下载完成后将自动启动安装
-          </Text>
+    <AppDialog
+      visible={isDownloading}
+      title="正在下载更新"
+      icon="cloud-download-outline"
+      dismissible={false}
+    >
+      <View style={styles.progressContent}>
+        <View style={styles.progressTrack}>
+          <View
+            style={[
+              styles.progressBar,
+              {
+                width: `${downloadProgress * 100}%`,
+                backgroundColor: primaryColor,
+              },
+            ]}
+          />
         </View>
+        <Text style={styles.percentText}>
+          {(downloadProgress * 100).toFixed(1)}%
+        </Text>
+        <Text type="secondary" style={styles.hint}>
+          下载完成后将自动启动安装
+        </Text>
       </View>
-    </Modal>
+    </AppDialog>
   );
 };
 
 const styles = StyleSheet.create({
-  modalBg: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
+  progressContent: {
+    width: '100%',
     alignItems: 'center',
-  },
-  container: {
-    width: '80%',
-    padding: 24,
-    borderRadius: 16,
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 20,
+    marginTop: 22,
   },
   progressTrack: {
     width: '100%',

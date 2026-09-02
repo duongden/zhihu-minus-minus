@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -16,6 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getMe, getMemberWithFallback } from '@/api/zhihu';
 import { BouncyButton } from '@/components/BouncyButton';
+import { BottomSheet } from '@/components/overlays/BottomSheet';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -465,106 +465,34 @@ export default function ProfileScreen({ isActive = true }: ProfileScreenProps) {
 
       <View className="h-[100px] bg-transparent" />
 
-      {/* 账号切换 Modal */}
-      <Modal
+      <BottomSheet
         visible={accountModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setAccountModalVisible(false)}
+        onClose={() => setAccountModalVisible(false)}
+        title="切换账号"
+        maxHeight="78%"
       >
-        <View className="flex-1 justify-end bg-black/50">
-          <Pressable
-            className="absolute inset-0"
-            onPress={() => setAccountModalVisible(false)}
-          />
-          <View
-            type="surface"
-            className="rounded-t-[24px] px-5 pt-3 pb-8"
-            style={{ maxHeight: '70%' }}
-          >
-            <View className="items-center mb-5 bg-transparent">
-              <View className="w-10 h-1.5 rounded-full bg-gray-300" />
-              <Text className="text-lg font-bold mt-4">切换账号</Text>
-            </View>
-
-            <ScrollView className="bg-transparent">
-              {accounts.map((account, index) => (
-                <View
-                  key={account.me.id}
-                  className="flex-row items-center bg-transparent"
-                >
-                  <Pressable
-                    onPress={() => handleSwitchAccount(index)}
-                    disabled={sessionChanging}
-                    className="flex-row items-center py-4 flex-1 border-b border-gray-100 dark:border-gray-800 bg-transparent"
-                  >
-                    <Image
-                      source={{ uri: account.me?.avatar_url }}
-                      className="w-12 h-12 rounded-full bg-[#eee]"
-                    />
-                    <View className="flex-1 ml-4 bg-transparent">
-                      <View className="flex-row items-center bg-transparent">
-                        <Text className="text-base font-bold">
-                          {account.me?.name}
-                        </Text>
-                        {index === activeAccountIndex && (
-                          <View
-                            className="ml-2 px-1.5 py-0.5 rounded"
-                            style={{
-                              backgroundColor: accentBgColor,
-                            }}
-                          >
-                            <Text
-                              className="text-[10px] font-bold"
-                              style={{ color: accentColor }}
-                            >
-                              当前
-                            </Text>
-                          </View>
-                        )}
-                      </View>
-                      <Text
-                        type="secondary"
-                        className="text-xs mt-1"
-                        numberOfLines={1}
-                      >
-                        {account.me?.headline || '知乎用户'}
-                      </Text>
-                    </View>
-                    {index === activeAccountIndex && (
-                      <Ionicons
-                        name="checkmark-circle"
-                        size={22}
-                        color={accentColor}
-                      />
-                    )}
-                  </Pressable>
-                  <Pressable
-                    onPress={() => handleRemoveAccount(index)}
-                    disabled={sessionChanging}
-                    className="pl-4 py-4"
-                  >
-                    <Ionicons name="trash-outline" size={20} color="#ff4d4f" />
-                  </Pressable>
-                </View>
-              ))}
-
-              {/* 游客模式 */}
-              <View className="flex-row items-center bg-transparent">
+        <View className="px-5 flex-shrink bg-transparent">
+          <ScrollView className="bg-transparent">
+            {accounts.map((account, index) => (
+              <View
+                key={account.me.id}
+                className="flex-row items-center bg-transparent"
+              >
                 <Pressable
-                  onPress={() => handleSwitchAccount(-1)}
+                  onPress={() => handleSwitchAccount(index)}
                   disabled={sessionChanging}
                   className="flex-row items-center py-4 flex-1 border-b border-gray-100 dark:border-gray-800 bg-transparent"
                 >
-                  <View className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 justify-center items-center">
-                    <Ionicons name="person-outline" size={24} color="#666" />
-                  </View>
+                  <Image
+                    source={{ uri: account.me?.avatar_url }}
+                    className="w-12 h-12 rounded-full bg-[#eee]"
+                  />
                   <View className="flex-1 ml-4 bg-transparent">
                     <View className="flex-row items-center bg-transparent">
                       <Text className="text-base font-bold">
-                        游客模式 (未登录)
+                        {account.me?.name}
                       </Text>
-                      {activeAccountIndex === -1 && (
+                      {index === activeAccountIndex && (
                         <View
                           className="ml-2 px-1.5 py-0.5 rounded"
                           style={{
@@ -585,10 +513,10 @@ export default function ProfileScreen({ isActive = true }: ProfileScreenProps) {
                       className="text-xs mt-1"
                       numberOfLines={1}
                     >
-                      不使用任何账号浏览
+                      {account.me?.headline || '知乎用户'}
                     </Text>
                   </View>
-                  {activeAccountIndex === -1 && (
+                  {index === activeAccountIndex && (
                     <Ionicons
                       name="checkmark-circle"
                       size={22}
@@ -596,36 +524,88 @@ export default function ProfileScreen({ isActive = true }: ProfileScreenProps) {
                     />
                   )}
                 </Pressable>
-                <View className="pl-4 py-4">
-                  <Ionicons
-                    name="trash-outline"
-                    size={20}
-                    color="transparent"
-                  />
-                </View>
+                <Pressable
+                  onPress={() => handleRemoveAccount(index)}
+                  disabled={sessionChanging}
+                  className="pl-4 py-4"
+                >
+                  <Ionicons name="trash-outline" size={20} color="#ff4d4f" />
+                </Pressable>
               </View>
+            ))}
 
+            {/* 游客模式 */}
+            <View className="flex-row items-center bg-transparent">
               <Pressable
-                onPress={handleAddAccount}
+                onPress={() => handleSwitchAccount(-1)}
                 disabled={sessionChanging}
-                className="flex-row items-center py-5 bg-transparent"
+                className="flex-row items-center py-4 flex-1 border-b border-gray-100 dark:border-gray-800 bg-transparent"
               >
                 <View className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 justify-center items-center">
-                  <Ionicons name="add" size={28} color="#666" />
+                  <Ionicons name="person-outline" size={24} color="#666" />
                 </View>
-                <Text className="text-base ml-4 font-medium">添加账号</Text>
+                <View className="flex-1 ml-4 bg-transparent">
+                  <View className="flex-row items-center bg-transparent">
+                    <Text className="text-base font-bold">
+                      游客模式 (未登录)
+                    </Text>
+                    {activeAccountIndex === -1 && (
+                      <View
+                        className="ml-2 px-1.5 py-0.5 rounded"
+                        style={{
+                          backgroundColor: accentBgColor,
+                        }}
+                      >
+                        <Text
+                          className="text-[10px] font-bold"
+                          style={{ color: accentColor }}
+                        >
+                          当前
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text
+                    type="secondary"
+                    className="text-xs mt-1"
+                    numberOfLines={1}
+                  >
+                    不使用任何账号浏览
+                  </Text>
+                </View>
+                {activeAccountIndex === -1 && (
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={22}
+                    color={accentColor}
+                  />
+                )}
               </Pressable>
-            </ScrollView>
+              <View className="pl-4 py-4">
+                <Ionicons name="trash-outline" size={20} color="transparent" />
+              </View>
+            </View>
 
             <Pressable
-              onPress={() => setAccountModalVisible(false)}
-              className="mt-4 py-4 items-center bg-gray-100 dark:bg-gray-800 rounded-xl"
+              onPress={handleAddAccount}
+              disabled={sessionChanging}
+              className="flex-row items-center py-5 bg-transparent"
             >
-              <Text className="text-base font-bold">取消</Text>
+              <View className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 justify-center items-center">
+                <Ionicons name="add" size={28} color="#666" />
+              </View>
+              <Text className="text-base ml-4 font-medium">添加账号</Text>
             </Pressable>
-          </View>
+          </ScrollView>
+
+          <Pressable
+            onPress={() => setAccountModalVisible(false)}
+            className="mt-4 py-4 items-center bg-gray-100 dark:bg-gray-800 rounded-2xl"
+          >
+            <Text className="text-base font-bold">取消</Text>
+          </Pressable>
         </View>
-      </Modal>
+      </BottomSheet>
     </ScrollView>
   );
 }

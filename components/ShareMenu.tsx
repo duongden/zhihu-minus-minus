@@ -1,13 +1,9 @@
-import { Modal, Pressable, Share } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Colors from '@/constants/Colors';
+import { Share } from 'react-native';
 import { useCollectionAction } from '@/hooks/useCollectionAction';
 import { useCollectionStore } from '@/store/useCollectionStore';
 import { copyToClipboard } from '@/utils/clipboard';
 import { showToast } from '@/utils/toast';
-import { MenuOption } from './MenuOption';
-import { Text, View } from './Themed';
-import { useColorScheme } from './useColorScheme';
+import { ActionSheet } from './overlays/ActionSheet';
 
 export type ShareContentType =
   | 'answer'
@@ -34,11 +30,6 @@ interface ShareMenuProps {
 }
 
 export function ShareMenu({ visible, onClose, type, data }: ShareMenuProps) {
-  const insets = useSafeAreaInsets();
-  const colorScheme = useColorScheme();
-  const surfaceColor = Colors[colorScheme].surface;
-  const _textColor = Colors[colorScheme].text;
-
   const isCollected = useCollectionStore((state) =>
     data ? !!state.collectedStatusMap[data.id.toString()] : false,
   );
@@ -74,7 +65,6 @@ export function ShareMenu({ visible, onClose, type, data }: ShareMenuProps) {
         url: link, // iOS only
         title: data.title || '知乎分享',
       });
-      onClose();
     } catch (_error) {
       showToast('分享失败');
     }
@@ -85,7 +75,6 @@ export function ShareMenu({ visible, onClose, type, data }: ShareMenuProps) {
     const success = await copyToClipboard(link);
     if (success) {
       showToast('链接已复制');
-      onClose();
     }
   };
 
@@ -117,94 +106,47 @@ export function ShareMenu({ visible, onClose, type, data }: ShareMenuProps) {
     const success = await copyToClipboard(text);
     if (success) {
       showToast('Markdown 已复制');
-      onClose();
     }
   };
 
   return (
-    <>
-      {visible && (
-        <Modal
-          visible={visible}
-          transparent
-          animationType="fade"
-          onRequestClose={onClose}
-        >
-          <Pressable
-            className="flex-1 justify-end bg-black/40"
-            onPress={onClose}
-          >
-            <View
-              className="rounded-t-[24px] px-5 pt-2.5"
-              style={{
-                backgroundColor: surfaceColor,
-                paddingBottom: insets.bottom + 20,
-              }}
-            >
-              <View className="items-center py-2.5 bg-transparent">
-                <View className="w-10 h-1.5 rounded-[3px] bg-[#ddd]" />
-              </View>
-
-              <View className="py-2.5 bg-transparent">
-                <View className="flex-row items-center mb-4 px-2.5 bg-transparent">
-                  <Text className="text-xl font-bold">更多选项</Text>
-                </View>
-
-                <MenuOption
-                  icon="share-outline"
-                  label="系统分享"
-                  onPress={onNativeShare}
-                />
-                {(type === 'answer' || type === 'article') && (
-                  <MenuOption
-                    icon={isCollected ? 'star' : 'star-outline'}
-                    label={isCollected ? '取消收藏' : '移至收藏'}
-                    color={isCollected ? '#ffb400' : undefined}
-                    onPress={() => {
-                      toggleCollect(data.id, type, isCollected);
-                      onClose();
-                    }}
-                  />
-                )}
-                <MenuOption
-                  icon="link-outline"
-                  label="仅复制链接"
-                  onPress={onCopyLink}
-                />
-                <MenuOption
-                  icon="logo-markdown"
-                  label="复制链接与信息"
-                  onPress={onCopyMarkdown}
-                />
-                {/* <View className="h-[1px] bg-[rgba(150,150,150,0.1)] my-2.5 mx-2.5" />
-                <MenuOption
-                  icon="eye-off-outline"
-                  label="不感兴趣"
-                  onPress={() => {
-                    showToast('已记录，将减少此类内容推荐');
-                    onClose();
-                  }}
-                />
-                <MenuOption
-                  icon="flag-outline"
-                  label="举报"
-                  onPress={() => {
-                    showToast('感谢反馈，我们将尽快处理');
-                    onClose();
-                  }}
-                /> */}
-              </View>
-
-              <Pressable
-                className="py-[18px] mt-2.5 items-center"
-                onPress={onClose}
-              >
-                <Text className="text-base font-bold">取消</Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Modal>
-      )}
-    </>
+    <ActionSheet
+      visible={visible}
+      onClose={onClose}
+      title="分享与更多操作"
+      options={[
+        {
+          key: 'system-share',
+          icon: 'share-outline',
+          label: '系统分享',
+          onPress: onNativeShare,
+        },
+        ...(type === 'answer' || type === 'article'
+          ? [
+              {
+                key: 'collection',
+                icon: isCollected
+                  ? ('star' as const)
+                  : ('star-outline' as const),
+                label: isCollected ? '取消收藏' : '移至收藏',
+                color: isCollected ? '#ffb400' : undefined,
+                onPress: () => toggleCollect(data.id, type, isCollected),
+              },
+            ]
+          : []),
+        {
+          key: 'copy-link',
+          icon: 'link-outline',
+          label: '仅复制链接',
+          onPress: onCopyLink,
+        },
+        {
+          key: 'copy-markdown',
+          icon: 'logo-markdown',
+          label: '复制链接与信息',
+          onPress: onCopyMarkdown,
+        },
+      ]}
+    />
   );
 }
