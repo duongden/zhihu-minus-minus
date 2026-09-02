@@ -1,28 +1,21 @@
+import type {
+  ZhihuAuthor,
+  ZhihuPaging,
+  ZhihuQuestion,
+  ZhihuSegmentInfo,
+} from '@/types/zhihu';
 import apiClient from '../client';
 
+export interface AnswerQuestion extends Omit<ZhihuQuestion, 'relationship'> {
+  relationship?: ZhihuQuestion['relationship'] | null;
+}
+
 export interface AnswerDetail {
-  id: number | string;
-  type?: string;
+  id: string | number;
+  type?: 'answer';
   answer_type?: string;
-  question?: {
-    id: number | string;
-    title: string;
-    type: string;
-    topics?: any[];
-  };
-  author: {
-    id: string;
-    url_token: string;
-    name: string;
-    avatar_url: string;
-    headline: string;
-    gender?: number;
-    is_following?: boolean;
-    badge?: any[];
-    badge_v2?: any;
-    is_org?: boolean;
-    type?: string;
-  };
+  question?: AnswerQuestion;
+  author: ZhihuAuthor;
   content: string;
   excerpt: string;
   created_time: number;
@@ -37,24 +30,40 @@ export interface AnswerDetail {
     relation?: {
       vote?: 'UP' | 'DOWN' | 'NEUTRAL';
       faved?: boolean;
+      liked?: boolean;
     };
   };
   relationship?: {
+    upvoted_followees?: ZhihuAuthor[];
     is_author?: boolean;
     is_favorited?: boolean;
     is_thanked?: boolean;
     voting?: number;
   };
-  segment_infos?: any[];
+  segment_infos?: ZhihuSegmentInfo[];
   can_comment?: {
     status: boolean;
     reason: string;
   };
   allow_segment_interaction?: number;
   content_need_truncated?: boolean;
-  biz_ext?: any;
+  extras?: string;
+  force_login_when_click_read_more?: boolean;
+  is_collapsed?: boolean;
+  is_copyable?: boolean;
+  is_jump_native?: boolean;
+  url?: string;
+  thumbnail?: string;
+  content_img?: string[];
+  biz_ext?: unknown;
   ip_info?: string;
-  paid_info?: any;
+  paid_info?: unknown;
+}
+
+export interface QuestionAnswersResponse {
+  data: AnswerDetail[];
+  paging?: ZhihuPaging;
+  read_count?: number;
 }
 
 export const getAnswer = async (
@@ -190,18 +199,37 @@ export const unreactAnswerSegment = async (
   return res.data;
 };
 
+interface SegmentCommentAuthor {
+  member?: SegmentCommentAuthor;
+  [key: string]: unknown;
+}
+
+interface SegmentComment {
+  author?: SegmentCommentAuthor;
+  relationship?: { voting: number };
+  liked?: boolean;
+  vote_count?: number;
+  like_count?: number;
+  [key: string]: unknown;
+}
+
+interface SegmentCommentsResponse {
+  data?: SegmentComment[];
+  [key: string]: unknown;
+}
+
 export const getSegmentComments = async (
   answerId: string | number,
   segmentId: string,
   limit = 20,
   offset = '',
-) => {
-  const res = await apiClient.get(
+): Promise<SegmentCommentsResponse> => {
+  const res = await apiClient.get<SegmentCommentsResponse>(
     `/comment_v5/answers/${answerId}/segment/root_comment?segment_id=${segmentId}&order_by=score&limit=${limit}&offset=${offset}`,
   );
   // 基础标准化 (V5 扁平化了作者结构)
   if (res.data?.data) {
-    res.data.data = res.data.data.map((comment: any) => {
+    res.data.data = res.data.data.map((comment) => {
       if (comment.author && !comment.author.member) {
         comment.author = { member: { ...comment.author } };
       }

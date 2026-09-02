@@ -1,5 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import { FlashList } from '@shopify/flash-list';
+import {
+  FlashList,
+  type FlashListRef,
+  useRecyclingState,
+} from '@shopify/flash-list';
 import {
   type InfiniteData,
   useMutation,
@@ -24,6 +28,8 @@ import {
   Animated,
   Image,
   LayoutAnimation,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
   View as NativeView,
   PanResponder,
   Platform,
@@ -35,6 +41,7 @@ import Reanimated, {
   interpolate,
   runOnJS,
   SharedTransition,
+  type SharedValue,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -43,16 +50,22 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import client from '@/api/client';
-import { type AnswerDetail, deleteAnswer } from '@/api/zhihu/answer';
+import {
+  type AnswerDetail,
+  deleteAnswer,
+  type QuestionAnswersResponse,
+} from '@/api/zhihu/answer';
 import { addReadHistory } from '@/api/zhihu/history';
 import { followMember, unfollowMember } from '@/api/zhihu/member';
 import {
   followQuestion,
   getQuestion,
   unfollowQuestion,
+  type ZhihuQuestionDetail,
 } from '@/api/zhihu/question';
 import { BouncyButton } from '@/components/BouncyButton';
 import { LikeButton } from '@/components/LikeButton';
+import { QueryErrorView } from '@/components/QueryErrorView';
 import { ShareMenu } from '@/components/ShareMenu';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -65,18 +78,32 @@ import { useViewableItems } from '@/hooks/useViewableItems';
 import { useZhihuInfiniteQuery } from '@/hooks/useZhihuInfiniteQuery';
 import { useCollectionStore } from '@/store/useCollectionStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import type { ZhihuAuthor } from '@/types/zhihu';
 import { formatDate } from '@/utils/date';
 import { refreshInfiniteQuery } from '@/utils/query';
 
-interface QuestionAnswersPage {
-  data?: AnswerDetail[];
-  paging?: {
-    is_end?: boolean;
-    next?: string;
-  };
+type AnswerSort = 'default' | 'created';
+
+interface AnswerItemHandle {
+  measureFooter: (
+    callback: (x: number, y: number, width: number, height: number) => void,
+  ) => void;
+  id: string;
 }
 
-const AnswerItem = forwardRef(
+interface AnswerItemProps {
+  item: AnswerDetail;
+  isExpanded: boolean;
+  onToggle: (id: string, expanded: boolean) => void;
+  onShare?: (item: AnswerDetail) => void;
+  questionId: string;
+  sortBy: AnswerSort;
+  screenTranslateX: SharedValue<number>;
+  onSwipeStart?: (author: ZhihuAuthor) => void;
+  onSwipeComplete?: (author: ZhihuAuthor) => void;
+}
+
+const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
   (
     {
       item,
@@ -88,21 +115,12 @@ const AnswerItem = forwardRef(
       screenTranslateX,
       onSwipeStart,
       onSwipeComplete,
-    }: {
-      item: any;
-      isExpanded: boolean;
-      onToggle: (id: string, expanded: boolean) => void;
-      onShare?: (item: any) => void;
-      questionId: string;
-      questionTitle?: string;
-      sortBy: string;
-      screenTranslateX: any;
-      onSwipeStart?: (author: any) => void;
-      onSwipeComplete?: (author: any) => void;
-    },
+    }: AnswerItemProps,
     ref,
   ) => {
     const { width: screenWidth } = useWindowDimensions();
+    const screenWidthRef = useRef(screenWidth);
+    screenWidthRef.current = screenWidth;
     const colorScheme = useColorScheme();
     const router = useRouter();
     const _textColor = Colors[colorScheme].text;
@@ -127,12 +145,16 @@ const AnswerItem = forwardRef(
     const primaryTransparent = useThemeColor({}, 'primaryTransparent');
     const warningColor = useThemeColor({}, 'warning');
 
-    const [measuredHeight, setMeasuredHeight] = useState(0);
+    const isFirstMount = useRef(true);
+    const animationItemIdRef = useRef(item.id);
+    const [measuredHeight, setMeasuredHeight] = useRecyclingState(0, [item.id]);
     // isMounted: ZhihuContent is only mounted after first expansion (perf optimization for long content)
-    const [isMounted, setIsMounted] = useState(isExpanded);
+    const [isMounted, setIsMounted] = useRecyclingState(
+      () => isExpanded,
+      [item.id],
+    );
     const expandedProgress = useSharedValue(isExpanded ? 1 : 0);
     const borderProgress = useSharedValue(0);
-    const isFirstMount = useRef(true);
 
     const itemRef = useRef(item);
     itemRef.current = item;
@@ -141,7 +163,20 @@ const AnswerItem = forwardRef(
     const onSwipeCompleteRef = useRef(onSwipeComplete);
     onSwipeCompleteRef.current = onSwipeComplete;
 
-    React.useEffect(() => {
+    React.useLayoutEffect(() => {
+      const itemChanged = animationItemIdRef.current !== item.id;
+      animationItemIdRef.current = item.id;
+
+      if (isFirstMount.current || itemChanged) {
+        isFirstMount.current = false;
+        expandedProgress.value = isExpanded ? 1 : 0;
+        borderProgress.value = 0;
+        if (isExpanded && !isMounted) {
+          setIsMounted(true);
+        }
+        return;
+      }
+
       expandedProgress.value = withTiming(isExpanded ? 1 : 0, {
         duration: 300,
       });
@@ -150,17 +185,20 @@ const AnswerItem = forwardRef(
         setIsMounted(true);
       }
 
-      if (isFirstMount.current) {
-        isFirstMount.current = false;
-        return;
-      }
       if (!isExpanded) {
         borderProgress.value = withSequence(
           withTiming(1, { duration: 150 }),
           withDelay(600, withTiming(0, { duration: 250 })),
         );
       }
-    }, [isExpanded]);
+    }, [
+      borderProgress,
+      expandedProgress,
+      isExpanded,
+      isMounted,
+      item.id,
+      setIsMounted,
+    ]);
 
     const animatedContentStyle = useAnimatedStyle(() => {
       if (measuredHeight === 0) {
@@ -211,7 +249,7 @@ const AnswerItem = forwardRef(
           const currentItem = itemRef.current;
           if (gestureState.dx < -120) {
             screenTranslateX.value = withTiming(
-              -screenWidth,
+              -screenWidthRef.current,
               { duration: 250 },
               () => {
                 if (onSwipeCompleteRef.current && currentItem?.author) {
@@ -230,8 +268,8 @@ const AnswerItem = forwardRef(
     ).current;
 
     useImperativeHandle(ref, () => ({
-      measureFooter: (cb: any) => footerRef.current?.measureInWindow(cb),
-      id: item?.id?.toString() || Math.random().toString(),
+      measureFooter: (callback) => footerRef.current?.measureInWindow(callback),
+      id: item.id.toString(),
     }));
 
     const rawText = item.content?.replace(/<[^>]+>/g, '') || '';
@@ -272,7 +310,7 @@ const AnswerItem = forwardRef(
     ) : null;
 
     const followMutation = useOptimisticToggle<
-      InfiniteData<QuestionAnswersPage, number>
+      InfiniteData<QuestionAnswersResponse, number>
     >({
       queryKey: ['question-answers', questionId, sortBy],
       mutationFn: async () => {
@@ -385,6 +423,8 @@ const AnswerItem = forwardRef(
                 },
               ]}
               onPress={() => followMutation.mutate()}
+              disabled={followMutation.isPending}
+              accessibilityState={{ disabled: followMutation.isPending }}
             >
               <Text
                 className="text-[13px] font-bold"
@@ -405,7 +445,7 @@ const AnswerItem = forwardRef(
             // Short content: render directly
             <View className="flex-1 bg-transparent">
               <ZhihuContent
-                objectId={item.id}
+                objectId={item.id.toString()}
                 type="answer"
                 content={item.content}
                 segmentInfos={item.segment_infos}
@@ -492,7 +532,7 @@ const AnswerItem = forwardRef(
                   className="bg-transparent"
                 >
                   <ZhihuContent
-                    objectId={item.id}
+                    objectId={item.id.toString()}
                     type="answer"
                     content={item.content}
                     segmentInfos={item.segment_infos}
@@ -598,7 +638,7 @@ const AnswerItem = forwardRef(
                   type: 'answer',
                   count: item.comment_count,
                 },
-              } as any)
+              })
             }
           >
             <Ionicons name="chatbubble-outline" size={16} color="#888" />
@@ -671,7 +711,7 @@ export default function QuestionDetail() {
   const queryClient = useQueryClient();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const screenTranslateX = useSharedValue(0);
-  const [swipedAuthor, setSwipedAuthor] = useState<any>(null);
+  const [swipedAuthor, setSwipedAuthor] = useState<ZhihuAuthor | null>(null);
 
   const animatedScreenStyle = useAnimatedStyle(() => {
     return {
@@ -685,7 +725,7 @@ export default function QuestionDetail() {
     };
   });
 
-  const handleSwipeComplete = (author: any) => {
+  const handleSwipeComplete = (author: ZhihuAuthor) => {
     if (author?.url_token) {
       router.push(`/user/${author.url_token}`);
     }
@@ -697,20 +737,22 @@ export default function QuestionDetail() {
 
   const [isRestored, setIsRestored] = useState(false);
 
-  const [sortBy, setSortBy] = useState<'default' | 'created'>('default');
+  const [sortBy, setSortBy] = useState<AnswerSort>('default');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [_menuVisible, _setMenuVisible] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
-  const [selectedAnswer, setSelectedAnswer] = useState<any>(null);
+  const [selectedAnswer, setSelectedAnswer] = useState<AnswerDetail | null>(
+    null,
+  );
   const [detailExpanded, setDetailExpanded] = useState(false);
 
-  const itemRefs = useRef(new Map<string, any>());
+  const itemRefs = useRef(new Map<string, AnswerItemHandle>());
   const {
     activeItem,
     viewableIdsRef,
     viewabilityConfig,
     onViewableItemsChanged,
-  } = useViewableItems<any>();
+  } = useViewableItems<AnswerDetail>();
 
   const storeFloatingCollected = useCollectionStore((state) =>
     activeItem?.id ? state.collectedStatusMap[activeItem.id.toString()] : false,
@@ -731,7 +773,7 @@ export default function QuestionDetail() {
   const footerAnim = useRef(new Animated.Value(0)).current;
 
   const isFloatingShown = useRef(false);
-  const flashListRef = useRef<any>(null);
+  const flashListRef = useRef<FlashListRef<AnswerDetail>>(null);
   const { headerVisible, handleScroll: baseHandleScroll } =
     useScrollHeaderAnim(400);
 
@@ -742,12 +784,14 @@ export default function QuestionDetail() {
     isFetchingNextPage,
     refetch,
     isRefetching,
-  } = useZhihuInfiniteQuery({
+    isPending: answersPending,
+    isError: answersError,
+  } = useZhihuInfiniteQuery<QuestionAnswersResponse>({
     queryKey: ['question-answers', id, sortBy],
     queryFn: async ({ pageParam = 0 }) => {
       const include =
         'data[*].content,excerpt,voteup_count,comment_count,favlists_count,author.name,author.avatar_url,author.headline,author.is_following,relationship.voting,relationship.is_author,created_time,updated_time,ip_info,segment_infos';
-      const res = await client.get(
+      const res = await client.get<QuestionAnswersResponse>(
         `/questions/${id}/answers?include=${include}&limit=20&offset=${pageParam}&sort_by=${sortBy}`,
       );
       return res.data;
@@ -764,9 +808,9 @@ export default function QuestionDetail() {
   }, [queryClient, id, sortBy, refetch]);
 
   const answers = useMemo(() => {
-    const all = answersData?.pages.flatMap((p: any) => p.data) || [];
-    const seen = new Set();
-    return all.filter((item: any) => {
+    const all = answersData?.pages.flatMap((page) => page.data) || [];
+    const seen = new Set<string>();
+    return all.filter((item) => {
       const id = item?.id?.toString();
       if (!id || seen.has(id)) return false;
       seen.add(id);
@@ -808,7 +852,9 @@ export default function QuestionDetail() {
         // Collapsing: scroll back to the item to prevent losing context
         // Use setTimeout to ensure the list has updated its layout
         setTimeout(() => {
-          const index = answers.findIndex((a: any) => a.id.toString() === id);
+          const index = answers.findIndex(
+            (answer) => answer.id.toString() === id,
+          );
           if (index >= 0) {
             flashListRef.current?.scrollToIndex({
               index: index,
@@ -822,14 +868,14 @@ export default function QuestionDetail() {
     [answers, insets.top, enableBrowseHistory],
   );
 
-  const getShareLink = (answer: any) => {
+  const getShareLink = (answer: AnswerDetail) => {
     const aid = answer?.id;
     return `https://www.zhihu.com/question/${id}/answer/${aid}`;
   };
 
   const lastCheckTime = useRef(0);
 
-  const handleScroll = (event: any) => {
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const { currentY } = baseHandleScroll(event);
 
     // if (!qLoading && isRestored && currentY > 0) {
@@ -863,12 +909,12 @@ export default function QuestionDetail() {
 
       Promise.all(promises).then((results) => {
         anyFooterVisible = results.some((r) => r === true);
-        const shouldShow =
+        const shouldShow = Boolean(
           !anyFooterVisible &&
-          activeItem &&
-          activeItem.id &&
-          expandedIds.has(activeItem.id.toString()) &&
-          currentY > 300;
+            activeItem &&
+            expandedIds.has(activeItem.id.toString()) &&
+            currentY > 300,
+        );
 
         if (shouldShow !== isFloatingShown.current) {
           isFloatingShown.current = shouldShow;
@@ -886,12 +932,17 @@ export default function QuestionDetail() {
   const primaryColor = useThemeColor({}, 'primary');
   const primaryTransparent = useThemeColor({}, 'primaryTransparent');
 
-  const { data: question, isLoading: qLoading } = useQuery({
+  const {
+    data: question,
+    isLoading: qLoading,
+    isError: questionError,
+    refetch: refetchQuestion,
+  } = useQuery({
     queryKey: ['question', id],
     queryFn: async () => await getQuestion(id as string),
   });
 
-  const followMutation = useOptimisticToggle({
+  const followMutation = useOptimisticToggle<ZhihuQuestionDetail>({
     queryKey: ['question', id],
     isActive: question?.relationship?.is_following,
     mutationFn: async () => {
@@ -899,15 +950,15 @@ export default function QuestionDetail() {
         return unfollowQuestion(id as string);
       return followQuestion(id as string);
     },
-    onUpdateCache: (old: any) => ({
+    onUpdateCache: (old) => ({
       ...old,
       relationship: {
         ...old?.relationship,
         is_following: !old?.relationship?.is_following,
       },
-      follower_count: old?.relationship?.is_following
-        ? old.follower_count - 1
-        : old.follower_count + 1,
+      follower_count: old.relationship?.is_following
+        ? Math.max(0, (old.follower_count ?? 0) - 1)
+        : (old.follower_count ?? 0) + 1,
     }),
     successMessage: (isActive) => (isActive ? '已取消关注' : '已关注问题'),
   });
@@ -931,7 +982,7 @@ export default function QuestionDetail() {
       }
       */
     }
-  }, [id, qLoading, question, answers.length, isRestored]);
+  }, [qLoading, question, answers.length, isRestored]);
 
   React.useEffect(() => {
     if (enableBrowseHistory && question?.id) {
@@ -962,19 +1013,25 @@ export default function QuestionDetail() {
           <View className="h-[100px] justify-center bg-transparent">
             <ActivityIndicator size="small" color={primaryColor} />
           </View>
+        ) : questionError && !question ? (
+          <QueryErrorView
+            compact
+            message="问题详情加载失败"
+            onRetry={() => void refetchQuestion()}
+          />
         ) : (
           <>
             {question?.topics && (
               <View className="flex-row flex-wrap mb-2.5 mt-2 bg-transparent">
-                {question.topics.map((t: any) => (
+                {question.topics.map((topic) => (
                   <Pressable
-                    key={t.id}
-                    onPress={() => router.push(`/topic/${t.id}` as any)}
+                    key={topic.id}
+                    onPress={() => router.push(`/topic/${topic.id}`)}
                     className="px-2.5 py-1 rounded-[15px] mr-2 mb-1"
                     style={{ backgroundColor: primaryTransparent }}
                   >
                     <Text className="text-xs" style={{ color: primaryColor }}>
-                      {t.name}
+                      {topic.name}
                     </Text>
                   </Pressable>
                 ))}
@@ -1043,6 +1100,8 @@ export default function QuestionDetail() {
                   },
                 ]}
                 onPress={() => followMutation.mutate()}
+                disabled={followMutation.isPending}
+                accessibilityState={{ disabled: followMutation.isPending }}
               >
                 <Text
                   className="text-sm font-medium"
@@ -1066,7 +1125,7 @@ export default function QuestionDetail() {
                       type: 'question',
                       count: question?.comment_count || 0,
                     },
-                  } as any)
+                  })
                 }
               >
                 <Text
@@ -1143,9 +1202,15 @@ export default function QuestionDetail() {
       initialTitle,
       insets.top,
       sortBy,
+      followMutation.mutate,
       followMutation.isPending,
       colorScheme,
       detailExpanded,
+      primaryColor,
+      primaryTransparent,
+      questionError,
+      refetchQuestion,
+      router.push,
     ],
   );
 
@@ -1221,7 +1286,7 @@ export default function QuestionDetail() {
           <Ionicons name="chevron-back" size={28} color={textColor} />
         </Pressable>
 
-        <FlashList
+        <FlashList<AnswerDetail>
           ref={flashListRef}
           onScroll={handleScroll}
           data={qLoading ? [] : answers}
@@ -1229,9 +1294,9 @@ export default function QuestionDetail() {
           renderItem={({ item }) => (
             <AnswerItem
               ref={(r) => {
-                item?.id
-                  ? itemRefs.current.set(item.id.toString(), r)
-                  : itemRefs.current.delete(item.id?.toString() || '');
+                const answerId = item.id.toString();
+                if (r) itemRefs.current.set(answerId, r);
+                else itemRefs.current.delete(answerId);
               }}
               item={item}
               isExpanded={
@@ -1243,22 +1308,36 @@ export default function QuestionDetail() {
                 setIsSharing(true);
               }}
               questionId={id}
-              questionTitle={question?.title}
               sortBy={sortBy}
               screenTranslateX={screenTranslateX}
               onSwipeStart={setSwipedAuthor}
               onSwipeComplete={handleSwipeComplete}
             />
           )}
-          keyExtractor={(item: any, index: number) =>
-            `ans-${item?.id?.toString() || index}-${index}`
-          }
+          keyExtractor={(item) => `ans-${item.id.toString()}`}
           onViewableItemsChanged={onViewableItemsChanged}
           viewabilityConfig={viewabilityConfig}
           onEndReached={() =>
             hasNextPage && !isFetchingNextPage && fetchNextPage()
           }
           onEndReachedThreshold={0.5}
+          ListEmptyComponent={
+            qLoading ? null : answersPending ? (
+              <ActivityIndicator
+                style={{ marginTop: 60 }}
+                color={primaryColor}
+              />
+            ) : answersError ? (
+              <QueryErrorView
+                message="回答列表加载失败"
+                onRetry={() => void refetch()}
+              />
+            ) : (
+              <Text type="secondary" className="text-center mt-16 text-sm">
+                暂无回答
+              </Text>
+            )
+          }
           ListFooterComponent={() =>
             isFetchingNextPage ? (
               <ActivityIndicator
@@ -1306,7 +1385,7 @@ export default function QuestionDetail() {
             <View className="flex-1 flex-row items-center px-5 justify-between bg-transparent">
               <View className="flex-row items-center bg-transparent">
                 <LikeButton
-                  id={activeItem?.id}
+                  id={activeItem?.id ?? ''}
                   count={activeItem?.voteup_count || 0}
                   voted={activeItem?.relationship?.voting}
                   type="answers"
@@ -1314,16 +1393,17 @@ export default function QuestionDetail() {
                 />
                 <Pressable
                   className="flex-row items-center ml-5 bg-transparent"
-                  onPress={() =>
+                  onPress={() => {
+                    if (!activeItem) return;
                     router.push({
                       pathname: '/comments/[id]',
                       params: {
-                        id: activeItem?.id,
+                        id: activeItem.id,
                         type: 'answer',
-                        count: activeItem?.comment_count,
+                        count: activeItem.comment_count,
                       },
-                    } as any)
-                  }
+                    });
+                  }}
                 >
                   <Ionicons
                     name="chatbubble-outline"

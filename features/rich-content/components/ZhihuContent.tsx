@@ -41,35 +41,15 @@ import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import type { ZhihuSegmentInfo } from '@/types/zhihu';
 import { showToast } from '@/utils/toast';
 import { extractZhihuRedirectTarget, parseZhihuUrl } from '@/utils/url';
 import ZhihuDOMContent, { type TextSelectionInfo } from './ZhihuDOMContent';
 
-interface SegmentInfo {
-  pid: string;
-  text: string;
-  marks: Array<{
-    start_index: number;
-    end_index: number;
-    seg_info?: {
-      like_count: number;
-      comment_count: number;
-      is_like: boolean;
-      seg_ids?: string[];
-    };
-    master_seg_info?: {
-      like_count: number;
-      comment_count: number;
-      is_like: boolean;
-      seg_ids?: string[];
-    };
-  }>;
-}
-
 export interface ZhihuContentProps {
   content?: string;
   contentArray?: any[];
-  segmentInfos?: SegmentInfo[];
+  segmentInfos?: ZhihuSegmentInfo[];
   objectId: string;
   type: 'answer' | 'article' | 'pin' | 'question';
   onRefresh?: () => void;
@@ -221,7 +201,7 @@ interface TextSlice {
 
 function sliceParagraphText(
   fullText: string,
-  marks: SegmentInfo['marks'] | undefined,
+  marks: ZhihuSegmentInfo['marks'] | undefined,
 ): TextSlice[] {
   if (!fullText) return [];
   if (!marks || marks.length === 0) {
@@ -661,7 +641,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
     );
 
     const segmentMap = useMemo(() => {
-      const map = new Map<string, SegmentInfo>();
+      const map = new Map<string, ZhihuSegmentInfo>();
       segmentInfos?.forEach((info) => {
         map.set(info.pid, info);
       });
@@ -704,7 +684,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
     });
 
     const findActiveInteraction = useCallback(
-      (segment: SegmentInfo | null | undefined) => {
+      (segment: ZhihuSegmentInfo | null | undefined) => {
         const marks = segment?.marks;
         if (!marks || marks.length === 0) return null;
         for (const mark of marks) {
@@ -722,7 +702,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
     );
 
     const handlePress = useCallback(
-      (pid: string, segment: SegmentInfo, interaction: any) => {
+      (pid: string, segment: ZhihuSegmentInfo, interaction: any) => {
         const mark = interaction.mark;
         setActiveSegment({
           pid,
