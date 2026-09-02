@@ -1,4 +1,4 @@
-import CookieManager from '@react-native-cookies/cookies';
+import CookieManager from '@preeternal/react-native-cookie-manager';
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { shouldImportLegacySession, useAuthStore } from '@/store/useAuthStore';

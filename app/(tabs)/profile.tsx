@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import CookieManager from '@react-native-cookies/cookies';
+import CookieManager from '@preeternal/react-native-cookie-manager';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import React from 'react';
@@ -219,10 +219,10 @@ export default function ProfileScreen({ isActive = true }: ProfileScreenProps) {
   const handleAddAccount = async () => {
     if (sessionChangeInFlight.current) return;
     setAccountModalVisible(false);
-    // When adding account, we don't clear current store yet,
-    // just navigate to login. Login will overwrite cookies.
+    // Keep the current app account selected, but start the login WebView with
+    // an empty native session. A successful login will write the new cookies.
     try {
-      await CookieManager.clearAll(true);
+      await CookieManager.clearAllStores();
       router.push('/login');
     } catch {
       Alert.alert('无法添加账号', '清理网页登录状态失败，请稍后重试。');

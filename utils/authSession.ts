@@ -1,4 +1,4 @@
-import CookieManager from '@react-native-cookies/cookies';
+import CookieManager from '@preeternal/react-native-cookie-manager';
 import * as SecureStore from 'expo-secure-store';
 
 export const LEGACY_COOKIE_STORAGE_KEY = 'user_cookies';
@@ -23,7 +23,7 @@ function parseCookieString(cookieString: string) {
  * The Zustand file store remains the source of truth for active-account state.
  */
 export async function syncNativeSessionCookies(cookieString: string | null) {
-  await CookieManager.clearAll(true);
+  await CookieManager.clearAllStores();
 
   if (!cookieString) {
     await SecureStore.deleteItemAsync(LEGACY_COOKIE_STORAGE_KEY);

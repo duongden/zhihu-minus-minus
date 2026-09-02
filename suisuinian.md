@@ -1,4 +1,4 @@
-获取 webview httpOnly cookie 要用的 "@react-native-cookies/cookies" 这种库... 它和 expo 可能没有贴贴的那么好，或者这个功能需要更原生的支持，反正用了这个之后不能扫码看结果开发了...  要接 adb 或者模拟安卓机
+获取 WebView 的 HttpOnly Cookie 要用 `@preeternal/react-native-cookie-manager` 这类原生库，因此不能使用 Expo Go 预览，需要通过开发构建连接真机或模拟器。
 
 todo:
 - [x] 首页热榜的跳转有的信息能跳有的不行，不知道为啥
