@@ -228,8 +228,7 @@ public final class PullRefreshView: ExpoView, UIGestureRecognizerDelegate {
 
     thresholdHapticArmed = false
     guard hapticsEnabled else { return }
-    thresholdFeedback.impactOccurred(intensity: 0.78)
-    thresholdFeedback.prepare()
+    emitImpact(thresholdFeedback, intensity: 0.78)
   }
 
   private func updateProgressHaptic(dragging: Bool) {
@@ -239,13 +238,21 @@ public final class PullRefreshView: ExpoView, UIGestureRecognizerDelegate {
     }
 
     let progress = min(max(pullOffset / threshold, 0), 1)
-    let interval = 0.07 - Double(progress) * 0.025
+    // iOS 的 Taptic Engine 会合并过密的 impact；留出更大的间隔能让每一拍更稳定。
+    let interval = 0.085 - Double(progress) * 0.025
     let now = CACurrentMediaTime()
     guard lastHapticAt == 0 || now - lastHapticAt >= interval else { return }
 
-    progressFeedback.impactOccurred(intensity: 0.14 + progress * 0.38)
-    progressFeedback.prepare()
+    emitImpact(progressFeedback, intensity: 0.14 + progress * 0.38)
     lastHapticAt = now
+  }
+
+  private func emitImpact(_ feedback: UIImpactFeedbackGenerator, intensity: CGFloat) {
+    // prepare() 的有效窗口有限，不能只依赖手势 began 时的那一次准备。
+    feedback.prepare()
+    feedback.impactOccurred(intensity: intensity)
+    // 为下一次脉冲预热，避免连续下拉时出现随机丢拍。
+    feedback.prepare()
   }
 
   private func constrainDistances() {
