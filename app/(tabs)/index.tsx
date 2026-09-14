@@ -17,6 +17,7 @@ import React, {
 } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
@@ -146,15 +147,25 @@ export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string }>();
-  const { visibleTabs, defaultTab, localCityName } = useSettingsStore();
+  const {
+    visibleTabs,
+    defaultTab,
+    localCityName,
+    useNativeIOSBottomTabs,
+  } = useSettingsStore();
+  const nativeIOSBottomTabs =
+    Platform.OS === 'ios' && useNativeIOSBottomTabs;
 
   // 动态过滤 Tabs
   const currentTabs = useMemo(() => {
-    return TABS.filter((tab) => {
+    const configuredTabs = TABS.filter((tab) => {
       if (tab === 'profile') return true;
       return visibleTabs.includes(tab);
     });
-  }, [visibleTabs]);
+    return nativeIOSBottomTabs
+      ? configuredTabs.filter((tab) => !['publish', 'profile'].includes(tab))
+      : configuredTabs;
+  }, [nativeIOSBottomTabs, visibleTabs]);
 
   const homeTabs = useMemo(() => {
     return currentTabs.filter((t) => !['publish', 'profile'].includes(t));
@@ -410,7 +421,72 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 1. 顶部 Tab 导航 (Home 专属) */}
+      {/* 1. 内容 Pager 放在顶部导航之前 */}
+      <AnimatedPagerView
+        key={`pager-${currentTabs.join('-')}`} // 强制重新渲染
+        ref={pagerRef}
+        style={styles.pager}
+        initialPage={initialPageIndex}
+        onPageScroll={pageScrollHandler}
+        onPageSelected={(e) => {
+          showChrome();
+          setCurrentPage(e.nativeEvent.position);
+        }}
+      >
+        {currentTabs.map((tab, idx) => {
+          const isVisited = visitedPages.has(idx);
+          return (
+            <View key={tab} style={{ flex: 1, backgroundColor: 'transparent' }}>
+              {!isVisited ? null : tab === 'daily' ? (
+                <DailyList
+                  ref={(element) => {
+                    listRefs.current[idx] = element;
+                  }}
+                  insets={insets}
+                  chrome={{
+                    enabled: isFocused && currentPage === idx,
+                    topOffset: topNavOffset,
+                    bottomOffset: bottomNavOffset,
+                    topHideDistance: insets.top + TOP_NAV_HEIGHT,
+                    bottomHideDistance: insets.bottom + BOTTOM_NAV_HEIGHT,
+                    onScrolledChange: (scrolled) =>
+                      handleScrolledChange(idx, scrolled),
+                  }}
+                  onRefreshStateChange={(isRefreshing) =>
+                    handleRefreshStateChange(idx, isRefreshing)
+                  }
+                />
+              ) : tab === 'publish' ? (
+                <PublishScreen />
+              ) : tab === 'profile' ? (
+                <ProfileScreen isActive={isFocused && currentPage === idx} />
+              ) : (
+                <FeedList
+                  ref={(element) => {
+                    listRefs.current[idx] = element;
+                  }}
+                  tab={tab as FeedTabType}
+                  isActive={isFocused && currentPage === idx}
+                  insets={insets}
+                  guestCookieReady={guestCookieReady}
+                  topNavOffset={topNavOffset}
+                  bottomNavOffset={bottomNavOffset}
+                  topHideDistance={insets.top + TOP_NAV_HEIGHT}
+                  bottomHideDistance={insets.bottom + BOTTOM_NAV_HEIGHT}
+                  onScrolledChange={(scrolled) =>
+                    handleScrolledChange(idx, scrolled)
+                  }
+                  onRefreshStateChange={(isRefreshing) =>
+                    handleRefreshStateChange(idx, isRefreshing)
+                  }
+                />
+              )}
+            </View>
+          );
+        })}
+      </AnimatedPagerView>
+
+      {/* 2. 顶部 Tab 导航 (Home 专属) */}
       <Animated.View
         style={[
           styles.topNavContainer,
@@ -489,175 +565,116 @@ export default function HomeScreen() {
         </BlurView>
       </Animated.View>
 
-      <AnimatedPagerView
-        key={`pager-${currentTabs.join('-')}`} // 强制重新渲染
-        ref={pagerRef}
-        style={styles.pager}
-        initialPage={initialPageIndex}
-        onPageScroll={pageScrollHandler}
-        onPageSelected={(e) => {
-          showChrome();
-          setCurrentPage(e.nativeEvent.position);
-        }}
-      >
-        {currentTabs.map((tab, idx) => {
-          const isVisited = visitedPages.has(idx);
-          return (
-            <View key={tab} style={{ flex: 1, backgroundColor: 'transparent' }}>
-              {!isVisited ? null : tab === 'daily' ? (
-                <DailyList
-                  ref={(element) => {
-                    listRefs.current[idx] = element;
-                  }}
-                  insets={insets}
-                  chrome={{
-                    enabled: isFocused && currentPage === idx,
-                    topOffset: topNavOffset,
-                    bottomOffset: bottomNavOffset,
-                    topHideDistance: insets.top + TOP_NAV_HEIGHT,
-                    bottomHideDistance: insets.bottom + BOTTOM_NAV_HEIGHT,
-                    onScrolledChange: (scrolled) =>
-                      handleScrolledChange(idx, scrolled),
-                  }}
-                  onRefreshStateChange={(isRefreshing) =>
-                    handleRefreshStateChange(idx, isRefreshing)
+      {!nativeIOSBottomTabs && (
+        /* 3. 底部悬浮导航栏 (Custom TabBar) */
+        <Animated.View
+          style={[
+            styles.bottomBarContainer,
+            colorScheme === 'light' && styles.lightTranslucentShadow,
+            { bottom: insets.bottom, width: containerWidth },
+            bottomNavAnimStyle,
+          ]}
+        >
+          <BlurView
+            intensity={130}
+            tint={colorScheme === 'dark' ? 'dark' : 'light'}
+            style={[
+              styles.bottomBlur,
+              {
+                backgroundColor:
+                  colorScheme === 'dark'
+                    ? 'rgba(0,0,0,0.7)'
+                    : 'rgba(255,255,255,0.85)',
+              },
+            ]}
+          >
+            <View style={styles.bottomNavItems}>
+              {/* 联动指示器 */}
+              <Animated.View
+                style={[
+                  styles.bottomIndicator,
+                  {
+                    backgroundColor: indicatorBgColor,
+                    width: bottomCapsuleWidth,
+                  },
+                  bottomIndicatorStyle,
+                ]}
+              />
+
+              {currentTabs.some((t) => !['publish', 'profile'].includes(t)) && (
+                <BottomTabIcon
+                  // 判断逻辑：当前在首页区域且当前子 Tab 有滚动
+                  isScrollTop={
+                    currentPage <
+                      currentTabs.filter(
+                        (t) => !['publish', 'profile'].includes(t),
+                      ).length && scrolledTabs[currentPage]
                   }
+                  icon={
+                    currentPage <
+                    currentTabs.filter(
+                      (t) => !['publish', 'profile'].includes(t),
+                    ).length
+                      ? 'home'
+                      : 'home-outline'
+                  }
+                  active={
+                    currentPage <
+                    currentTabs.filter(
+                      (t) => !['publish', 'profile'].includes(t),
+                    ).length
+                  }
+                  onPress={handleHomeTabPress}
+                  color={
+                    currentPage <
+                    currentTabs.filter(
+                      (t) => !['publish', 'profile'].includes(t),
+                    ).length
+                      ? tintColor
+                      : Colors[colorScheme].textSecondary
+                  }
+                  width={bottomCapsuleWidth}
                 />
-              ) : tab === 'publish' ? (
-                <PublishScreen />
-              ) : tab === 'profile' ? (
-                <ProfileScreen isActive={isFocused && currentPage === idx} />
-              ) : (
-                <FeedList
-                  ref={(element) => {
-                    listRefs.current[idx] = element;
-                  }}
-                  tab={tab as FeedTabType}
-                  isActive={isFocused && currentPage === idx}
-                  insets={insets}
-                  guestCookieReady={guestCookieReady}
-                  topNavOffset={topNavOffset}
-                  bottomNavOffset={bottomNavOffset}
-                  topHideDistance={insets.top + TOP_NAV_HEIGHT}
-                  bottomHideDistance={insets.bottom + BOTTOM_NAV_HEIGHT}
-                  onScrolledChange={(scrolled) =>
-                    handleScrolledChange(idx, scrolled)
+              )}
+
+              {currentTabs.includes('publish') && (
+                <BottomTabIcon
+                  icon={
+                    currentTabs[currentPage] === 'publish' ? 'add-circle' : 'add'
                   }
-                  onRefreshStateChange={(isRefreshing) =>
-                    handleRefreshStateChange(idx, isRefreshing)
+                  active={currentTabs[currentPage] === 'publish'}
+                  onPress={() => handleTabPress(currentTabs.indexOf('publish'))}
+                  color={
+                    currentTabs[currentPage] === 'publish'
+                      ? tintColor
+                      : Colors[colorScheme].textSecondary
                   }
+                  size={currentTabs[currentPage] === 'publish' ? 28 : 24}
+                  width={bottomCapsuleWidth}
+                />
+              )}
+
+              {currentTabs.includes('profile') && (
+                <BottomTabIcon
+                  icon={
+                    currentTabs[currentPage] === 'profile'
+                      ? 'person'
+                      : 'person-outline'
+                  }
+                  active={currentTabs[currentPage] === 'profile'}
+                  onPress={() => handleTabPress(currentTabs.indexOf('profile'))}
+                  color={
+                    currentTabs[currentPage] === 'profile'
+                      ? tintColor
+                      : Colors[colorScheme].textSecondary
+                  }
+                  width={bottomCapsuleWidth}
                 />
               )}
             </View>
-          );
-        })}
-      </AnimatedPagerView>
-
-      {/* 3. 底部悬浮导航栏 (Custom TabBar) */}
-      <Animated.View
-        style={[
-          styles.bottomBarContainer,
-          colorScheme === 'light' && styles.lightTranslucentShadow,
-          { bottom: insets.bottom, width: containerWidth },
-          bottomNavAnimStyle,
-        ]}
-      >
-        <BlurView
-          intensity={130}
-          tint={colorScheme === 'dark' ? 'dark' : 'light'}
-          style={[
-            styles.bottomBlur,
-            {
-              backgroundColor:
-                colorScheme === 'dark'
-                  ? 'rgba(0,0,0,0.7)'
-                  : 'rgba(255,255,255,0.85)',
-            },
-          ]}
-        >
-          <View style={styles.bottomNavItems}>
-            {/* 联动指示器 */}
-            <Animated.View
-              style={[
-                styles.bottomIndicator,
-                {
-                  backgroundColor: indicatorBgColor,
-                  width: bottomCapsuleWidth,
-                },
-                bottomIndicatorStyle,
-              ]}
-            />
-
-            {currentTabs.some((t) => !['publish', 'profile'].includes(t)) && (
-              <BottomTabIcon
-                // 判断逻辑：当前在首页区域且当前子 Tab 有滚动
-                isScrollTop={
-                  currentPage <
-                    currentTabs.filter(
-                      (t) => !['publish', 'profile'].includes(t),
-                    ).length && scrolledTabs[currentPage]
-                }
-                icon={
-                  currentPage <
-                  currentTabs.filter((t) => !['publish', 'profile'].includes(t))
-                    .length
-                    ? 'home'
-                    : 'home-outline'
-                }
-                active={
-                  currentPage <
-                  currentTabs.filter((t) => !['publish', 'profile'].includes(t))
-                    .length
-                }
-                onPress={handleHomeTabPress}
-                color={
-                  currentPage <
-                  currentTabs.filter((t) => !['publish', 'profile'].includes(t))
-                    .length
-                    ? tintColor
-                    : Colors[colorScheme].textSecondary
-                }
-                width={bottomCapsuleWidth}
-              />
-            )}
-
-            {currentTabs.includes('publish') && (
-              <BottomTabIcon
-                icon={
-                  currentTabs[currentPage] === 'publish' ? 'add-circle' : 'add'
-                }
-                active={currentTabs[currentPage] === 'publish'}
-                onPress={() => handleTabPress(currentTabs.indexOf('publish'))}
-                color={
-                  currentTabs[currentPage] === 'publish'
-                    ? tintColor
-                    : Colors[colorScheme].textSecondary
-                }
-                size={currentTabs[currentPage] === 'publish' ? 28 : 24}
-                width={bottomCapsuleWidth}
-              />
-            )}
-
-            {currentTabs.includes('profile') && (
-              <BottomTabIcon
-                icon={
-                  currentTabs[currentPage] === 'profile'
-                    ? 'person'
-                    : 'person-outline'
-                }
-                active={currentTabs[currentPage] === 'profile'}
-                onPress={() => handleTabPress(currentTabs.indexOf('profile'))}
-                color={
-                  currentTabs[currentPage] === 'profile'
-                    ? tintColor
-                    : Colors[colorScheme].textSecondary
-                }
-                width={bottomCapsuleWidth}
-              />
-            )}
-          </View>
-        </BlurView>
-      </Animated.View>
+          </BlurView>
+        </Animated.View>
+      )}
       {!cookies && !guestCookieReady && (
         <View
           style={{
@@ -1224,6 +1241,7 @@ const FeedList = React.forwardRef<
     );
 
     const flashListRef = useRef<FlashListRef<FeedListItem>>(null);
+
     const scrollHandler = useCollapsibleChromeScroll({
       enabled: isActive && AUTO_HIDE_NAV_TABS.includes(tab),
       topOffset: topNavOffset,
