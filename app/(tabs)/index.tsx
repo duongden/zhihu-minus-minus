@@ -147,14 +147,9 @@ export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string }>();
-  const {
-    visibleTabs,
-    defaultTab,
-    localCityName,
-    useNativeIOSBottomTabs,
-  } = useSettingsStore();
-  const nativeIOSBottomTabs =
-    Platform.OS === 'ios' && useNativeIOSBottomTabs;
+  const { visibleTabs, defaultTab, localCityName, useNativeIOSBottomTabs } =
+    useSettingsStore();
+  const nativeIOSBottomTabs = Platform.OS === 'ios' && useNativeIOSBottomTabs;
 
   // 动态过滤 Tabs
   const currentTabs = useMemo(() => {
@@ -640,7 +635,9 @@ export default function HomeScreen() {
               {currentTabs.includes('publish') && (
                 <BottomTabIcon
                   icon={
-                    currentTabs[currentPage] === 'publish' ? 'add-circle' : 'add'
+                    currentTabs[currentPage] === 'publish'
+                      ? 'add-circle'
+                      : 'add'
                   }
                   active={currentTabs[currentPage] === 'publish'}
                   onPress={() => handleTabPress(currentTabs.indexOf('publish'))}
