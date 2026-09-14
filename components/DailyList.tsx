@@ -238,7 +238,7 @@ export const DailyList = React.forwardRef<
         keyExtractor={(item: ListItem, index: number) =>
           item.type === 'date' ? item.date : item.data.id.toString() + index
         }
-        {...({ estimatedItemSize: 100 } as any)}
+        {...({ estimatedItemSize: 100 } as object)}
         onEndReached={() =>
           hasNextPage && !isFetchingNextPage && fetchNextPage()
         }
