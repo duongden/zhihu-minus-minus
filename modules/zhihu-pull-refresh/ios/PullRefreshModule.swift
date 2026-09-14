@@ -31,9 +31,6 @@ public final class PullRefreshModule: Module {
         view.setMaxPullDistance(distance)
       }
 
-      OnViewDestroys { view: PullRefreshView in
-        view.dispose()
-      }
     }
   }
 }

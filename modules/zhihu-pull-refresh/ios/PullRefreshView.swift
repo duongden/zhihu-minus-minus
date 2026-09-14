@@ -6,7 +6,7 @@ public final class PullRefreshView: ExpoView, UIGestureRecognizerDelegate {
   private let onPull = EventDispatcher()
   private let onRefreshTriggered = EventDispatcher()
   private let pullGesture: UIPanGestureRecognizer
-  private let progressFeedback = UIImpactFeedbackGenerator(style: .soft)
+  private let progressFeedback = UIImpactFeedbackGenerator(style: .light)
   private let thresholdFeedback = UIImpactFeedbackGenerator(style: .rigid)
 
   private weak var childView: UIView?
@@ -32,6 +32,10 @@ public final class PullRefreshView: ExpoView, UIGestureRecognizerDelegate {
     pullGesture.cancelsTouchesInView = false
     pullGesture.maximumNumberOfTouches = 1
     addGestureRecognizer(pullGesture)
+  }
+
+  deinit {
+    pullGesture.isEnabled = false
   }
 
   public override func layoutSubviews() {
@@ -86,11 +90,7 @@ public final class PullRefreshView: ExpoView, UIGestureRecognizerDelegate {
     constrainDistances()
   }
 
-  func dispose() {
-    pullGesture.isEnabled = false
-  }
-
-  public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+  public override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
     guard gestureRecognizer === pullGesture, canStartPull() else { return false }
 
     let pan = gestureRecognizer as! UIPanGestureRecognizer
@@ -228,7 +228,7 @@ public final class PullRefreshView: ExpoView, UIGestureRecognizerDelegate {
 
     thresholdHapticArmed = false
     guard hapticsEnabled else { return }
-    thresholdFeedback.impactOccurred(intensity: 0.65)
+    thresholdFeedback.impactOccurred(intensity: 0.78)
     thresholdFeedback.prepare()
   }
 
@@ -243,7 +243,7 @@ public final class PullRefreshView: ExpoView, UIGestureRecognizerDelegate {
     let now = CACurrentMediaTime()
     guard lastHapticAt == 0 || now - lastHapticAt >= interval else { return }
 
-    progressFeedback.impactOccurred(intensity: 0.08 + progress * 0.3)
+    progressFeedback.impactOccurred(intensity: 0.14 + progress * 0.38)
     progressFeedback.prepare()
     lastHapticAt = now
   }
