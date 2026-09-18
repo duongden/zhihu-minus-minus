@@ -29,6 +29,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   type FeedItem,
   followMember,
+  getContentVoteCount,
+  getContentVoteState,
   getMe,
   getMemberActivities,
   getMemberRelations,
@@ -682,7 +684,8 @@ export default function UserDetailScreen() {
         ? HighlightText(highlight.description)
         : obj.excerpt || '',
       image: obj.thumbnail_info?.thumbnails?.[0]?.url || null,
-      voteCount: obj.voteup_count || 0,
+      voteCount:
+        feedType === 'videos' ? 0 : (getContentVoteCount(feedType, obj) ?? 0),
       commentCount: obj.comment_count || 0,
       author: {
         id: obj.author?.id || user?.id || '',
@@ -696,7 +699,8 @@ export default function UserDetailScreen() {
           : obj.id !== undefined
             ? String(obj.id)
             : undefined,
-      voted: obj.relationship?.voting || 0,
+      voted:
+        feedType === 'videos' ? 0 : (getContentVoteState(feedType, obj) ?? 0),
       favlistsCount: obj.favlists_count || obj.favorite_count || 0,
     };
   };
@@ -1107,9 +1111,9 @@ export default function UserDetailScreen() {
       excerpt: getExcerptText(),
       image: imageUrl,
       voteCount:
-        mappedType === 'pins'
-          ? displayItem.reaction_count || displayItem.like_count || 0
-          : displayItem.voteup_count || 0,
+        mappedType === 'videos'
+          ? 0
+          : (getContentVoteCount(mappedType, displayItem) ?? 0),
       commentCount:
         displayItem.comment_count ??
         displayItem.reaction?.statistics?.comments ??
@@ -1119,7 +1123,10 @@ export default function UserDetailScreen() {
         displayItem.favorite_count ??
         displayItem.reaction?.statistics?.favorites ??
         0,
-      voted: displayItem.relationship?.voting || 0,
+      voted:
+        mappedType === 'videos'
+          ? 0
+          : (getContentVoteState(mappedType, displayItem) ?? 0),
       type: mappedType,
     };
 

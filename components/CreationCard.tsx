@@ -4,6 +4,11 @@ import { useRouter } from 'expo-router';
 import React from 'react';
 import { View as NativeView, Pressable } from 'react-native';
 import Animated from 'react-native-reanimated';
+import {
+  getContentVoteCount,
+  getContentVoteState,
+  type VoteContentType,
+} from '@/api/zhihu';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
@@ -100,6 +105,14 @@ export const CreationCard = React.forwardRef<
     const footerRef = React.useRef<NativeView>(null);
 
     const isCollectable = type === 'answer' || type === 'article';
+    const voteContentType: VoteContentType | null =
+      type === 'article'
+        ? 'articles'
+        : type === 'pin'
+          ? 'pins'
+          : type === 'answer'
+            ? 'answers'
+            : null;
     const storeCollected = useCollectionStore((state) =>
       item?.id ? state.collectedStatusMap[item.id.toString()] : false,
     );
@@ -398,24 +411,19 @@ export const CreationCard = React.forwardRef<
                 id={item.id}
                 count={
                   item.voteCount ??
-                  item.voteup_count ??
-                  (type === 'pin'
-                    ? item.reaction_count || item.like_count
-                    : 0) ??
+                  (voteContentType
+                    ? getContentVoteCount(voteContentType, item)
+                    : undefined) ??
                   0
                 }
                 voted={
                   item.voted !== undefined
                     ? item.voted
-                    : item.relationship?.voting || 0
+                    : voteContentType
+                      ? (getContentVoteState(voteContentType, item) ?? 0)
+                      : 0
                 }
-                type={
-                  type === 'article'
-                    ? 'articles'
-                    : type === 'pin'
-                      ? 'pins'
-                      : 'answers'
-                }
+                type={voteContentType ?? 'answers'}
                 variant="ghost"
               />
               <BouncyButton
