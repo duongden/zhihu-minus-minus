@@ -120,6 +120,7 @@ export interface ZhihuQuestion {
 export interface ZhihuReaction {
   statistics: {
     like_count: number;
+    up_vote_count?: number;
     favorites?: number;
   };
   relation?: {
@@ -177,13 +178,20 @@ export interface ZhihuPin {
   excerpt?: string;
   created: number;
   comment_count: number;
+  like_count?: number;
   reaction_count?: number;
+  reaction?: ZhihuReaction;
+  virtuals?: {
+    is_favorited?: boolean;
+    is_liked?: boolean;
+  };
   author: ZhihuAuthor;
   type: 'pin';
   url?: string;
   link_card_info?: Record<string, string>;
   relationship?: {
     voting?: number;
+    is_liked?: boolean;
   };
   bottom_poll?: {
     voting?: ZhihuPinPoll;

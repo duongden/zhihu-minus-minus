@@ -5,7 +5,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View as RNView, Share } from 'react-native';
 import Animated, { SharedTransition } from 'react-native-reanimated';
 import { hasAuthenticationCookie } from '@/api/client';
-import { type FeedItem, voteContent } from '@/api/zhihu';
+import { type FeedItem, getVoteSuccessMessage, voteContent } from '@/api/zhihu';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useCollectionAction } from '@/hooks/useCollectionAction';
@@ -17,6 +17,7 @@ import {
 } from '@/utils/contentCache';
 import { ImpactFeedbackStyle, impactAsync } from '@/utils/haptics';
 import { showToast } from '@/utils/toast';
+import { getZhihuErrorMessage } from '@/utils/zhihuError';
 import { BouncyButton } from './BouncyButton';
 import { CustomContextMenu, type MenuOption } from './CustomContextMenu';
 import { FeedCardPreview } from './FeedCardPreview';
@@ -213,14 +214,17 @@ const FeedCardComponent = ({ item, tab }: FeedCardProps) => {
       ? [
           {
             key: 'like',
-            title: voted === 1 ? '取消赞同' : '赞同',
+            title:
+              voted === 1
+                ? isPinType
+                  ? '取消点赞'
+                  : '取消赞同'
+                : isPinType
+                  ? '点赞'
+                  : '赞同',
             icon: voted === 1 ? 'caret-up' : 'caret-up-outline',
             onPress: async () => {
               const nextVoted = voted === 1 ? 0 : 1;
-              const nextCount = Math.max(
-                0,
-                voted === 1 ? voteCount - 1 : voteCount + 1,
-              );
               try {
                 const voteType =
                   item.type === 'pins'
@@ -230,19 +234,32 @@ const FeedCardComponent = ({ item, tab }: FeedCardProps) => {
                     : nextVoted === 1
                       ? 'up'
                       : 'neutral';
-                await voteContent(item.id, engagementType, voteType);
-                setVoted(nextVoted);
-                setVoteCount(nextCount);
+                const result = await voteContent(
+                  item.id,
+                  engagementType,
+                  voteType,
+                );
+                const resolvedCount =
+                  result.voteCount ??
+                  Math.max(
+                    0,
+                    voteCount +
+                      Number(result.voted === 1) -
+                      Number(voted === 1),
+                  );
+                setVoted(result.voted);
+                setVoteCount(resolvedCount);
                 updateContentInteractionCaches(queryClient, {
                   type: engagementType,
                   id: item.id,
-                  voted: nextVoted,
-                  voteCount: nextCount,
+                  voted: result.voted,
+                  voteCount: resolvedCount,
                 });
-                showToast(nextVoted === 1 ? '已赞同' : '已取消赞同');
-              } catch {
-                console.error('投票失败');
-                showToast('操作失败，请稍后重试');
+                showToast(
+                  getVoteSuccessMessage(engagementType, voted, result.voted),
+                );
+              } catch (error: unknown) {
+                showToast(getZhihuErrorMessage(error));
               }
             },
           },

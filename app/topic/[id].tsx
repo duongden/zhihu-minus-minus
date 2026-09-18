@@ -14,6 +14,7 @@ import {
   getTopicParents,
   unfollowTopic,
 } from '@/api/zhihu/topic';
+import { getContentVoteCount, getContentVoteState } from '@/api/zhihu/voters';
 import { BouncyButton } from '@/components/BouncyButton';
 import { FeedCard } from '@/components/FeedCard';
 import { QueryErrorView } from '@/components/QueryErrorView';
@@ -525,13 +526,9 @@ function parseTopicFeedItem(item: any) {
     },
     excerpt: excerpt.replace(/<[^>]+>/g, ''),
     image: image,
-    voteCount:
-      target.voteup_count || target.like_count || target.reaction_count || 0,
+    voteCount: getContentVoteCount(appType, target) ?? 0,
     commentCount: target.comment_count || 0,
-    voted:
-      target.relationship?.voting ||
-      (target.relationship?.is_liked ? 1 : 0) ||
-      0,
+    voted: getContentVoteState(appType, target) ?? 0,
     type: appType,
   };
 }

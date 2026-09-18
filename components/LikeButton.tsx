@@ -9,7 +9,11 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { voteContent } from '@/api/zhihu';
+import {
+  getVoteSuccessMessage,
+  type VoteContentType,
+  voteContent,
+} from '@/api/zhihu';
 import Colors from '@/constants/Colors';
 import { colors } from '@/constants/designTokens';
 import { updateContentInteractionCaches } from '@/utils/contentCache';
@@ -30,7 +34,7 @@ export const LikeButton = ({
   id: string | number;
   count: number | string;
   voted?: number;
-  type?: 'answers' | 'articles' | 'questions' | 'pins' | 'comments';
+  type?: VoteContentType;
   variant?: 'default' | 'ghost' | 'minimal';
   onVoteChange?: (voted: number, count: number) => void;
 }) => {
@@ -79,31 +83,38 @@ export const LikeButton = ({
             ? 'up'
             : 'neutral';
 
-      await voteContent(id, type, voteType);
+      const result = await voteContent(id, type, voteType);
+      const resolvedCount =
+        result.voteCount ??
+        (typeof count === 'number'
+          ? Math.max(
+              0,
+              count + Number(result.voted === 1) - Number(voted === 1),
+            )
+          : undefined);
 
-      setVoted(nextVoted);
-      // count 可能是占位符（如 '-'），仅在数字时增减并通知外部
-      if (typeof count === 'number') {
-        const newCount = Math.max(0, isUpvoted ? count - 1 : count + 1);
-        setCount(newCount);
-        onVoteChange?.(nextVoted, newCount);
+      setVoted(result.voted);
+      // 响应计数优先；接口未返回计数时才按最终状态计算差值。
+      if (resolvedCount !== undefined) {
+        setCount(resolvedCount);
+        onVoteChange?.(result.voted, resolvedCount);
 
         if (type !== 'comments') {
           updateContentInteractionCaches(queryClient, {
             type,
             id,
-            voted: nextVoted,
-            voteCount: newCount,
+            voted: result.voted,
+            voteCount: resolvedCount,
           });
         }
       } else if (type !== 'comments') {
         updateContentInteractionCaches(queryClient, {
           type,
           id,
-          voted: nextVoted,
+          voted: result.voted,
         });
       }
-      showToast(isUpvoted ? '已取消赞同' : '已赞同');
+      showToast(getVoteSuccessMessage(type, voted, result.voted));
     } catch (error: unknown) {
       showToast(getZhihuErrorMessage(error));
     } finally {
