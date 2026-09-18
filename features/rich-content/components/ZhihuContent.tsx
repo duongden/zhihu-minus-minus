@@ -1071,8 +1071,20 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
           marginBottom: 6,
           lineHeight: 17 * lineHeightScale,
         },
-        ul: { paddingLeft: 20, color: textColor, marginVertical: 8 },
-        ol: { paddingLeft: 20, color: textColor, marginVertical: 8 },
+        ul: {
+          paddingLeft: 20,
+          color: textColor,
+          marginVertical: 8,
+          fontSize: 17 * fontSizeScale,
+          lineHeight: 17 * lineHeightScale,
+        },
+        ol: {
+          paddingLeft: 20,
+          color: textColor,
+          marginVertical: 8,
+          fontSize: 17 * fontSizeScale,
+          lineHeight: 17 * lineHeightScale,
+        },
         li: {
           marginBottom: 6,
           color: textColor,
