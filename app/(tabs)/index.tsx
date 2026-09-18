@@ -42,6 +42,8 @@ import { WebView } from 'react-native-webview';
 import {
   FEED_URLS,
   type FeedItem,
+  getContentVoteCount,
+  getContentVoteState,
   getFeed,
   type RawFeedItem,
   type RawFeedTarget,
@@ -1447,11 +1449,11 @@ function parseFollowingData(item: RawFeedItem): FeedItem | null {
       (target.content_img && target.content_img.length > 0
         ? target.content_img[0]
         : null),
-    voteCount: target.voteup_count || target.like_count || 0,
+    voteCount: getContentVoteCount(appType, target) ?? 0,
     commentCount: target.comment_count || 0,
     favlistsCount:
       target.favorite_count || target.reaction?.statistics?.favorites || 0,
-    voted: target.relationship?.voting || 0,
+    voted: getContentVoteState(appType, target) ?? 0,
     type: appType,
     answerType: normalizeAnswerType(target),
     contentNeedTruncated: target.content_need_truncated,
@@ -1536,14 +1538,14 @@ function parseRecommendData(item: RawFeedItem): FeedItem | null {
       (target.content_img && target.content_img.length > 0
         ? target.content_img[0]
         : null),
-    voteCount: target.voteup_count || target.like_count || 0,
+    voteCount: getContentVoteCount(appType, target) ?? 0,
     commentCount: target.comment_count || 0,
     favlistsCount:
       target.favlists_count ||
       target.favorite_count ||
       target.reaction?.statistics?.favorites ||
       0,
-    voted: target.relationship?.voting || 0,
+    voted: getContentVoteState(appType, target) ?? 0,
     type: appType,
     topics: target.topics?.map((topic) => ({
       id: topic.id,

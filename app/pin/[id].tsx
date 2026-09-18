@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { recordReadHistory } from '@/api/zhihu/history';
 import { followMember, unfollowMember } from '@/api/zhihu/member';
 import { getPin, votePinPoll } from '@/api/zhihu/pin';
+import { getContentVoteCount, getContentVoteState } from '@/api/zhihu/voters';
 import { BouncyButton } from '@/components/BouncyButton';
 import { LikeButton } from '@/components/LikeButton';
 import { QueryErrorView } from '@/components/QueryErrorView';
@@ -56,6 +57,8 @@ export default function PinDetailScreen() {
   });
 
   const poll = pin?.bottom_poll?.voting as ZhihuPinPoll | undefined;
+  const pinVoteCount = getContentVoteCount('pins', pin) ?? 0;
+  const pinVoteState = getContentVoteState('pins', pin) ?? 0;
   const pollMutation = useMutation({
     mutationFn: ({ pollId, optionId }: { pollId: string; optionId: string }) =>
       votePinPoll(pollId, [optionId]),
@@ -292,8 +295,8 @@ export default function PinDetailScreen() {
             <View className="flex-row items-center bg-transparent">
               <LikeButton
                 id={pin?.id}
-                count={pin?.like_count || 0}
-                voted={pin?.relationship?.voting}
+                count={pinVoteCount}
+                voted={pinVoteState}
                 type="pins"
                 variant="minimal"
               />
@@ -337,7 +340,7 @@ export default function PinDetailScreen() {
         onClose={() => setVotersVisible(false)}
         contentType="pin"
         contentId={String(id)}
-        count={pin?.like_count}
+        count={pinVoteCount}
       />
     </View>
   );
