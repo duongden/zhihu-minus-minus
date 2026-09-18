@@ -78,6 +78,7 @@ import {
 } from '@/hooks/useGestureScrollView';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
 import { useScrollHeaderAnim } from '@/hooks/useScrollAnimation';
+import { useScrollAwareTextSelection } from '@/hooks/useScrollAwareTextSelection';
 import { useViewableItems } from '@/hooks/useViewableItems';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useCollectionStore } from '@/store/useCollectionStore';
@@ -168,6 +169,8 @@ const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
     );
     const expandedProgress = useSharedValue(isExpanded ? 1 : 0);
     const borderProgress = useSharedValue(0);
+    const { isTextSelectable, touchCaptureHandlers } =
+      useScrollAwareTextSelection(item.id.toString());
 
     React.useLayoutEffect(() => {
       const itemChanged = animationItemIdRef.current !== item.id;
@@ -379,6 +382,7 @@ const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
     return (
       <GestureDetector gesture={panGesture}>
         <View
+          {...touchCaptureHandlers}
           style={{
             backgroundColor: Colors[colorScheme].backgroundSecondary,
             borderRadius: 12,
@@ -470,6 +474,7 @@ const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
                   segmentInfos={item.segment_infos}
                   linkCardInfo={item.link_card_info}
                   useNative={true}
+                  selectable={isTextSelectable}
                 />
                 {MetaInfo}
               </View>
@@ -557,6 +562,7 @@ const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
                       content={item.content}
                       segmentInfos={item.segment_infos}
                       linkCardInfo={item.link_card_info}
+                      selectable={isTextSelectable}
                     />
                     {MetaInfo}
                     <BouncyButton

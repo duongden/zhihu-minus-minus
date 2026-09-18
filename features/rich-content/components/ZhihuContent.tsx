@@ -59,6 +59,7 @@ export interface ZhihuContentProps {
   type: 'answer' | 'article' | 'pin' | 'question';
   onRefresh?: () => void;
   useNative?: boolean;
+  selectable?: boolean;
 }
 
 interface LinkCardDisplay {
@@ -759,6 +760,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
     type,
     onRefresh,
     useNative,
+    selectable = true,
   }) => {
     const colorScheme = useColorScheme();
     const { width } = useWindowDimensions();
@@ -1113,7 +1115,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
       ],
     );
 
-    const defaultTextProps = useMemo(() => ({ selectable: true }), []);
+    const defaultTextProps = useMemo(() => ({ selectable }), [selectable]);
 
     const renderPinContent = () => {
       if (!contentArray) return null;
