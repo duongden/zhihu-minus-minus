@@ -45,7 +45,7 @@
         <b>问题详情</b><br />
       </td>
       <td align="center" valign="top">
-        <img src="./screenshot/v0.0.4/photo_2026-03-12_23-33-16.jpg" width="160" style="border-radius: 16px; border: 1px solid #eee; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" />
+        <img src="./screenshot/v0.6.1/IMG_0376.PNG" width="160" style="border-radius: 16px; border: 1px solid #eee; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" />
         <br /><br />
         <b>夜间模式</b><br />
       </td>
