@@ -4,7 +4,6 @@ import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Build
-import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.view.MotionEvent
@@ -57,7 +56,6 @@ class PullRefreshView(
   private var refreshing = false
   private var refreshLatched = false
   private var thresholdHapticArmed = true
-  private var lastHapticTickAt = 0L
   private var settleAnimator: ValueAnimator? = null
 
   init {
@@ -77,9 +75,6 @@ class PullRefreshView(
 
   fun setHapticsEnabled(enabled: Boolean) {
     hapticsEnabled = enabled
-    if (!enabled) {
-      lastHapticTickAt = 0L
-    }
   }
 
   fun setRefreshing(value: Boolean) {
@@ -89,12 +84,10 @@ class PullRefreshView(
     if (value) {
       refreshLatched = true
       thresholdHapticArmed = false
-      lastHapticTickAt = 0L
       animatePullTo(holdDistancePx)
     } else {
       refreshLatched = false
       thresholdHapticArmed = true
-      lastHapticTickAt = 0L
       animatePullTo(0f)
     }
   }
@@ -391,8 +384,6 @@ class PullRefreshView(
   private fun updatePullOffset(offset: Float, dragging: Boolean) {
     pullOffsetPx = offset.coerceIn(0f, maxPullDistancePx)
 
-    updateProgressHaptic(dragging)
-
     if (pullOffsetPx < thresholdPx * THRESHOLD_REARM_PROGRESS) {
       thresholdHapticArmed = true
     }
@@ -420,42 +411,6 @@ class PullRefreshView(
       }
     }
   }
-
-  private fun updateProgressHaptic(dragging: Boolean) {
-    if (
-      !dragging ||
-      !hapticsEnabled ||
-      refreshing ||
-      pullOffsetPx < 2f ||
-      pullOffsetPx >= thresholdPx
-    ) {
-      if (!dragging || pullOffsetPx < 2f) {
-        lastHapticTickAt = 0L
-      }
-      return
-    }
-
-    val progress = (pullOffsetPx / thresholdPx).coerceIn(0f, 1f)
-    // Android 马达的连续反馈很容易变成嗡鸣；用低振幅短脉冲保留距离感。
-    val amplitudeControl = hasAmplitudeControl()
-    val amplitude = (2f + progress * 14f).toInt()
-    // 不支持振幅控制的马达，用时长渐变；同时留出间隔，避免脉冲叠成嗡鸣。
-    val durationMs = if (amplitudeControl) {
-      (3f + progress * 5f).toLong()
-    } else {
-      (1f + progress * 7f).toLong()
-    }
-    val baseIntervalMs = (36f - progress * 18f).toLong()
-    val intervalMs = max(baseIntervalMs, durationMs + if (amplitudeControl) 4L else 6L)
-    val now = SystemClock.uptimeMillis()
-    if (lastHapticTickAt == 0L || now - lastHapticTickAt >= intervalMs) {
-      emitVibration(durationMs = durationMs, amplitude = amplitude)
-      lastHapticTickAt = now
-    }
-  }
-
-  private fun hasAmplitudeControl(): Boolean =
-    Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && vibrator?.hasAmplitudeControl() == true
 
   private fun emitVibration(durationMs: Long, amplitude: Int) {
     // VibrationEffect 不接受 0ms；对非振幅控制设备来说，0ms 就代表不发这一拍。

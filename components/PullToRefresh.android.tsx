@@ -80,7 +80,7 @@ export function PullToRefresh({
       if (!event.eventName.endsWith('onPull')) return;
 
       pullDistance.value = event.offset;
-      // Android 使用原生稀疏 tick，避免低质量马达把连续包络变成嗡嗡声。
+      // Android 仅保留原生阈值震动，拖动进度不触发震动。
     },
     ['onPull'],
   );
