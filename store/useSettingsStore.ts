@@ -186,7 +186,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   pressScale: 0.98,
   androidFeedbackType: 'ripple',
   enableHapticFeedback: true,
-  useNativeIOSBottomTabs: false,
+  useNativeIOSBottomTabs: true,
   enableBrowseHistory: true,
   enableLocalFeedDedup: false,
   enableFeedCacheOnLaunch: false,
@@ -359,7 +359,7 @@ export const useSettingsStore = create<SettingsState>()(
 
         if (version < 12) {
           persistedState.useNativeIOSBottomTabs =
-            persistedState.useNativeIOSBottomTabs ?? false;
+            persistedState.useNativeIOSBottomTabs ?? true;
         }
 
         persistedState.readingBackground = isValidReadingBackground(
