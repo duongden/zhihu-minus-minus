@@ -3,7 +3,15 @@ import { useQuery } from '@tanstack/react-query';
 import { BlurView } from 'expo-blur';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Image, StyleSheet } from 'react-native';
+import {
+  ActivityIndicator,
+  Animated,
+  Image,
+  type NativeScrollEvent,
+  type ScrollView as NativeScrollView,
+  type NativeSyntheticEvent,
+  StyleSheet,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getArticle, getDailyDetail } from '@/api/zhihu';
 import { getArticleCollectionStatus } from '@/api/zhihu/collection';
@@ -19,6 +27,7 @@ import { DownvoteButton } from '@/components/DownvoteButton';
 import { LikeButton } from '@/components/LikeButton';
 import { ActionSheet } from '@/components/overlays/ActionSheet';
 import { QueryErrorView } from '@/components/QueryErrorView';
+import { ReadingProgressNotice } from '@/components/ReadingProgressNotice';
 import { ShareMenu } from '@/components/ShareMenu';
 import { StableAvatar } from '@/components/StableAvatar';
 import { Text, ThemedIcon, useThemeColor, View } from '@/components/Themed';
@@ -27,6 +36,7 @@ import Colors from '@/constants/Colors';
 import { RICH_CONTENT_STALE_TIME, ZhihuContent } from '@/features/rich-content';
 import { useCollectionAction } from '@/hooks/useCollectionAction';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
+import { useReadingProgress } from '@/hooks/useReadingProgress';
 import { useCollectionStore } from '@/store/useCollectionStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import type { ZhihuArticle } from '@/types/zhihu';
@@ -49,6 +59,7 @@ export default function ArticleDetail() {
   const [isLiked, setIsLiked] = useState(false); // Local liked menu state (optional)
 
   const scrollY = useRef(new Animated.Value(0)).current;
+  const scrollViewRef = useRef<NativeScrollView>(null);
 
   // 1. 获取日报详情
   const {
@@ -84,6 +95,12 @@ export default function ArticleDetail() {
   const isError = isDaily ? dailyError : zhihuError;
   const refetchContent = isDaily ? refetchDaily : refetchZhihu;
   const authorAvatarUrl = !isDaily ? data?.author?.avatar_url : undefined;
+  const readingProgress = useReadingProgress({
+    contentKey: `${isDaily ? 'daily' : 'article'}:${String(id ?? '')}`,
+    enabled: Boolean(id),
+    ready: Boolean(data),
+    scrollRef: scrollViewRef,
+  });
 
   const enableBrowseHistory = useSettingsStore((s) => s.enableBrowseHistory);
 
@@ -309,6 +326,7 @@ export default function ArticleDetail() {
       </View>
 
       <Animated.ScrollView
+        ref={scrollViewRef}
         className="flex-1"
         style={{
           backgroundColor: isDark
@@ -318,8 +336,16 @@ export default function ArticleDetail() {
         scrollEventThrottle={16}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: true },
+          {
+            useNativeDriver: true,
+            listener: (event: NativeSyntheticEvent<NativeScrollEvent>) =>
+              readingProgress.onScroll(event.nativeEvent.contentOffset.y),
+          },
         )}
+        onLayout={readingProgress.onLayout}
+        onContentSizeChange={readingProgress.onContentSizeChange}
+        onScrollEndDrag={readingProgress.commitProgress}
+        onMomentumScrollEnd={readingProgress.commitProgress}
         contentContainerStyle={{
           paddingTop: isDaily ? 0 : insets.top + 60,
           paddingBottom: isDaily ? 100 + insets.bottom : 120 + insets.bottom,
@@ -484,6 +510,13 @@ export default function ArticleDetail() {
           </View>
         )}
       </Animated.ScrollView>
+
+      <ReadingProgressNotice
+        visible={readingProgress.restoredOffset !== null}
+        onBackToTop={readingProgress.scrollToTop}
+        onDismiss={readingProgress.dismissRestoreNotice}
+        bottomOffset={isDaily ? 20 : 88}
+      />
 
       {/* Floating Footer Actions for Standard Articles */}
       {!isDaily && (
