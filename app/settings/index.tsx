@@ -34,6 +34,13 @@ interface SearchEntry {
 
 const SEARCH_ENTRIES: ReadonlyArray<SearchEntry> = [
   {
+    label: 'App 图标',
+    description: '更换主屏幕图标的配色',
+    icon: 'apps-outline',
+    href: '/settings/app-icon',
+    keywords: 'app 图标 icon 主屏幕 桌面 颜色 换肤 个性化',
+  },
+  {
     label: '外观与阅读',
     description: '主题、字体、阅读、导航、启动页与按压反馈',
     icon: 'color-palette-outline',
@@ -191,7 +198,7 @@ export default function SettingsScreen() {
               <Ionicons name="search-outline" size={28} color={mutedColor} />
               <Text style={styles.emptyTitle}>没有找到相关设置</Text>
               <Text type="secondary" style={styles.emptyDescription}>
-                试试“主题”“导航”“过滤”或“历史”
+                试试“主题”“图标”“过滤”或“历史”
               </Text>
             </RNView>
           )

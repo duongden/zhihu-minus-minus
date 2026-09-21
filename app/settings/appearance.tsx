@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { Stack } from 'expo-router';
+import { type Href, Stack, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   LayoutAnimation,
@@ -49,6 +49,7 @@ export interface ColorPreset {
 const PRESET_COLORS: ColorPreset[] = designTokens.primaryPresets;
 
 export default function AppearanceSettings() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme() ?? 'light';
   const {
@@ -91,6 +92,34 @@ export default function AppearanceSettings() {
           paddingBottom: insets.bottom + 40,
         }}
       >
+        <Section title="个性化" colorScheme={colorScheme}>
+          <BouncyButton
+            onPress={() => router.push('/settings/app-icon' as Href)}
+            style={styles.routeRow}
+          >
+            <RNView
+              style={[
+                styles.appIconPreview,
+                { backgroundColor: Colors.light.primary },
+              ]}
+            >
+              <RNView style={styles.appIconMinus} />
+              <RNView style={styles.appIconMinus} />
+            </RNView>
+            <RNView style={styles.routeCopy}>
+              <Text style={styles.routeLabel}>App 图标</Text>
+              <Text type="secondary" style={styles.routeDescription}>
+                更换主屏幕图标的配色
+              </Text>
+            </RNView>
+            <Ionicons
+              name="chevron-forward"
+              size={18}
+              color={Colors[colorScheme].textSecondary}
+            />
+          </BouncyButton>
+        </Section>
+
         <Section title="显示模式" colorScheme={colorScheme}>
           <ThemeModeSelector />
         </Section>
@@ -237,7 +266,7 @@ export default function AppearanceSettings() {
             >
               <Ionicons
                 name="refresh-outline"
-                size={14}
+                size={12}
                 color={Colors[colorScheme].textSecondary}
               />
               <Text
@@ -739,6 +768,31 @@ function ColorPickerSection({ primaryColor, onColorChange }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  routeRow: {
+    minHeight: 70,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  appIconPreview: {
+    width: 38,
+    height: 38,
+    borderRadius: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+  },
+  appIconMinus: {
+    width: 8,
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: Colors.light.textInverse,
+  },
+  routeCopy: { flex: 1, marginHorizontal: 12 },
+  routeLabel: { fontSize: 16, fontWeight: '600' },
+  routeDescription: { fontSize: 12, lineHeight: 18, marginTop: 2 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -778,7 +832,7 @@ const styles = StyleSheet.create({
     borderRadius: 7,
   },
   colorChipText: {
-    fontSize: 14,
+    fontSize: 10,
   },
   optionRow: {
     flex: 1,

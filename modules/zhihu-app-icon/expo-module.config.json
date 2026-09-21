@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["ZhihuAppIconModule"]
+  },
+  "android": {
+    "modules": ["com.zhihuminus.appicon.ZhihuAppIconModule"]
+  }
+}
