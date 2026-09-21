@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { FontAwesome6, Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -286,7 +286,9 @@ const FeedCardComponent = ({ item, tab }: FeedCardProps) => {
           {
             key: 'collect',
             title: isCollected ? '取消收藏' : '移至收藏',
-            icon: isCollected ? 'star' : 'star-outline',
+            icon: 'star',
+            iconFamily: 'font-awesome-6' as const,
+            iconSolid: isCollected,
             onPress: () => {
               const typeStr = item.type === 'answers' ? 'answer' : 'article';
               toggleCollect(item.id, typeStr, isCollected);
@@ -485,8 +487,9 @@ const FeedCardComponent = ({ item, tab }: FeedCardProps) => {
                 }}
                 className="flex-row items-center  bg-transparent ml-4 py-1 px-3 rounded-full"
               >
-                <Ionicons
-                  name={isCollected ? 'star' : 'star-outline'}
+                <FontAwesome6
+                  name="star"
+                  solid={isCollected}
                   size={16}
                   color={isCollected ? warningColor : secondaryColor}
                 />

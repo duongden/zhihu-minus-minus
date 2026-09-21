@@ -69,6 +69,37 @@ const APP_ICONS = [
     iosName: 'ZhihuIconSlate',
     androidAlias: 'AppIconSlateAlias',
   },
+  {
+    id: 'aurora',
+    label: '极光',
+    color: '#6366f1',
+    gradient: {
+      start: [0, 0],
+      end: [1, 1],
+      colors: ['#22d3ee', '#6366f1', '#ec4899'],
+    },
+    iosName: 'ZhihuIconAurora',
+    androidAlias: 'AppIconAuroraAlias',
+  },
+  {
+    id: 'rainbow',
+    label: '彩虹',
+    color: '#f97316',
+    bands: {
+      start: [0, 0],
+      end: [1, 0],
+      colors: [
+        '#5ebd3e',
+        '#ffb900',
+        '#f78200',
+        '#e23838',
+        '#973999',
+        '#009cdf',
+      ],
+    },
+    iosName: 'ZhihuIconRainbow',
+    androidAlias: 'AppIconRainbowAlias',
+  },
 ];
 
 module.exports = { APP_ICONS };

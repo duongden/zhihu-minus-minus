@@ -11,7 +11,9 @@ public final class ZhihuAppIconModule: Module {
     "peach": "ZhihuIconPeach",
     "rose": "ZhihuIconRose",
     "violet": "ZhihuIconViolet",
-    "slate": "ZhihuIconSlate"
+    "slate": "ZhihuIconSlate",
+    "aurora": "ZhihuIconAurora",
+    "rainbow": "ZhihuIconRainbow"
   ]
 
   public func definition() -> ModuleDefinition {

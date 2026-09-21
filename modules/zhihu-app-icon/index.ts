@@ -10,7 +10,9 @@ export type AppIconName =
   | 'peach'
   | 'rose'
   | 'violet'
-  | 'slate';
+  | 'slate'
+  | 'aurora'
+  | 'rainbow';
 
 interface AppIconNativeModule {
   getAppIcon(): Promise<AppIconName>;

@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { FontAwesome6, Ionicons } from '@expo/vector-icons';
 import {
   FlashList,
   type FlashListRef,
@@ -681,8 +681,9 @@ const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
               className="flex-row items-center  bg-transparent py-1.5 px-3 rounded-full"
               onPress={() => toggleCollect(item.id, 'answer', isCollected)}
             >
-              <Ionicons
-                name={isCollected ? 'star' : 'star-outline'}
+              <FontAwesome6
+                name="star"
+                solid={isCollected}
                 size={16}
                 color={
                   isCollected ? warningColor : Colors[colorScheme].iconMuted
@@ -1501,8 +1502,9 @@ export default function QuestionDetail() {
                     )
                   }
                 >
-                  <Ionicons
-                    name={isFloatingCollected ? 'star' : 'star-outline'}
+                  <FontAwesome6
+                    name="star"
+                    solid={isFloatingCollected}
                     size={20}
                     color={
                       isFloatingCollected
