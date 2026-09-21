@@ -246,6 +246,7 @@
     },
     "plugins": [
       "expo-router",
+      "./plugins/withAppIcons",
       "expo-secure-store",
       [
         "expo-build-properties",
