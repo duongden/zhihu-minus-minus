@@ -7,6 +7,7 @@ export type {
   TextSelectionInfo,
   ZhihuDOMContentProps,
 } from './components/ZhihuDOMContent';
+export type { RichContentVariant } from './imagePolicy';
 export {
   getNeighborAnswerIds,
   getRichContentQueryKey,

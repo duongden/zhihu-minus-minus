@@ -13,6 +13,7 @@ import {
   Dimensions,
   type GestureResponderEvent,
   Image,
+  type ImageProps,
   Linking,
   Pressable,
   View as RNView,
@@ -48,6 +49,11 @@ import { useSettingsStore } from '@/store/useSettingsStore';
 import type { ZhihuSegmentInfo } from '@/types/zhihu';
 import { showToast } from '@/utils/toast';
 import { extractZhihuRedirectTarget, parseZhihuUrl } from '@/utils/url';
+import {
+  DAILY_AVATAR_SIZE,
+  isDailyAvatar,
+  type RichContentVariant,
+} from '../imagePolicy';
 import ZhihuDOMContent, { type TextSelectionInfo } from './ZhihuDOMContent';
 
 export interface ZhihuContentProps {
@@ -60,6 +66,7 @@ export interface ZhihuContentProps {
   onRefresh?: () => void;
   useNative?: boolean;
   selectable?: boolean;
+  variant?: RichContentVariant;
 }
 
 interface LinkCardDisplay {
@@ -486,7 +493,17 @@ const LazyImage: React.FC<{
   resizeMode: 'contain' | 'cover' | 'stretch' | 'center';
   resizeMethod?: 'auto' | 'resize' | 'scale';
   colorScheme: 'light' | 'dark';
-}> = ({ src, style, resizeMode, resizeMethod, colorScheme }) => {
+  borderRadius?: number;
+  onLoad?: ImageProps['onLoad'];
+}> = ({
+  src,
+  style,
+  resizeMode,
+  resizeMethod,
+  colorScheme,
+  borderRadius = 12,
+  onLoad,
+}) => {
   const [visible, setVisible] = useState(false);
   const containerRef = useRef<RNView>(null);
   const timerRef = useRef<any>(null);
@@ -523,16 +540,24 @@ const LazyImage: React.FC<{
   return (
     <RNView
       ref={containerRef}
-      style={[style, { backgroundColor: placeholderColor }]}
-      className="rounded-xl justify-center items-center overflow-hidden"
+      style={[
+        style,
+        {
+          backgroundColor: placeholderColor,
+          borderRadius,
+          overflow: 'hidden',
+          justifyContent: 'center',
+          alignItems: 'center',
+        },
+      ]}
     >
       {visible ? (
         <Image
           source={{ uri: src }}
-          style={StyleSheet.absoluteFill}
+          style={[StyleSheet.absoluteFill, { borderRadius }]}
           resizeMode={resizeMode}
           resizeMethod={resizeMethod}
-          className="rounded-xl"
+          onLoad={onLoad}
         />
       ) : (
         <ActivityIndicator
@@ -548,6 +573,9 @@ const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
   const { src, width: attrWidth, height: attrHeight, eeimg } = tnode.attributes;
   const rendererProps = useRendererProps('img');
   const [svgError, setSvgError] = useState(false);
+  const [intrinsicAspectRatio, setIntrinsicAspectRatio] = useState<
+    number | null
+  >(null);
 
   if (!rendererProps) return null;
   const {
@@ -555,6 +583,7 @@ const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
     onLongPress,
     width: contentWidth,
     colorScheme,
+    variant,
   } = rendererProps as any;
   const themeColors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
 
@@ -591,6 +620,8 @@ const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
     displayWidth = isBlockFormula
       ? contentWidth
       : Math.min(contentWidth, Math.max(40, alt.length * 8));
+  } else if (intrinsicAspectRatio) {
+    displayHeight = contentWidth / intrinsicAspectRatio;
   }
 
   const imageStyle: any = {
@@ -605,6 +636,21 @@ const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
 
   // 确保 src 有协议
   const finalSrc = src.startsWith('//') ? `https:${src}` : src;
+
+  if (isDailyAvatar(tnode.attributes, variant)) {
+    return (
+      <Pressable onPress={() => onPress(finalSrc)} style={{ marginRight: 10 }}>
+        <LazyImage
+          src={finalSrc}
+          style={{ width: DAILY_AVATAR_SIZE, height: DAILY_AVATAR_SIZE }}
+          resizeMode="cover"
+          resizeMethod="resize"
+          colorScheme={colorScheme}
+          borderRadius={DAILY_AVATAR_SIZE / 2}
+        />
+      </Pressable>
+    );
+  }
 
   if (isFormula && !isBlockFormula) {
     return (
@@ -670,6 +716,13 @@ const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
             resizeMode="contain"
             resizeMethod="resize"
             colorScheme={colorScheme}
+            onLoad={(event) => {
+              if (originalWidth > 0 && originalHeight > 0) return;
+              const { width, height } = event.nativeEvent.source;
+              if (width > 0 && height > 0) {
+                setIntrinsicAspectRatio(width / height);
+              }
+            }}
           />
         )}
       </Pressable>
@@ -761,6 +814,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
     onRefresh,
     useNative,
     selectable = true,
+    variant = 'default',
   }) => {
     const colorScheme = useColorScheme();
     const { width } = useWindowDimensions();
@@ -989,6 +1043,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
           },
           width: width - 40,
           colorScheme,
+          variant,
         },
       }),
       [
@@ -1001,6 +1056,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
         width,
         fontSizeScale,
         lineHeightScale,
+        variant,
       ],
     );
 
@@ -1019,8 +1075,37 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
           textDecorationStyle: 'dashed',
           textDecorationColor: lightPrimaryColor,
         },
+        ...(variant === 'daily'
+          ? {
+              meta: {
+                flexDirection: 'row' as const,
+                alignItems: 'center' as const,
+                flexWrap: 'wrap' as const,
+                minHeight: DAILY_AVATAR_SIZE,
+                marginBottom: 20,
+              },
+              author: {
+                color: textColor,
+                fontSize: 15 * fontSizeScale,
+                fontWeight: '600' as const,
+              },
+              bio: {
+                color: textSecondaryColor,
+                flexGrow: 1,
+                flexShrink: 1,
+                fontSize: 14 * fontSizeScale,
+              },
+              'question-title': { display: 'none' as const },
+            }
+          : {}),
       }),
-      [lightPrimaryColor],
+      [
+        fontSizeScale,
+        lightPrimaryColor,
+        textColor,
+        textSecondaryColor,
+        variant,
+      ],
     );
 
     const tagsStyles = useMemo(
@@ -1304,6 +1389,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
               onTextSelected={
                 type === 'answer' ? onTextSelectedCallback : undefined
               }
+              variant={variant}
               style={domStyle}
             />
           </View>

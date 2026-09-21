@@ -407,6 +407,7 @@ export default function ArticleDetail() {
             content={isDaily ? data.body : data.content}
             objectId={id as string}
             type="article"
+            variant={isDaily ? 'daily' : 'default'}
           />
         </View>
 

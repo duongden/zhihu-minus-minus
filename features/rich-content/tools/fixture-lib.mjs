@@ -139,6 +139,10 @@ export function analyzeHtml(html) {
     lists: (activeTags.ul ?? 0) + (activeTags.ol ?? 0),
     totalImages: tags.img ?? 0,
     activeImages: activeTags.img ?? 0,
+    avatarImages: countMatches(
+      activeHtml,
+      /<img\b[^>]*class=(?:"|')[^"']*\bavatar\b[^"']*(?:"|')[^>]*>/gi,
+    ),
     formulaImages,
     noscripts: tags.noscript ?? 0,
     videoBoxes: countMatches(

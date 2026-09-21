@@ -69,6 +69,14 @@ test('counts member mentions and topic tags in pin HTML', () => {
   assert.equal(stats.topicTags, 1);
 });
 
+test('counts daily avatar images separately from content images', () => {
+  const stats = analyzeHtml(
+    '<div class="meta"><img class="avatar" src="avatar.jpg"></div><img class="content-image" src="content.jpg">',
+  );
+  assert.equal(stats.activeImages, 2);
+  assert.equal(stats.avatarImages, 1);
+});
+
 test('analyzes JSON API envelopes and asserts metadata beside content', async () => {
   const directoryPath = await mkdtemp(
     path.join(tmpdir(), 'rich-content-json-fixture-'),

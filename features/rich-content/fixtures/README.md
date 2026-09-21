@@ -71,6 +71,8 @@ HTML 统计还包括 `memberMentions`（`a.member_mention`）和 `topicTags`（`
 
 ## 现有种子样本
 
+`cases/daily-author-avatar-001.json` 是脱敏后的知乎日报详情 envelope，用于覆盖日报作者栏中无宽高属性的 `img.avatar` 与普通正文图片并存的结构。
+
 `cases/pig.json` 是脱敏后的完整知乎 answer envelope，正文和正文外元数据一起覆盖无公式长图文的解析与渲染压力。
 
 `cases/question-feed-card-heavy.json` 是 `question_feed_card` envelope，正文位于 `target.content`，用于覆盖 feed card 包装、超长图文、link card、segment 信息和 answer 关系元数据。

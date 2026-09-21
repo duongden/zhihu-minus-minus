@@ -2,6 +2,40 @@
   "version": 2,
   "cases": [
     {
+      "id": "daily-author-avatar-001",
+      "file": "./cases/daily-author-avatar-001.json",
+      "contentPath": "body",
+      "sourceType": "daily",
+      "collectedAt": "2026-09-21",
+      "traits": [
+        "daily",
+        "author-meta",
+        "avatar",
+        "image",
+        "figcaption",
+        "json-envelope"
+      ],
+      "expected": {
+        "paragraphs": 1,
+        "headings": 1,
+        "figures": 1,
+        "figcaptions": 1,
+        "totalImages": 2,
+        "activeImages": 2,
+        "avatarImages": 1,
+        "formulaImages": 0,
+        "noscripts": 0,
+        "videoBoxes": 0,
+        "linkCards": 0
+      },
+      "expectedMetadata": {
+        "type": 0,
+        "id": 1,
+        "js.length": 0,
+        "css.length": 0
+      }
+    },
+    {
       "id": "long-image-heavy-001",
       "file": "./cases/pig.json",
       "contentPath": "content",

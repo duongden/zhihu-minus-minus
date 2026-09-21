@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { colors, radii, typography } from '@/constants/designTokens';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import { DAILY_AVATAR_SIZE, type RichContentVariant } from '../imagePolicy';
 
 export interface TextSelectionInfo {
   text: string;
@@ -24,6 +25,7 @@ export interface ZhihuDOMContentProps {
   onTextSelected?: (info: TextSelectionInfo | null) => void;
   onReady?: () => void;
   style?: object;
+  variant?: RichContentVariant;
 }
 
 export default React.memo(function ZhihuDOMContent({
@@ -38,6 +40,7 @@ export default React.memo(function ZhihuDOMContent({
   onTextSelected,
   onReady,
   style,
+  variant = 'default',
 }: ZhihuDOMContentProps) {
   const [height, setHeight] = useState(400);
   const [_loading, _setLoading] = useState(true);
@@ -45,6 +48,41 @@ export default React.memo(function ZhihuDOMContent({
   const textColor = colors[colorScheme].text;
   const { primaryColor: customPrimaryColor } = useSettingsStore();
   const primaryColor = customPrimaryColor || colors.light.primary;
+  const dailyStyles =
+    variant === 'daily'
+      ? `
+        .zhihu-content .meta {
+          display: flex;
+          align-items: center;
+          min-height: ${DAILY_AVATAR_SIZE}px;
+          margin: 0 0 20px;
+        }
+        .zhihu-content .meta .avatar {
+          box-sizing: border-box;
+          flex: 0 0 ${DAILY_AVATAR_SIZE}px;
+          width: ${DAILY_AVATAR_SIZE}px !important;
+          height: ${DAILY_AVATAR_SIZE}px !important;
+          max-width: none;
+          margin: 0 10px 0 0;
+          border-radius: 50%;
+          object-fit: cover;
+        }
+        .zhihu-content .meta .author {
+          flex: 0 0 auto;
+          font-size: 15px;
+          font-weight: 600;
+        }
+        .zhihu-content .meta .bio {
+          flex: 1 1 auto;
+          min-width: 0;
+          color: ${colors[colorScheme].textSecondary};
+          font-size: 14px;
+        }
+        .zhihu-content .question-title:empty {
+          display: none;
+        }
+      `
+      : '';
 
   const html = `
     <!DOCTYPE html>
@@ -180,6 +218,7 @@ export default React.memo(function ZhihuDOMContent({
         .zhihu-content ul, .zhihu-content ol { padding-left: 20px; margin: 10px 0; }
         .zhihu-content li { margin-bottom: 8px; font-size: 17px; }
         .zhihu-content hr { height: 1px; background-color: ${colors[colorScheme].contentBorder}; border: none; margin: 25px 0; }
+        ${dailyStyles}
 
         .segment-interactable {
           text-decoration: underline dashed;
