@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import * as Device from 'expo-device';
 import { File, Paths } from 'expo-file-system';
 import * as FileSystem from 'expo-file-system/legacy';
 import {
@@ -22,6 +23,7 @@ import {
 import { AppDialog } from '@/components/overlays/AppDialog';
 import { Text, useThemeColor } from '@/components/Themed';
 import { showToast } from '@/utils/toast';
+import { isVersionNewer, selectAndroidApk } from '@/utils/updateSelection';
 
 const GITHUB_RELEASE_API =
   'https://api.github.com/repos/huamurui/zhihu-minus-minus/releases/latest';
@@ -78,9 +80,11 @@ export async function getUpdateInfo(): Promise<UpdateInfo> {
   const latestVersion = latestVersionTag.replace(/^v/, '');
   const currentVersion =
     Constants.expoConfig?.version || Constants.nativeAppVersion || '0.0.0';
-  const apkUrl = data.assets?.find((asset) =>
-    asset.name.endsWith('.apk'),
-  )?.browser_download_url;
+  const apkUrl =
+    Platform.OS === 'android'
+      ? selectAndroidApk(data.assets ?? [], Device.supportedCpuArchitectures)
+          ?.browser_download_url
+      : undefined;
 
   return {
     apkUrl,
@@ -329,27 +333,6 @@ async function downloadAndInstallApk(
     console.error('[Update] Error details:', e);
     showToast(`更新失败: ${e instanceof Error ? e.message : '未知错误'}`);
   }
-}
-
-/**
- * Simple version comparison
- * @param latest "0.0.6"
- * @param current "0.0.6"
- * @returns true if latest > current
- */
-function isVersionNewer(latest: string, current: string): boolean {
-  const latestParts = latest.split('.').map(Number);
-  const currentParts = current.split('.').map(Number);
-
-  for (let i = 0; i < Math.max(latestParts.length, currentParts.length); i++) {
-    const latestPart = latestParts[i] || 0;
-    const currentPart = currentParts[i] || 0;
-
-    if (latestPart > currentPart) return true;
-    if (latestPart < currentPart) return false;
-  }
-
-  return false;
 }
 
 export const UpdateChecker: React.FC = () => {

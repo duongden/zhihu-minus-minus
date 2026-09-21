@@ -20,9 +20,9 @@ Android 与 iOS 使用不同的 GitHub-hosted runner，但位于同一次 workfl
 工作流依次执行：
 
 1. 运行 TypeScript、Biome、全部测试及富文本 fixture 分析。
-2. 质量检查通过后，并行构建 arm64-v8a preview APK 和未签名 IPA。
+2. 质量检查通过后，Android 在一次 Gradle `assembleRelease` 中生成 arm64-v8a、armeabi-v7a、x86、x86_64 四个单 ABI preview APK，并与 iOS 未签名 IPA 并行构建；每个 APK 都会检查实际打包的 ABI。
 3. 两个平台分别上传临时 artifact。
-4. Release job 下载全部 artifact，生成 `SHA256SUMS.txt`，并创建与 `package.json` 版本对应的 tag 和 Release。
+4. Release job 下载全部 artifact，生成 `SHA256SUMS.txt`，并创建与 `package.json` 版本对应的 tag 和 Release。它会先用 arm64-v8a APK 创建草稿，再上传其余附件，确保旧版一键更新仍将 arm64-v8a 识别为第一个 APK。
 5. GitHub 根据 `.github/release.yml` 和 PR label 自动生成发布说明。
 
 如果任一平台构建失败，Release job 不会运行。修复后可以在该 workflow run 中重跑失败 job，或重新触发工作流。构建 artifact 默认保留 7 天；Release 中的附件不受该临时保留期影响。
@@ -30,8 +30,13 @@ Android 与 iOS 使用不同的 GitHub-hosted runner，但位于同一次 workfl
 ## 发布产物
 
 - `zhihu-minus-minus-v<version>-preview-arm64-v8a.apk`：Android arm64-v8a preview 包。
+- `zhihu-minus-minus-v<version>-preview-compat-armeabi-v7a.apk`：Android 32 位 ARM 兼容包，未实机验证。
+- `zhihu-minus-minus-v<version>-preview-compat-x86.apk`：Android 32 位 x86 兼容包，未实机验证。
+- `zhihu-minus-minus-v<version>-preview-compat-x86_64.apk`：Android 64 位 x86 兼容包，未实机验证。
 - `zhihu-minus-minus-v<version>-unsigned.ipa`：未签名 iOS 包，需要用户自行处理签名和安装环境。
-- `SHA256SUMS.txt`：两个安装包的 SHA-256 校验值。
+- `SHA256SUMS.txt`：全部安装包的 SHA-256 校验值。
+
+arm64-v8a 是兼容 v0.6.1 及更早客户端的主包，必须最先创建。v0.6.2 起，客户端会解析约定的附件名，并按照设备支持的 ABI 精确选择 APK；无法识别设备 ABI 或找不到匹配附件时，不提供直接更新，只保留 GitHub Release 下载入口。`compat-*` 仍表示尚未完成实机验证的兼容包。
 
 默认的草稿流程仍需在 Releases 页面确认内容并点击发布。若勾选 `publish_release`，成功完成构建后会直接公开，无需再操作。
 

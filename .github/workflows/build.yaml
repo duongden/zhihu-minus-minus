@@ -65,7 +65,7 @@ jobs:
         run: npm run check
 
   build-android:
-    name: Build Android APK
+    name: Build Android APKs
     needs: quality
     runs-on: ubuntu-latest
     env:
@@ -96,10 +96,8 @@ jobs:
       - name: Prepare Android artifact
         id: android-artifact
         run: |
-          APP_VERSION=$(node -p "require('./package.json').version")
-          APK_NAME="zhihu-minus-minus-v${APP_VERSION}-${BUILD_TYPE}-arm64-v8a.apk"
-          APK_PATH="${RUNNER_TEMP}/${APK_NAME}"
-          echo "path=${APK_PATH}" >> "$GITHUB_OUTPUT"
+          echo "archive=${RUNNER_TEMP}/android-apks.tar.gz" >> "$GITHUB_OUTPUT"
+          echo "directory=${RUNNER_TEMP}/android-apks" >> "$GITHUB_OUTPUT"
 
       - name: Prepare Firebase config
         env:
@@ -109,14 +107,60 @@ jobs:
           mkdir -p assets/config/google-services
           printf '%s' "$FIREBASE_ANDROID_JSON_B64" | base64 --decode > assets/config/google-services/google-services.real.json
 
-      - name: Build APK
-        run: eas build --platform android --profile "$EAS_PROFILE" --local --non-interactive --output="${{ steps.android-artifact.outputs.path }}"
+      - name: Build APKs
+        run: eas build --platform android --profile "$EAS_PROFILE" --local --non-interactive --output="${{ steps.android-artifact.outputs.archive }}"
+
+      - name: Extract, verify and name APKs
+        env:
+          ANDROID_ARCHIVE: ${{ steps.android-artifact.outputs.archive }}
+          ANDROID_OUTPUT_DIR: ${{ steps.android-artifact.outputs.directory }}
+        run: |
+          APP_VERSION=$(node -p "require('./package.json').version")
+          EXTRACT_DIR="${RUNNER_TEMP}/android-apks-raw"
+          mkdir -p "$EXTRACT_DIR" "$ANDROID_OUTPUT_DIR"
+          tar -xzf "$ANDROID_ARCHIVE" -C "$EXTRACT_DIR"
+
+          mapfile -t RAW_APKS < <(find "$EXTRACT_DIR" -type f -name "*.apk" | sort)
+          if [ "${#RAW_APKS[@]}" -ne 4 ]; then
+            echo "Expected four split APKs, found ${#RAW_APKS[@]}"
+            exit 1
+          fi
+
+          for APK_PATH in "${RAW_APKS[@]}"; do
+            mapfile -t PACKAGED_ABIS < <(
+              unzip -Z1 "$APK_PATH" |
+                sed -n 's#^lib/\([^/]*\)/.*#\1#p' |
+                sort -u
+            )
+            if [ "${#PACKAGED_ABIS[@]}" -ne 1 ]; then
+              echo "Expected one ABI in $APK_PATH, found: ${PACKAGED_ABIS[*]:-none}"
+              exit 1
+            fi
+
+            ABI="${PACKAGED_ABIS[0]}"
+            case "$ABI" in
+              arm64-v8a) ASSET_ARCH="arm64-v8a" ;;
+              armeabi-v7a|x86|x86_64) ASSET_ARCH="compat-${ABI}" ;;
+              *)
+                echo "Unexpected ABI in $APK_PATH: $ABI"
+                exit 1
+                ;;
+            esac
+
+            cp "$APK_PATH" "$ANDROID_OUTPUT_DIR/zhihu-minus-minus-v${APP_VERSION}-${BUILD_TYPE}-${ASSET_ARCH}.apk"
+          done
+
+          mapfile -t NAMED_APKS < <(find "$ANDROID_OUTPUT_DIR" -maxdepth 1 -type f -name "*.apk" | sort)
+          if [ "${#NAMED_APKS[@]}" -ne 4 ]; then
+            echo "Expected four uniquely named APKs, found ${#NAMED_APKS[@]}"
+            exit 1
+          fi
 
       - name: Upload Android artifact
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk
-          path: ${{ steps.android-artifact.outputs.path }}
+          name: android-apks
+          path: ${{ steps.android-artifact.outputs.directory }}/*.apk
           if-no-files-found: error
           retention-days: 7
 
@@ -237,10 +281,17 @@ jobs:
         run: |
           APP_VERSION=$(node -p "require('./package.json').version")
           RELEASE_TAG="v${APP_VERSION}"
-          mapfile -t FILES < <(find dist -maxdepth 1 -type f \( -name "*.apk" -o -name "*.ipa" \) | sort)
+          PRIMARY_APK="dist/zhihu-minus-minus-v${APP_VERSION}-${BUILD_TYPE}-arm64-v8a.apk"
+          mapfile -t APKS < <(find dist -maxdepth 1 -type f -name "*.apk" | sort)
+          mapfile -t IPAS < <(find dist -maxdepth 1 -type f -name "*.ipa" | sort)
 
-          if [ "${#FILES[@]}" -ne 2 ]; then
-            echo "Expected one APK and one IPA, found ${#FILES[@]} release assets"
+          if [ ! -f "$PRIMARY_APK" ]; then
+            echo "Primary arm64-v8a APK was not found at $PRIMARY_APK"
+            exit 1
+          fi
+
+          if [ "${#APKS[@]}" -ne 4 ] || [ "${#IPAS[@]}" -ne 1 ]; then
+            echo "Expected four APKs and one IPA, found ${#APKS[@]} APKs and ${#IPAS[@]} IPAs"
             exit 1
           fi
 
@@ -250,11 +301,13 @@ jobs:
           )
 
           echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "primary_apk=${PRIMARY_APK}" >> "$GITHUB_OUTPUT"
 
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
           PUBLISH_RELEASE: ${{ inputs.publish_release }}
+          PRIMARY_APK: ${{ steps.release.outputs.primary_apk }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
           if git rev-parse "refs/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
@@ -267,17 +320,28 @@ jobs:
             exit 1
           fi
 
-          mapfile -t FILES < <(find dist -maxdepth 1 -type f \( -name "*.apk" -o -name "*.ipa" -o -name "SHA256SUMS.txt" \) | sort)
           RELEASE_FLAGS=(
             --title "$RELEASE_TAG"
             --target "$GITHUB_SHA"
             --generate-notes
             --fail-on-no-commits
-            --notes "Android 为 arm64-v8a preview APK；iOS 为未签名 IPA。SHA256SUMS.txt 可用于校验下载文件。"
+            --notes "Android 默认提供已验证的 arm64-v8a preview APK；其余 compat APK 未经实机验证，供对应架构设备手动安装。iOS 为未签名 IPA。SHA256SUMS.txt 可用于校验下载文件。"
+            --draft
           )
 
-          if [ "$PUBLISH_RELEASE" != "true" ]; then
-            RELEASE_FLAGS+=(--draft)
-          fi
+          # Older clients install the first APK returned by the GitHub API.
+          # Create the draft with arm64-v8a first, then upload compatibility
+          # builds, so the legacy one-click updater keeps its verified target.
+          gh release create "$RELEASE_TAG" "$PRIMARY_APK" "${RELEASE_FLAGS[@]}"
 
-          gh release create "$RELEASE_TAG" "${FILES[@]}" "${RELEASE_FLAGS[@]}"
+          mapfile -t REMAINING_FILES < <(
+            find dist -maxdepth 1 -type f \
+              \( -name "*.apk" -o -name "*.ipa" -o -name "SHA256SUMS.txt" \) \
+              ! -path "$PRIMARY_APK" |
+              sort
+          )
+          gh release upload "$RELEASE_TAG" "${REMAINING_FILES[@]}"
+
+          if [ "$PUBLISH_RELEASE" = "true" ]; then
+            gh release edit "$RELEASE_TAG" --draft=false
+          fi
