@@ -3,6 +3,7 @@ import axios, { type AxiosError, type AxiosResponse } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { shouldImportLegacySession, useAuthStore } from '@/store/useAuthStore';
 import { useVerificationStore } from '@/store/useVerificationStore';
+import { classifyNetworkError } from '@/utils/networkFailure';
 import {
   encryptZseV4,
   hmacSha1Hex,
@@ -51,6 +52,11 @@ function getRequestId(config?: object) {
   const requestId = `local-${requestSequence}`;
   requestIds.set(config, requestId);
   return requestId;
+}
+
+function getFailureStatus(error: AxiosError<unknown>) {
+  if (error.response?.status) return error.response.status;
+  return classifyNetworkError(error, axios.isCancel(error));
 }
 
 function getDc0(cookie: string) {
@@ -462,12 +468,13 @@ apiClient.interceptors.response.use(
     }
 
     const status = error.response?.status;
+    const failureStatus = getFailureStatus(error);
     const shouldLogTransientFailure =
       !status || status === 408 || status === 429 || status >= 500;
     if (shouldLogTransientFailure && !sessionInvalidated) {
-      console.warn(
-        `⚠️ [API ${requestId}] ${method} ${path} Status: ${status || 'network-error'}`,
-      );
+      const message = `[API ${requestId}] ${method} ${path} Status: ${failureStatus}`;
+      if (failureStatus === 'canceled') console.log(message);
+      else console.warn(`⚠️ ${message}`);
     }
     return Promise.reject(error);
   },

@@ -1,3 +1,5 @@
+import { classifyNetworkError } from './networkFailure';
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
@@ -30,7 +32,18 @@ export function getZhihuErrorMessage(error: unknown): string {
     if (code === 'ECONNABORTED' || code === 'ETIMEDOUT') {
       return '请求超时，请检查网络后重试';
     }
-    if (code === 'ERR_NETWORK') return '网络连接失败，请检查网络后重试';
+    if (code === 'ERR_NETWORK') {
+      const status = classifyNetworkError(error);
+      if (status === 'offline') return '当前设备似乎已离线，请检查网络';
+      if (status === 'dns-error') return '域名解析失败，请检查 DNS 或代理设置';
+      if (status === 'tls-error')
+        return '安全连接建立失败，请检查代理或证书设置';
+      if (status === 'connection-reset') return '连接被远端中断，请稍后重试';
+      if (status === 'connection-refused')
+        return '服务器拒绝了连接，请稍后重试';
+      if (status === 'connection-error') return '网络连接已中断，请稍后重试';
+      return '网络连接失败，请检查网络后重试';
+    }
 
     const message = error.message;
     if (typeof message === 'string' && message) return message;

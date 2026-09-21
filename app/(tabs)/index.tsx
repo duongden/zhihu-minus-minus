@@ -86,7 +86,8 @@ import {
   getInMemoryFeedKey,
 } from '@/utils/feedIdentity';
 import { resolveLocalAccountKey } from '@/utils/localAccount';
-import { refreshInfiniteQuery } from '@/utils/query';
+import { refreshInfiniteQuery, shouldRetryQuery } from '@/utils/query';
+import { getZhihuErrorMessage } from '@/utils/zhihuError';
 import ProfileScreen from './profile';
 import PublishScreen from './publish';
 
@@ -1056,6 +1057,7 @@ const FeedList = React.forwardRef<
         ['zhihu-feed', queryAccountKey, tab, recommendationRequestKey] as const,
       [queryAccountKey, recommendationRequestKey, tab],
     );
+    const isGuestRecommend = tab === 'recommend' && !cookies;
     const {
       data,
       fetchNextPage,
@@ -1063,6 +1065,7 @@ const FeedList = React.forwardRef<
       isFetchingNextPage,
       isLoading,
       isError,
+      error: feedError,
       isRefetching,
       refetch,
     } = useInfiniteQuery({
@@ -1115,6 +1118,11 @@ const FeedList = React.forwardRef<
       },
       initialPageParam: FEED_URLS[tab],
       getNextPageParam: (lastPage) => lastPage.nextUrl,
+      // Guest recommendations already try both the App endpoint and the Web
+      // compatibility endpoint. Retrying the whole pair here can otherwise
+      // keep an empty screen loading for up to a minute (2 endpoints x 3 runs).
+      retry: isGuestRecommend ? false : shouldRetryQuery,
+      retryOnMount: !isGuestRecommend,
       initialData: initialFeedCache ?? undefined,
       staleTime: launchCacheContext && initialFeedCache ? 5 * 60 * 1000 : 0,
       enabled:
@@ -1389,7 +1397,7 @@ const FeedList = React.forwardRef<
               </View>
             ) : isError ? (
               <QueryErrorView
-                message="Feed 加载失败"
+                message={`Feed 加载失败：${getZhihuErrorMessage(feedError)}`}
                 onRetry={() => void refetch()}
               />
             ) : (
