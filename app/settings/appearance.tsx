@@ -20,7 +20,9 @@ import Reanimated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BouncyButton } from '@/components/BouncyButton';
 import { Section, SettingItem } from '@/components/SettingItem';
+import { NavigationInteractionSettings } from '@/components/settings/NavigationInteractionSettings';
 import { Text, useThemeColor, View } from '@/components/Themed';
+import { ThemeModeSelector } from '@/components/ThemeModeSelector';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { designTokens } from '@/constants/designTokens';
@@ -29,7 +31,7 @@ import {
   SURFACE_STYLE_OPTIONS,
   TEXT_CONTRAST_OPTIONS,
 } from '@/constants/theme';
-import { type TabKey, useSettingsStore } from '@/store/useSettingsStore';
+import { useSettingsStore } from '@/store/useSettingsStore';
 
 // 开启 Android 下的 LayoutAnimation
 if (
@@ -56,47 +58,13 @@ export default function AppearanceSettings() {
     readingBackground,
     textContrast,
     surfaceStyle,
-    visibleTabs,
-    defaultTab,
-    useWebView,
-    enablePrivateMessaging,
-    enableBrowseHistory,
-    enableHapticFeedback,
-    useNativeIOSBottomTabs,
-    pressOpacity,
-    pressScale,
-    androidFeedbackType,
     updateSettings,
-    resetSettings,
-    localCityName,
   } = useSettingsStore();
 
   const [showAdvancedColor, setShowAdvancedColor] = useState(false);
 
-  const TAB_LABELS: Record<TabKey, string> = {
-    following: '关注',
-    recommend: '推荐',
-    local: localCityName || '同城',
-    hot: '热榜',
-    daily: '日报',
-    publish: '发布',
-    profile: '我的',
-  };
-
   const tintColor = useThemeColor({}, 'primary');
   const canvasColor = useThemeColor({}, 'background');
-  const isDark = colorScheme === 'dark';
-
-  const toggleTab = (tab: TabKey) => {
-    if (visibleTabs.includes(tab)) {
-      if (tab === 'profile') return; // 禁止隐藏“我的”
-      if (visibleTabs.length > 1) {
-        updateSettings({ visibleTabs: visibleTabs.filter((t) => t !== tab) });
-      }
-    } else {
-      updateSettings({ visibleTabs: [...visibleTabs, tab] });
-    }
-  };
 
   const toggleAdvancedColor = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -114,7 +82,7 @@ export default function AppearanceSettings() {
       ]}
     >
       <Stack.Screen
-        options={{ title: '外观与定制', headerShadowVisible: false }}
+        options={{ title: '外观与阅读', headerShadowVisible: false }}
       />
 
       <ScrollView
@@ -123,6 +91,10 @@ export default function AppearanceSettings() {
           paddingBottom: insets.bottom + 40,
         }}
       >
+        <Section title="显示模式" colorScheme={colorScheme}>
+          <ThemeModeSelector />
+        </Section>
+
         {/* 1. 字体风格 */}
         <Section title="字体与排版" colorScheme={colorScheme}>
           <SettingItem
@@ -419,334 +391,7 @@ export default function AppearanceSettings() {
           </SettingItem>
         </Section>
 
-        {/* 4. 按压反馈 */}
-        <Section title="交互与反馈" colorScheme={colorScheme}>
-          <SettingItem
-            label="震动反馈"
-            icon="phone-portrait-outline"
-            colorScheme={colorScheme}
-          >
-            <Switch
-              value={enableHapticFeedback}
-              onValueChange={(val) =>
-                updateSettings({ enableHapticFeedback: val })
-              }
-              trackColor={{ true: tintColor }}
-            />
-          </SettingItem>
-
-          {Platform.OS === 'android' && (
-            <SettingItem
-              label="反馈类型"
-              icon="hardware-chip-outline"
-              colorScheme={colorScheme}
-            >
-              <View style={styles.row}>
-                <BouncyButton
-                  onPress={() =>
-                    updateSettings({ androidFeedbackType: 'ripple' })
-                  }
-                  style={[
-                    styles.tabChip,
-                    {
-                      backgroundColor: Colors[colorScheme].backgroundTertiary,
-                      marginRight: 8,
-                    },
-                    androidFeedbackType === 'ripple' && {
-                      backgroundColor: tintColor,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.tabChipText,
-                      androidFeedbackType === 'ripple' && {
-                        color: Colors[colorScheme].textInverse,
-                        fontWeight: 'bold',
-                      },
-                    ]}
-                  >
-                    水波纹
-                  </Text>
-                </BouncyButton>
-                <BouncyButton
-                  onPress={() =>
-                    updateSettings({ androidFeedbackType: 'scale-opacity' })
-                  }
-                  style={[
-                    styles.tabChip,
-                    { backgroundColor: Colors[colorScheme].backgroundTertiary },
-                    androidFeedbackType === 'scale-opacity' && {
-                      backgroundColor: tintColor,
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.tabChipText,
-                      androidFeedbackType === 'scale-opacity' && {
-                        color: Colors[colorScheme].textInverse,
-                        fontWeight: 'bold',
-                      },
-                    ]}
-                  >
-                    缩放
-                  </Text>
-                </BouncyButton>
-              </View>
-            </SettingItem>
-          )}
-
-          {(Platform.OS !== 'android' ||
-            androidFeedbackType === 'scale-opacity') && (
-            <>
-              <SettingItem
-                label="按压不透明度"
-                icon="contrast-outline"
-                colorScheme={colorScheme}
-              >
-                <View style={styles.row}>
-                  <BouncyButton
-                    onPress={() =>
-                      updateSettings({
-                        pressOpacity: Math.max(
-                          0.5,
-                          parseFloat((pressOpacity - 0.05).toFixed(2)),
-                        ),
-                      })
-                    }
-                    style={[
-                      styles.smallBtn,
-                      {
-                        backgroundColor: Colors[colorScheme].backgroundTertiary,
-                      },
-                    ]}
-                  >
-                    <Ionicons
-                      name="remove"
-                      size={18}
-                      color={Colors[colorScheme].text}
-                    />
-                  </BouncyButton>
-                  <Text style={styles.valueText}>
-                    {pressOpacity.toFixed(2)}
-                  </Text>
-                  <BouncyButton
-                    onPress={() =>
-                      updateSettings({
-                        pressOpacity: Math.min(
-                          1.0,
-                          parseFloat((pressOpacity + 0.05).toFixed(2)),
-                        ),
-                      })
-                    }
-                    style={[
-                      styles.smallBtn,
-                      {
-                        backgroundColor: Colors[colorScheme].backgroundTertiary,
-                      },
-                    ]}
-                  >
-                    <Ionicons
-                      name="add"
-                      size={18}
-                      color={Colors[colorScheme].text}
-                    />
-                  </BouncyButton>
-                </View>
-              </SettingItem>
-              <SettingItem
-                label="按压缩放比例"
-                icon="expand-outline"
-                colorScheme={colorScheme}
-              >
-                <View style={styles.row}>
-                  <BouncyButton
-                    onPress={() =>
-                      updateSettings({
-                        pressScale: Math.max(
-                          0.88,
-                          parseFloat((pressScale - 0.01).toFixed(2)),
-                        ),
-                      })
-                    }
-                    style={[
-                      styles.smallBtn,
-                      {
-                        backgroundColor: Colors[colorScheme].backgroundTertiary,
-                      },
-                    ]}
-                  >
-                    <Ionicons
-                      name="remove"
-                      size={18}
-                      color={Colors[colorScheme].text}
-                    />
-                  </BouncyButton>
-                  <Text style={styles.valueText}>{pressScale.toFixed(2)}</Text>
-                  <BouncyButton
-                    onPress={() =>
-                      updateSettings({
-                        pressScale: Math.min(
-                          1.0,
-                          parseFloat((pressScale + 0.01).toFixed(2)),
-                        ),
-                      })
-                    }
-                    style={[
-                      styles.smallBtn,
-                      {
-                        backgroundColor: Colors[colorScheme].backgroundTertiary,
-                      },
-                    ]}
-                  >
-                    <Ionicons
-                      name="add"
-                      size={18}
-                      color={Colors[colorScheme].text}
-                    />
-                  </BouncyButton>
-                </View>
-              </SettingItem>
-            </>
-          )}
-
-          <SettingItem
-            label="实时预览"
-            icon="play-circle-outline"
-            colorScheme={colorScheme}
-          >
-            <BouncyButton hapticFeedback style={[styles.previewBtn]}>
-              <Text style={{ fontSize: 13, fontWeight: 'bold' }}>按我测试</Text>
-            </BouncyButton>
-          </SettingItem>
-        </Section>
-
-        {/* 5. 栏目展示 */}
-        <Section title="底部导航栏 (至少保留一个)" colorScheme={colorScheme}>
-          {(Object.keys(TAB_LABELS) as TabKey[]).map((tab) => (
-            <SettingItem
-              key={tab}
-              label={TAB_LABELS[tab]}
-              icon="layers-outline"
-              colorScheme={colorScheme}
-            >
-              <Switch
-                value={visibleTabs.includes(tab)}
-                onValueChange={() => toggleTab(tab)}
-                trackColor={{ true: tintColor }}
-                disabled={tab === 'profile'}
-              />
-            </SettingItem>
-          ))}
-          {Platform.OS === 'ios' && (
-            <SettingItem
-              label="iOS 26+ 液态玻璃"
-              icon="phone-portrait-outline"
-              colorScheme={colorScheme}
-            >
-              <Switch
-                value={useNativeIOSBottomTabs}
-                onValueChange={(val) =>
-                  updateSettings({ useNativeIOSBottomTabs: val })
-                }
-                trackColor={{ true: tintColor }}
-              />
-            </SettingItem>
-          )}
-        </Section>
-
-        {/* 6. 默认落地页 */}
-        <Section title="默认启动页" colorScheme={colorScheme}>
-          <RNView style={styles.tabGrid}>
-            {visibleTabs.map((tab) => (
-              <BouncyButton
-                key={tab}
-                onPress={() => updateSettings({ defaultTab: tab })}
-                style={[
-                  styles.tabChip,
-                  { backgroundColor: Colors[colorScheme].backgroundTertiary },
-                  defaultTab === tab && { backgroundColor: tintColor },
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.tabChipText,
-                    defaultTab === tab && {
-                      color: Colors[colorScheme].textInverse,
-                      fontWeight: 'bold',
-                    },
-                  ]}
-                >
-                  {TAB_LABELS[tab]}
-                </Text>
-              </BouncyButton>
-            ))}
-          </RNView>
-        </Section>
-
-        {/* 7. 实验性功能 */}
-        <Section title="实验性功能 (默认关闭)" colorScheme={colorScheme}>
-          <SettingItem
-            label="启用 WebView 渲染"
-            icon="globe-outline"
-            colorScheme={colorScheme}
-          >
-            <Switch
-              value={useWebView}
-              onValueChange={(val) => updateSettings({ useWebView: val })}
-              trackColor={{ true: tintColor }}
-            />
-          </SettingItem>
-          <SettingItem
-            label="启用私信功能 (IM)"
-            icon="chatbubbles-outline"
-            colorScheme={colorScheme}
-          >
-            <Switch
-              value={enablePrivateMessaging}
-              onValueChange={(val) =>
-                updateSettings({ enablePrivateMessaging: val })
-              }
-              trackColor={{ true: tintColor }}
-            />
-          </SettingItem>
-          <SettingItem
-            label="记录浏览历史"
-            icon="time-outline"
-            colorScheme={colorScheme}
-          >
-            <Switch
-              value={enableBrowseHistory}
-              onValueChange={(val) =>
-                updateSettings({ enableBrowseHistory: val })
-              }
-              trackColor={{ true: tintColor }}
-            />
-          </SettingItem>
-        </Section>
-
-        <BouncyButton
-          onPress={resetSettings}
-          style={[
-            styles.resetBtn,
-            {
-              backgroundColor: isDark
-                ? 'rgba(255,77,79,0.15)'
-                : 'rgba(255,77,79,0.08)',
-            },
-          ]}
-        >
-          <Text
-            style={{
-              color: Colors[colorScheme].danger,
-              fontWeight: '600',
-              fontSize: 16,
-            }}
-          >
-            恢复默认设置
-          </Text>
-        </BouncyButton>
+        <NavigationInteractionSettings />
       </ScrollView>
     </RNView>
   );
@@ -1150,30 +795,6 @@ const styles = StyleSheet.create({
   },
   optionChipText: {
     fontSize: 13,
-  },
-  tabGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    padding: 16,
-  },
-  tabChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-  },
-  tabChipText: { fontSize: 14 },
-  previewBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 16,
-  },
-  resetBtn: {
-    marginTop: 10,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    marginBottom: 20,
   },
   hexInput: {
     width: 100,
