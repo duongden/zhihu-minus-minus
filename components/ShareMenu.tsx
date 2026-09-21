@@ -126,9 +126,9 @@ export function ShareMenu({ visible, onClose, type, data }: ShareMenuProps) {
           ? [
               {
                 key: 'collection',
-                icon: isCollected
-                  ? ('star' as const)
-                  : ('star-outline' as const),
+                icon: 'star' as const,
+                iconFamily: 'font-awesome-6' as const,
+                iconSolid: isCollected,
                 label: isCollected ? '取消收藏' : '移至收藏',
                 color: isCollected ? Colors.light.warningAccent : undefined,
                 onPress: () => toggleCollect(data.id, type, isCollected),

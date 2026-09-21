@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { FontAwesome6, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React from 'react';
@@ -454,8 +454,9 @@ export const CreationCard = React.forwardRef<
                   onPress={() => toggleCollect(item.id, type, isCollected)}
                   className="flex-row items-center justify-center ml-3 p-2 rounded-full bg-transparent"
                 >
-                  <Ionicons
-                    name={isCollected ? 'star' : 'star-outline'}
+                  <FontAwesome6
+                    name="star"
+                    solid={isCollected}
                     size={16}
                     color={
                       isCollected ? warningColor : Colors[colorScheme].iconMuted

@@ -533,7 +533,9 @@ export const AnswerDetailView = ({
           },
           {
             key: 'collection',
-            icon: activeCollected ? 'star' : 'star-outline',
+            icon: 'star',
+            iconFamily: 'font-awesome-6',
+            iconSolid: activeCollected,
             label: activeCollected ? '取消收藏' : '移至收藏',
             color: activeCollected ? warningColor : undefined,
             disabled: collectionPending,
