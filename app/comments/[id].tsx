@@ -379,7 +379,7 @@ export default function CommentScreen() {
                   ))}
                 <Text
                   type="secondary"
-                  className="text-xs font-medium mt-1"
+                  className="text-xs font-medium"
                   style={{ color: tintColor }}
                 >
                   查看全部 {item.child_comment_count} 条回复 →
