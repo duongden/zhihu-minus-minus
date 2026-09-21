@@ -115,17 +115,30 @@ function withAndroidAppIconResources(config) {
         `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n${colors}\n</resources>\n`,
       );
 
-      for (const { id } of APP_ICONS) {
+      for (const { id, gradient, bands } of APP_ICONS) {
         const resourceName = androidResourceName(id);
         fs.copyFileSync(
           path.join(sourceRoot, `assets/images/app-icons/${id}.png`),
           path.join(mipmapDirectory, `${resourceName}.png`),
         );
+        const usesImageBackground = gradient || bands;
+        const backgroundResource = usesImageBackground
+          ? `@drawable/${resourceName}_background`
+          : `@color/${resourceName}_color`;
+        if (usesImageBackground) {
+          fs.copyFileSync(
+            path.join(
+              sourceRoot,
+              `assets/images/app-icons/${id}-background.png`,
+            ),
+            path.join(drawableDirectory, `${resourceName}_background.png`),
+          );
+        }
         fs.writeFileSync(
           path.join(adaptiveDirectory, `${resourceName}.xml`),
           `<?xml version="1.0" encoding="utf-8"?>
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
-  <background android:drawable="@color/${resourceName}_color" />
+  <background android:drawable="${backgroundResource}" />
   <foreground android:drawable="@drawable/zhihu_icon_foreground" />
   <monochrome android:drawable="@drawable/zhihu_icon_monochrome" />
 </adaptive-icon>

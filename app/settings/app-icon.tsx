@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
+  type ImageSourcePropType,
   Platform,
   View as RNView,
   ScrollView,
@@ -21,46 +23,25 @@ import {
 } from '@/modules/zhihu-app-icon';
 
 function AppIconPreview({
-  color,
+  source,
   size = 72,
 }: {
-  color: string;
+  source: ImageSourcePropType;
   size?: number;
 }) {
   const scale = size / 192;
   return (
-    <RNView
+    <Image
+      source={source}
       style={[
         styles.iconPreview,
         {
           width: size,
           height: size,
           borderRadius: 42 * scale,
-          backgroundColor: color,
         },
       ]}
-    >
-      <RNView
-        style={[
-          styles.minusMark,
-          {
-            width: 40 * scale,
-            height: 12 * scale,
-            borderRadius: 6 * scale,
-          },
-        ]}
-      />
-      <RNView
-        style={[
-          styles.minusMark,
-          {
-            width: 40 * scale,
-            height: 12 * scale,
-            borderRadius: 6 * scale,
-          },
-        ]}
-      />
-    </RNView>
+    />
   );
 }
 
@@ -149,7 +130,7 @@ export default function AppIconSettings() {
                     isSelected && styles.selectedOption,
                   ]}
                 >
-                  <AppIconPreview color={option.color} />
+                  <AppIconPreview source={option.source} />
                   <RNView style={styles.optionFooter}>
                     <Text style={styles.optionLabel}>{option.label}</Text>
                     {isChanging ? (
@@ -219,17 +200,12 @@ const styles = StyleSheet.create({
   },
   selectedOption: { borderWidth: 1.5 },
   iconPreview: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
     shadowColor: '#000000',
     shadowOpacity: 0.14,
     shadowRadius: 7,
     shadowOffset: { width: 0, height: 3 },
     elevation: 3,
   },
-  minusMark: { backgroundColor: '#ffffff' },
   optionFooter: {
     width: '100%',
     minHeight: 22,

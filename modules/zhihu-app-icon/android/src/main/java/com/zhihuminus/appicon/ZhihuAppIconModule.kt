@@ -17,7 +17,9 @@ class ZhihuAppIconModule : Module() {
     "peach" to "AppIconPeachAlias",
     "rose" to "AppIconRoseAlias",
     "violet" to "AppIconVioletAlias",
-    "slate" to "AppIconSlateAlias"
+    "slate" to "AppIconSlateAlias",
+    "aurora" to "AppIconAuroraAlias",
+    "rainbow" to "AppIconRainbowAlias"
   )
 
   private val context: Context
