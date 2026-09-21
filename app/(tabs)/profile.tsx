@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import CookieManager from '@preeternal/react-native-cookie-manager';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { type Href, useRouter } from 'expo-router';
 import React from 'react';
 import {
   ActivityIndicator,
@@ -17,7 +17,6 @@ import { BottomSheet } from '@/components/overlays/BottomSheet';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { StableAvatar } from '@/components/StableAvatar';
 import { Text, useThemeColor, View } from '@/components/Themed';
-import { ThemeModeSelector } from '@/components/ThemeModeSelector';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useAuthStore } from '@/store/useAuthStore';
@@ -365,42 +364,28 @@ export default function ProfileScreen({ isActive = true }: ProfileScreenProps) {
         ) : null}
       </View>
 
-      {/* 我的资产 */}
-      <View type="surface" className="rounded-2xl mx-3 mt-3 overflow-hidden">
+      <MenuSection title="我的内容">
         <MenuItem
           icon="bookmark-outline"
           title="我的收藏"
+          subtitle="整理和继续阅读收藏内容"
           color={Colors[colorScheme].warning}
           onPress={() => router.push('/collections')}
         />
         <MenuItem
           icon="time-outline"
           title="最近浏览"
+          subtitle="找回最近看过的内容"
           color={accentColor}
           onPress={() => router.push('/history')}
         />
-      </View>
+      </MenuSection>
 
-      {/* 通用设置 */}
-      <View type="surface" className="rounded-2xl mx-3 mt-3 overflow-hidden">
-        <ThemeModeSelector />
-
-        <MenuItem
-          icon="color-palette-outline"
-          title="外观与定制"
-          color={accentColor}
-          onPress={() => router.push('/settings/appearance')}
-        />
-        <MenuItem
-          icon="filter-outline"
-          title="过滤与推荐"
-          color={accentColor}
-          onPress={() => router.push('/settings/filter')}
-        />
-
+      <MenuSection title="消息与账户">
         <MenuItem
           icon="notifications-outline"
           title="消息通知"
+          subtitle="查看赞同、关注与系统消息"
           onPress={() => router.push('/notifications')}
           right={
             unreadCount > 0 ? (
@@ -421,6 +406,7 @@ export default function ProfileScreen({ isActive = true }: ProfileScreenProps) {
           <MenuItem
             icon="chatbubbles-outline"
             title="我的私信"
+            subtitle="查看与知乎用户的对话"
             color="#4caf50"
             onPress={() => router.push('/inbox')}
           />
@@ -428,6 +414,7 @@ export default function ProfileScreen({ isActive = true }: ProfileScreenProps) {
         <MenuItem
           icon="people-outline"
           title="切换账号"
+          subtitle="管理登录账号与游客模式"
           onPress={() => setAccountModalVisible(true)}
           right={
             <View className="flex-row items-center bg-transparent">
@@ -442,12 +429,17 @@ export default function ProfileScreen({ isActive = true }: ProfileScreenProps) {
             </View>
           }
         />
+      </MenuSection>
+
+      <MenuSection title="设置">
         <MenuItem
-          icon="help-circle-outline"
-          title="反馈与建议"
-          onPress={() => router.push('/feedback')}
+          icon="settings-outline"
+          title="设置"
+          subtitle="偏好、内容、功能与关于"
+          color={accentColor}
+          onPress={() => router.push('/settings' as Href)}
         />
-      </View>
+      </MenuSection>
 
       {/* 退出登录按钮 */}
       {me && (
@@ -633,6 +625,7 @@ function StatItem({ count, label, onPress }: StatItemProps) {
 interface MenuItemProps {
   icon: React.ComponentProps<typeof Ionicons>['name'];
   title: string;
+  subtitle?: string;
   color?: string;
   right?: React.ReactNode;
   onPress: () => void;
@@ -641,6 +634,7 @@ interface MenuItemProps {
 function MenuItem({
   icon,
   title,
+  subtitle,
   color = '#666',
   right,
   onPress,
@@ -648,26 +642,57 @@ function MenuItem({
   return (
     <BouncyButton
       onPress={onPress}
-      className="flex-row items-center justify-between py-[15px] px-4"
+      className="flex-row items-center justify-between py-3.5 px-4"
     >
-      <View className="flex-row items-center bg-transparent">
+      <View className="flex-row items-center flex-1 bg-transparent">
         <View
           className="w-9 h-9 rounded-lg justify-center items-center"
           style={{ backgroundColor: `${color}15` }}
         >
           <Ionicons name={icon} size={20} color={color} />
         </View>
-        <Text className="text-base ml-3 font-medium">{title}</Text>
+        <View className="flex-1 ml-3 bg-transparent">
+          <Text className="text-base font-medium">{title}</Text>
+          {subtitle ? (
+            <Text type="secondary" className="text-xs mt-0.5" numberOfLines={1}>
+              {subtitle}
+            </Text>
+          ) : null}
+        </View>
       </View>
       {right ? (
         right
       ) : (
-        <Ionicons
-          name="chevron-forward"
-          size={16}
-          color={Colors.light.tabIconDefault}
-        />
+        <View className="flex-row items-center bg-transparent ml-2">
+          <Ionicons
+            name="chevron-forward"
+            size={16}
+            color={Colors.light.tabIconDefault}
+          />
+        </View>
       )}
     </BouncyButton>
+  );
+}
+
+function MenuSection({
+  children,
+  title,
+}: {
+  children: React.ReactNode;
+  title: string;
+}) {
+  return (
+    <View className="mt-5 bg-transparent">
+      <Text
+        type="secondary"
+        className="text-xs uppercase tracking-wide mx-7 mb-2"
+      >
+        {title}
+      </Text>
+      <View type="surface" className="rounded-2xl mx-3 overflow-hidden">
+        {children}
+      </View>
+    </View>
   );
 }

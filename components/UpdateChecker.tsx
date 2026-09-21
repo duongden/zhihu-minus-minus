@@ -25,6 +25,8 @@ import { showToast } from '@/utils/toast';
 
 const GITHUB_RELEASE_API =
   'https://api.github.com/repos/huamurui/zhihu-minus-minus/releases/latest';
+const GITHUB_RELEASES_API =
+  'https://api.github.com/repos/huamurui/zhihu-minus-minus/releases';
 const IGNORED_VERSION_KEY = 'ignored_version_tag';
 
 interface GithubReleaseAsset {
@@ -37,6 +39,111 @@ interface GithubRelease {
   assets?: GithubReleaseAsset[];
   html_url: string;
   body?: string;
+  name?: string | null;
+  prerelease?: boolean;
+  published_at?: string | null;
+}
+
+export interface ReleaseHistoryItem {
+  name: string;
+  notes: string;
+  prerelease: boolean;
+  publishedAt: string | null;
+  tag: string;
+  url: string;
+}
+
+export interface UpdateInfo {
+  apkUrl?: string;
+  currentVersion: string;
+  latestVersion: string;
+  latestVersionTag: string;
+  releaseNotes: string;
+  releaseUrl: string;
+  updateAvailable: boolean;
+}
+
+export async function getUpdateInfo(): Promise<UpdateInfo> {
+  const response = await fetch(GITHUB_RELEASE_API);
+  if (!response.ok) {
+    throw new Error(`GitHub Releases 请求失败 (${response.status})`);
+  }
+
+  const data = (await response.json()) as GithubRelease;
+  if (!data.tag_name || !data.html_url) {
+    throw new Error('最新版本信息不完整');
+  }
+
+  const latestVersionTag = data.tag_name;
+  const latestVersion = latestVersionTag.replace(/^v/, '');
+  const currentVersion =
+    Constants.expoConfig?.version || Constants.nativeAppVersion || '0.0.0';
+  const apkUrl = data.assets?.find((asset) =>
+    asset.name.endsWith('.apk'),
+  )?.browser_download_url;
+
+  return {
+    apkUrl,
+    currentVersion,
+    latestVersion,
+    latestVersionTag,
+    releaseNotes: data.body || '无更新说明',
+    releaseUrl: data.html_url,
+    updateAvailable: isVersionNewer(latestVersion, currentVersion),
+  };
+}
+
+function normalizeRelease(value: unknown): ReleaseHistoryItem | null {
+  if (!value || typeof value !== 'object') return null;
+  const release = value as Record<string, unknown>;
+  if (
+    typeof release.tag_name !== 'string' ||
+    typeof release.html_url !== 'string'
+  ) {
+    return null;
+  }
+
+  return {
+    name:
+      typeof release.name === 'string' && release.name.trim()
+        ? release.name
+        : release.tag_name,
+    notes: typeof release.body === 'string' ? release.body : '',
+    prerelease: release.prerelease === true,
+    publishedAt:
+      typeof release.published_at === 'string' ? release.published_at : null,
+    tag: release.tag_name,
+    url: release.html_url,
+  };
+}
+
+export async function getReleaseHistory(): Promise<ReleaseHistoryItem[]> {
+  const releases: ReleaseHistoryItem[] = [];
+  const perPage = 100;
+
+  for (let page = 1; ; page += 1) {
+    const response = await fetch(
+      `${GITHUB_RELEASES_API}?per_page=${perPage}&page=${page}`,
+    );
+    if (!response.ok) {
+      throw new Error(`GitHub Releases 请求失败 (${response.status})`);
+    }
+
+    const data: unknown = await response.json();
+    if (!Array.isArray(data)) {
+      throw new Error('版本记录格式无效');
+    }
+
+    releases.push(
+      ...data
+        .map((release) => normalizeRelease(release))
+        .filter((release): release is ReleaseHistoryItem => release !== null),
+    );
+
+    if (data.length < perPage) break;
+  }
+
+  return releases;
 }
 
 export const useCheckUpdate = (
@@ -53,15 +160,11 @@ export const useCheckUpdate = (
       // 延迟检查，避免干扰首屏路由
       await new Promise((resolve) => setTimeout(resolve, 2000));
       try {
-        const response = await fetch(GITHUB_RELEASE_API);
-        const data = (await response.json()) as GithubRelease;
+        const updateInfo = await getUpdateInfo();
 
-        if (data?.tag_name) {
-          const latestVersionTag = data.tag_name;
-          const latestVersion = latestVersionTag.replace('v', '');
-          const currentVersion = Constants.expoConfig?.version || '0.0.0';
-          // const currentVersion = '0.0.0'; // Debug spoof
-
+        if (updateInfo.updateAvailable) {
+          const { apkUrl, latestVersionTag, releaseNotes, releaseUrl } =
+            updateInfo;
           // 检查是否已经忽略了此版本
           const ignoredVersion =
             await SecureStore.getItemAsync(IGNORED_VERSION_KEY);
@@ -69,63 +172,49 @@ export const useCheckUpdate = (
             return;
           }
 
-          if (isVersionNewer(latestVersion, currentVersion)) {
-            // 查找 APK 文件
-            const apkAsset = data.assets?.find((asset) =>
-              asset.name.endsWith('.apk'),
-            );
-
-            const buttons: AlertButton[] = [
-              { text: '稍后', style: 'cancel' },
-              {
-                text: '忽略此版本',
-                style: 'destructive',
-                onPress: async () => {
-                  await SecureStore.setItemAsync(
-                    IGNORED_VERSION_KEY,
-                    latestVersionTag,
-                  );
-                },
+          const buttons: AlertButton[] = [
+            { text: '稍后', style: 'cancel' },
+            {
+              text: '忽略此版本',
+              style: 'destructive',
+              onPress: async () => {
+                await SecureStore.setItemAsync(
+                  IGNORED_VERSION_KEY,
+                  latestVersionTag,
+                );
               },
-            ];
+            },
+          ];
 
-            if (Platform.OS === 'android' && apkAsset) {
-              buttons.push({
-                text: '直接更新',
-                onPress: () => {
-                  if (onUpdateRef.current) {
-                    onUpdateRef.current(
-                      apkAsset.browser_download_url,
-                      latestVersionTag,
-                    );
-                  } else {
-                    downloadAndInstallApk(
-                      apkAsset.browser_download_url,
-                      latestVersionTag,
-                    );
-                  }
-                },
-              });
-            }
-
+          if (Platform.OS === 'android' && apkUrl) {
             buttons.push({
-              text: '去下载 (GitHub)',
+              text: '直接更新',
               onPress: () => {
-                const downloadUrl = data.html_url;
-                if (Platform.OS === 'android') {
-                  WebBrowser.openBrowserAsync(downloadUrl);
+                if (onUpdateRef.current) {
+                  onUpdateRef.current(apkUrl, latestVersionTag);
                 } else {
-                  Linking.openURL(downloadUrl);
+                  downloadAndInstallApk(apkUrl, latestVersionTag);
                 }
               },
             });
-
-            Alert.alert(
-              '发现新版本',
-              `最新版本 ${latestVersionTag} 已发布。\n\n更新内容：\n${data.body || '无更新说明'}`,
-              buttons,
-            );
           }
+
+          buttons.push({
+            text: '去下载 (GitHub)',
+            onPress: () => {
+              if (Platform.OS === 'android') {
+                WebBrowser.openBrowserAsync(releaseUrl);
+              } else {
+                Linking.openURL(releaseUrl);
+              }
+            },
+          });
+
+          Alert.alert(
+            '发现新版本',
+            `最新版本 ${latestVersionTag} 已发布。\n\n更新内容：\n${releaseNotes}`,
+            buttons,
+          );
         }
       } catch (error) {
         console.error('Failed to check for updates:', error);
