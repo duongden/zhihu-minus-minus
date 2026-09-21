@@ -12,14 +12,8 @@ import * as Sharing from 'expo-sharing';
 import * as WebBrowser from 'expo-web-browser';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
-import {
-  Alert,
-  type AlertButton,
-  Linking,
-  Platform,
-  StyleSheet,
-  View,
-} from 'react-native';
+import { Linking, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { MarkdownText } from '@/components/MarkdownText';
 import { AppDialog } from '@/components/overlays/AppDialog';
 import { Text, useThemeColor } from '@/components/Themed';
 import { showToast } from '@/utils/toast';
@@ -151,13 +145,13 @@ export async function getReleaseHistory(): Promise<ReleaseHistoryItem[]> {
 }
 
 export const useCheckUpdate = (
-  onUpdate?: (url: string, version: string) => void,
+  onUpdateAvailable?: (info: UpdateInfo) => void,
 ) => {
-  const onUpdateRef = useRef(onUpdate);
+  const onUpdateAvailableRef = useRef(onUpdateAvailable);
 
   useEffect(() => {
-    onUpdateRef.current = onUpdate;
-  }, [onUpdate]);
+    onUpdateAvailableRef.current = onUpdateAvailable;
+  }, [onUpdateAvailable]);
 
   useEffect(() => {
     const checkUpdate = async () => {
@@ -167,58 +161,13 @@ export const useCheckUpdate = (
         const updateInfo = await getUpdateInfo();
 
         if (updateInfo.updateAvailable) {
-          const { apkUrl, latestVersionTag, releaseNotes, releaseUrl } =
-            updateInfo;
           // 检查是否已经忽略了此版本
           const ignoredVersion =
             await SecureStore.getItemAsync(IGNORED_VERSION_KEY);
-          if (ignoredVersion === latestVersionTag) {
+          if (ignoredVersion === updateInfo.latestVersionTag) {
             return;
           }
-
-          const buttons: AlertButton[] = [
-            { text: '稍后', style: 'cancel' },
-            {
-              text: '忽略此版本',
-              style: 'destructive',
-              onPress: async () => {
-                await SecureStore.setItemAsync(
-                  IGNORED_VERSION_KEY,
-                  latestVersionTag,
-                );
-              },
-            },
-          ];
-
-          if (Platform.OS === 'android' && apkUrl) {
-            buttons.push({
-              text: '直接更新',
-              onPress: () => {
-                if (onUpdateRef.current) {
-                  onUpdateRef.current(apkUrl, latestVersionTag);
-                } else {
-                  downloadAndInstallApk(apkUrl, latestVersionTag);
-                }
-              },
-            });
-          }
-
-          buttons.push({
-            text: '去下载 (GitHub)',
-            onPress: () => {
-              if (Platform.OS === 'android') {
-                WebBrowser.openBrowserAsync(releaseUrl);
-              } else {
-                Linking.openURL(releaseUrl);
-              }
-            },
-          });
-
-          Alert.alert(
-            '发现新版本',
-            `最新版本 ${latestVersionTag} 已发布。\n\n更新内容：\n${releaseNotes}`,
-            buttons,
-          );
+          onUpdateAvailableRef.current?.(updateInfo);
         }
       } catch (error) {
         console.error('Failed to check for updates:', error);
@@ -338,41 +287,112 @@ async function downloadAndInstallApk(
 export const UpdateChecker: React.FC = () => {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [pendingUpdate, setPendingUpdate] = useState<UpdateInfo | null>(null);
   const primaryColor = useThemeColor({}, 'primary');
 
-  useCheckUpdate((url, version) => {
-    downloadAndInstallApk(url, version, setDownloadProgress, setIsDownloading);
-  });
+  useCheckUpdate(setPendingUpdate);
 
-  if (!isDownloading) return null;
+  if (!isDownloading && !pendingUpdate) return null;
+
+  const closeUpdate = () => setPendingUpdate(null);
+  const ignoreUpdate = async () => {
+    if (!pendingUpdate) return;
+    const versionTag = pendingUpdate.latestVersionTag;
+    setPendingUpdate(null);
+    await SecureStore.setItemAsync(IGNORED_VERSION_KEY, versionTag);
+  };
+  const openRelease = () => {
+    if (!pendingUpdate) return;
+    const releaseUrl = pendingUpdate.releaseUrl;
+    setPendingUpdate(null);
+    if (Platform.OS === 'android') {
+      void WebBrowser.openBrowserAsync(releaseUrl);
+    } else {
+      void Linking.openURL(releaseUrl);
+    }
+  };
+  const startDownload = () => {
+    if (!pendingUpdate?.apkUrl) return;
+    const { apkUrl, latestVersionTag } = pendingUpdate;
+    setPendingUpdate(null);
+    void downloadAndInstallApk(
+      apkUrl,
+      latestVersionTag,
+      setDownloadProgress,
+      setIsDownloading,
+    );
+  };
 
   return (
-    <AppDialog
-      visible={isDownloading}
-      title="正在下载更新"
-      icon="cloud-download-outline"
-      dismissible={false}
-    >
-      <View style={styles.progressContent}>
-        <View style={styles.progressTrack}>
-          <View
-            style={[
-              styles.progressBar,
-              {
-                width: `${downloadProgress * 100}%`,
-                backgroundColor: primaryColor,
-              },
-            ]}
-          />
-        </View>
-        <Text style={styles.percentText}>
-          {(downloadProgress * 100).toFixed(1)}%
-        </Text>
-        <Text type="secondary" style={styles.hint}>
-          下载完成后将自动启动安装
-        </Text>
-      </View>
-    </AppDialog>
+    <>
+      {pendingUpdate ? (
+        <AppDialog
+          visible
+          title={`发现新版本 ${pendingUpdate.latestVersionTag}`}
+          icon="cloud-download-outline"
+          message="有新的版本可用"
+          onClose={closeUpdate}
+          actions={[
+            { label: '稍后', onPress: closeUpdate },
+            {
+              label: '忽略此版本',
+              onPress: () => void ignoreUpdate(),
+              variant: 'destructive',
+            },
+            ...(pendingUpdate.apkUrl
+              ? [
+                  {
+                    label: '直接更新',
+                    onPress: startDownload,
+                    variant: 'primary' as const,
+                  },
+                ]
+              : []),
+            {
+              label: '去下载（GitHub）',
+              onPress: openRelease,
+              variant: 'secondary' as const,
+            },
+          ]}
+        >
+          <ScrollView
+            nestedScrollEnabled
+            style={styles.updateNotes}
+            contentContainerStyle={styles.updateNotesContent}
+          >
+            <MarkdownText markdown={pendingUpdate.releaseNotes} />
+          </ScrollView>
+        </AppDialog>
+      ) : null}
+      {isDownloading ? (
+        <AppDialog
+          visible
+          title="正在下载更新"
+          icon="cloud-download-outline"
+          dismissible={false}
+        >
+          <View style={styles.progressContent}>
+            <View style={styles.progressTrack}>
+              <View
+                style={[
+                  styles.progressBar,
+                  {
+                    width: `${downloadProgress * 100}%`,
+                    backgroundColor: primaryColor,
+                  },
+                ]}
+              />
+            </View>
+            <Text style={styles.percentText}>
+              {(downloadProgress * 100).toFixed(1)}%
+            </Text>
+            <Text type="secondary" style={styles.hint}>
+              下载完成后将自动启动安装
+            </Text>
+          </View>
+        </AppDialog>
+      ) : null}
+    </>
   );
 };
 
@@ -382,6 +402,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 22,
   },
+  updateNotes: { width: '100%', maxHeight: 300, marginTop: 4 },
+  updateNotesContent: { paddingBottom: 2 },
   progressTrack: {
     width: '100%',
     height: 6,

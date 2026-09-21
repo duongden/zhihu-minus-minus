@@ -11,24 +11,12 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BouncyButton } from '@/components/BouncyButton';
+import { MarkdownText } from '@/components/MarkdownText';
 import { Text, useThemeColor } from '@/components/Themed';
 import {
   getReleaseHistory,
   type ReleaseHistoryItem,
 } from '@/components/UpdateChecker';
-
-function cleanReleaseNotes(notes: string): string {
-  const cleaned = notes
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/<[^>]+>/g, '')
-    .replace(/^#{1,6}\s*/gm, '')
-    .replace(/\[([^\]]+)]\([^)]+\)/g, '$1')
-    .replace(/[*_`]/g, '')
-    .replace(/\r/g, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-  return cleaned || '本次发布未提供更新说明。';
-}
 
 function formatReleaseDate(value: string | null): string {
   if (!value) return '发布时间未知';
@@ -53,8 +41,9 @@ function ReleaseCard({
   const cardColor = useThemeColor({}, 'backgroundSecondary');
   const borderColor = useThemeColor({}, 'controlBorder');
   const primaryColor = useThemeColor({}, 'primary');
-  const notes = cleanReleaseNotes(release.notes);
+  const notes = release.notes.trim() || '本次发布未提供更新说明。';
   const canExpand = notes.length > 180 || notes.split('\n').length > 4;
+  const previewNotes = notes.split('\n').slice(0, 4).join('\n');
 
   return (
     <RNView
@@ -85,13 +74,13 @@ function ReleaseCard({
       <Text type="secondary" style={styles.releaseDate}>
         {formatReleaseDate(release.publishedAt)}
       </Text>
-      <Text
-        type="secondary"
-        style={styles.releaseNotes}
-        numberOfLines={expanded ? undefined : 4}
-      >
-        {notes}
-      </Text>
+      <RNView style={styles.releaseNotes}>
+        <MarkdownText
+          markdown={expanded || !canExpand ? notes : `${previewNotes}\n…`}
+          compact
+          muted
+        />
+      </RNView>
       <RNView style={styles.releaseActions}>
         {canExpand ? (
           <BouncyButton onPress={onToggle} style={styles.releaseAction}>

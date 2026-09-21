@@ -14,8 +14,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BouncyButton } from '@/components/BouncyButton';
+import { MarkdownText } from '@/components/MarkdownText';
+import { AppDialog } from '@/components/overlays/AppDialog';
 import { Text, useThemeColor } from '@/components/Themed';
-import { getUpdateInfo } from '@/components/UpdateChecker';
+import { getUpdateInfo, type UpdateInfo } from '@/components/UpdateChecker';
 
 const REPOSITORY_URL = 'https://github.com/huamurui/zhihu-minus-minus';
 
@@ -51,6 +53,7 @@ export default function AboutScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [checking, setChecking] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const canvasColor = useThemeColor({}, 'background');
   const cardColor = useThemeColor({}, 'backgroundSecondary');
   const borderColor = useThemeColor({}, 'controlBorder');
@@ -64,17 +67,7 @@ export default function AboutScreen() {
     try {
       const info = await getUpdateInfo();
       if (info.updateAvailable) {
-        Alert.alert(
-          '发现新版本',
-          `当前版本 v${info.currentVersion}\n最新版本 ${info.latestVersionTag}\n\n${info.releaseNotes}`,
-          [
-            { text: '稍后', style: 'cancel' },
-            {
-              text: '查看更新',
-              onPress: () => void Linking.openURL(info.releaseUrl),
-            },
-          ],
-        );
+        setUpdateInfo(info);
       } else {
         Alert.alert('已是最新版', `当前版本 v${info.currentVersion}`);
       }
@@ -187,6 +180,38 @@ export default function AboutScreen() {
           回归阅读本质，少一点打扰，多一点内容。
         </Text>
       </ScrollView>
+      {updateInfo ? (
+        <AppDialog
+          visible
+          title={`发现新版本 ${updateInfo.latestVersionTag}`}
+          icon="cloud-download-outline"
+          message={`当前版本 v${updateInfo.currentVersion}`}
+          onClose={() => setUpdateInfo(null)}
+          actions={[
+            {
+              label: '稍后',
+              onPress: () => setUpdateInfo(null),
+              variant: 'secondary',
+            },
+            {
+              label: '查看更新',
+              onPress: () => {
+                setUpdateInfo(null);
+                void Linking.openURL(updateInfo.releaseUrl);
+              },
+              variant: 'primary',
+            },
+          ]}
+        >
+          <ScrollView
+            nestedScrollEnabled
+            style={styles.updateNotes}
+            contentContainerStyle={styles.updateNotesContent}
+          >
+            <MarkdownText markdown={updateInfo.releaseNotes} />
+          </ScrollView>
+        </AppDialog>
+      ) : null}
     </RNView>
   );
 }
@@ -231,6 +256,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   updateButtonText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  updateNotes: { width: '100%', maxHeight: 300, marginTop: 16 },
+  updateNotesContent: { paddingBottom: 2 },
   feedbackIntro: { paddingHorizontal: 4, marginTop: 28, marginBottom: 12 },
   feedbackTitle: { fontSize: 18, fontWeight: '700', marginBottom: 6 },
   feedbackDescription: { fontSize: 13, lineHeight: 20 },
