@@ -47,7 +47,7 @@ base64 < google-services.json | tr -d '\n'
 base64 < GoogleService-Info.plist | tr -d '\n'
 ```
 
-`build.yaml` 会在每个构建 job 中把这两个 Firebase Secret 临时还原为根目录文件，并通过环境变量交给 `app.config.ts`；runner 结束后文件随工作区一起销毁。Firebase 客户端文件本身不是服务端私钥，但仍按环境配置管理，不提交到 Git。`SENTRY_AUTH_TOKEN` 只放在 CI/EAS Secret 中，绝不能放进 App 包或提交到仓库。
+`build.yaml` 会在每个构建 job 中把这两个 Firebase Secret 临时还原为根目录文件，并通过环境变量交给 `app.config.ts`。`.easignore` 会在 EAS 创建临时构建归档时将这两个刚生成的文件包含进去；它们仍被 `.gitignore` 忽略，不会进入 Git。runner 结束后文件随工作区一起销毁。Firebase 客户端文件本身不是服务端私钥，但仍按环境配置管理，不提交到 Git。`SENTRY_AUTH_TOKEN` 只放在 CI/EAS Secret 中，绝不能放进 App 包或提交到仓库。
 
 ## 移除方式
 
