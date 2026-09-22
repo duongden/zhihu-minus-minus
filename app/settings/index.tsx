@@ -127,7 +127,10 @@ function TelemetrySettingRow() {
         <Ionicons name="analytics-outline" size={19} color={primaryColor} />
       </RNView>
       <RNView style={styles.routeCopy}>
-        <Text style={styles.routeLabel}>分享数据（App崩溃报告&匿名数据）</Text>
+        <Text style={styles.routeLabel}>分享数据</Text>
+        <Text type="secondary" style={styles.routeDescription}>
+          App崩溃报告 & 匿名统计
+        </Text>
       </RNView>
       <Switch
         value={enabled}
