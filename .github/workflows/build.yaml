@@ -126,7 +126,13 @@ jobs:
             local encoded="$2"
             local output_path="$3"
             encoded="$(printf '%s' "$encoded" | tr -d '[:space:]')"
-            if ! printf '%s' "$encoded" | base64 --decode > "$output_path"; then
+            local -a decoder
+            if [[ "${RUNNER_OS:-Linux}" == "macOS" ]]; then
+              decoder=(base64 -D)
+            else
+              decoder=(base64 --decode)
+            fi
+            if ! printf '%s' "$encoded" | "${decoder[@]}" > "$output_path"; then
               echo "Invalid base64 in GitHub Secret ${secret_name}. Store one-line base64 only, without backticks."
               exit 1
             fi
@@ -238,7 +244,13 @@ jobs:
             local encoded="$2"
             local output_path="$3"
             encoded="$(printf '%s' "$encoded" | tr -d '[:space:]')"
-            if ! printf '%s' "$encoded" | base64 --decode > "$output_path"; then
+            local -a decoder
+            if [[ "${RUNNER_OS:-Linux}" == "macOS" ]]; then
+              decoder=(base64 -D)
+            else
+              decoder=(base64 --decode)
+            fi
+            if ! printf '%s' "$encoded" | "${decoder[@]}" > "$output_path"; then
               echo "Invalid base64 in GitHub Secret ${secret_name}. Store one-line base64 only, without backticks."
               exit 1
             fi
