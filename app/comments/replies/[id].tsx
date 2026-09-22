@@ -148,7 +148,7 @@ export default function ReplyDetailScreen() {
     queryFn: async ({ pageParam = '' }) => {
       return getChildComments(id as string, 20, pageParam);
     },
-    getNextPageParam: (lastPage: any) => {
+    getNextPageParam: (lastPage) => {
       if (!lastPage?.paging?.is_end && lastPage?.paging?.next) {
         const match = lastPage.paging.next.match(/offset=([^&]*)/);
         return match ? match[1] : undefined;
@@ -158,8 +158,7 @@ export default function ReplyDetailScreen() {
     initialPageParam: '',
   });
 
-  const replies =
-    repliesData?.pages.flatMap((page: any) => page.data || []) || [];
+  const replies = repliesData?.pages.flatMap((page) => page.data || []) || [];
   const totalCount =
     repliesData?.pages?.[0]?.counts?.total_counts ??
     parentComment?.child_comment_count ??

@@ -38,6 +38,7 @@ import {
   getPinCommentsV5 as getPinComments,
   getQuestionCommentsV5 as getQuestionComments,
 } from '@/api/zhihu';
+import type { ZhihuCommentResponse } from '@/api/zhihu/comment';
 import { BouncyButton } from '@/components/BouncyButton';
 import { CommentActionSheet } from '@/components/CommentActionSheet';
 import {
@@ -138,10 +139,23 @@ export default function CommentScreen() {
     refetch,
   } = useInfiniteQuery({
     queryKey: ['comments', id, type, segmentId, orderBy],
-    queryFn: async ({ pageParam = '' }) => {
+    queryFn: async ({ pageParam = '' }): Promise<ZhihuCommentResponse> => {
       if (segmentId) {
         const { getSegmentComments } = await import('@/api/zhihu/answer');
-        return getSegmentComments(id as string, segmentId as string);
+        const segmentResponse = await getSegmentComments(
+          id as string,
+          segmentId as string,
+        );
+        return {
+          data: segmentResponse.data || [],
+          paging: segmentResponse.paging || {
+            is_end: true,
+            is_start: true,
+            next: '',
+            previous: '',
+            totals: segmentResponse.data?.length || 0,
+          },
+        };
       }
       if (type === 'question')
         return getQuestionComments(id as string, 20, pageParam, orderBy);
@@ -151,7 +165,7 @@ export default function CommentScreen() {
         return getPinComments(id as string, 20, pageParam, orderBy);
       return getAnswerComments(id as string);
     },
-    getNextPageParam: (lastPage: any) => {
+    getNextPageParam: (lastPage) => {
       if (!lastPage?.paging?.is_end && lastPage?.paging?.next) {
         const match = lastPage.paging.next.match(/offset=([^&]*)/);
         return match ? match[1] : undefined;
@@ -161,7 +175,7 @@ export default function CommentScreen() {
     initialPageParam: '',
   });
 
-  const comments = data?.pages.flatMap((page: any) => page.data || []) || [];
+  const comments = data?.pages.flatMap((page) => page.data || []) || [];
 
   const mutation = useMutation({
     mutationFn: async ({ text: commentText, images }: CommentDraft) => {

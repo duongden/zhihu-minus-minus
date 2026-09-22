@@ -27,6 +27,7 @@ import {
 } from '@/features/rich-content';
 import { useZhihuInfiniteQuery } from '@/hooks/useZhihuInfiniteQuery';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import { getZhihuErrorStatus } from '@/utils/zhihuError';
 
 const slowTransition = SharedTransition.duration(600);
 
@@ -69,8 +70,8 @@ export default function AnswerDetailScreen() {
     queryFn: () => getAnswer(initialId),
     enabled: !!initialId,
     staleTime: RICH_CONTENT_STALE_TIME,
-    retry: (failureCount, err: any) =>
-      err?.response?.status === 404 ? false : failureCount < 2,
+    retry: (failureCount, err) =>
+      getZhihuErrorStatus(err) === 404 ? false : failureCount < 2,
   });
 
   const questionId = propQuestionId || initialAnswer?.question?.id;
@@ -98,8 +99,8 @@ export default function AnswerDetailScreen() {
   const answerIds = useMemo(() => {
     const listIds: string[] =
       answersData?.pages
-        .flatMap((p: any) => p.data)
-        .map((i: any) => i.id.toString()) || [];
+        .flatMap((page) => page.data)
+        .map((item) => item.id.toString()) || [];
 
     let combined = listIds;
     // 确保初始 ID 在列表中
@@ -189,10 +190,9 @@ export default function AnswerDetailScreen() {
 
   const handleShareClick = () => {
     if (!currentId) return;
-    const cachedAnswer = queryClient.getQueryData<any>([
-      'answer-detail',
-      currentId,
-    ]);
+    const cachedAnswer = queryClient.getQueryData<
+      Awaited<ReturnType<typeof getAnswer>>
+    >(['answer-detail', currentId]);
     const actualQid = cachedAnswer?.question?.id || questionId;
     const url = `https://www.zhihu.com/question/${actualQid}/answer/${currentId}`;
 

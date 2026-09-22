@@ -50,11 +50,24 @@ export interface ChatMessage {
 
 export interface ChatMessagesResponse {
   data: ChatMessage[];
-  paging: {
-    is_end: boolean;
-    next: string;
-    previous: string;
-  };
+  paging: ChatPaging;
+}
+
+export interface ChatPaging {
+  is_end: boolean;
+  next: string;
+  previous: string;
+}
+
+interface ChatMessagesApiPayload {
+  messages: ChatMessageInfo[];
+  sender: ChatParticipant;
+  receiver: ChatParticipant;
+}
+
+interface ChatMessagesApiResponse {
+  data: ChatMessagesApiPayload;
+  paging: ChatPaging;
 }
 
 export const getInbox = async (
@@ -76,7 +89,9 @@ export const getMessages = async (
   const url =
     nextUrl ||
     `https://www.zhihu.com/api/v4/chat?sender_id=${senderId}&limit=20`;
-  const { data } = await client.get<any>(url, { signal: options.signal });
+  const { data } = await client.get<ChatMessagesApiResponse>(url, {
+    signal: options.signal,
+  });
 
   // 转换数据结构，使其与 POST 返回的单条消息结构一致，方便统一渲染
   const messages = data?.data?.messages || [];
@@ -84,12 +99,12 @@ export const getMessages = async (
   const receiver = data?.data?.receiver || {};
 
   return {
-    data: messages.map((msg: any) => ({
-      info: msg,
-      sender: sender,
-      receiver: receiver,
+    data: messages.map((info) => ({
+      info,
+      sender,
+      receiver,
     })),
-    paging: data?.paging,
+    paging: data.paging,
   };
 };
 

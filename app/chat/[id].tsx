@@ -17,7 +17,7 @@ import {
   TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getMessages, sendMessage } from '@/api/zhihu';
+import { type ChatMessage, getMessages, sendMessage } from '@/api/zhihu';
 import { BouncyButton } from '@/components/BouncyButton';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { StableAvatar } from '@/components/StableAvatar';
@@ -96,15 +96,10 @@ export default function ChatScreen() {
 
   const messages = data?.pages.flatMap((page) => page.data) || [];
 
-  const renderMessage = ({ item }: { item: any }) => {
-    if (!item) return null;
-
-    // The API might return the message structure slightly differently from the POST response.
-    // If it's unwrapped, item.id exists instead of item.info.id.
-    const messageInfo = item.info || item;
+  const renderMessage = ({ item }: { item: ChatMessage }) => {
+    const messageInfo = item.info;
 
     if (!messageInfo || !messageInfo.id) {
-      console.log('Unrecognized message format:', item);
       return null;
     }
 
@@ -203,9 +198,7 @@ export default function ChatScreen() {
         <FlatList
           ref={flatListRef}
           data={messages}
-          keyExtractor={(item, index) =>
-            item?.info?.id || item?.id || index.toString()
-          }
+          keyExtractor={(item, index) => item.info?.id || index.toString()}
           renderItem={renderMessage}
           inverted={true}
           onEndReached={() => {

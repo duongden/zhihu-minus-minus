@@ -7,7 +7,7 @@ export interface FeedCacheContext {
   feedType: string;
 }
 
-export interface CachedFeedResult<T = any> {
+export interface CachedFeedResult<T = unknown> {
   items: T[];
   nextUrl: string | null;
 }
@@ -19,7 +19,7 @@ interface FeedCacheRow {
 }
 
 class FeedCacheRepository {
-  async getFeedCache<T = any>(
+  async getFeedCache<T = unknown>(
     context: FeedCacheContext,
   ): Promise<CachedFeedResult<T> | null> {
     if (!context.accountKey.trim() || !context.feedType.trim()) return null;
@@ -50,7 +50,7 @@ class FeedCacheRepository {
 
   async saveFeedCache(
     context: FeedCacheContext,
-    items: any[],
+    items: unknown[],
     nextUrl?: string | null,
   ): Promise<void> {
     if (!context.accountKey.trim() || !context.feedType.trim()) return;

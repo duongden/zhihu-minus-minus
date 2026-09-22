@@ -5,6 +5,7 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import type { FeedItem } from '@/api/zhihu/feed';
 import {
   followTopic,
   getBestAnswerers,
@@ -24,6 +25,12 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
 import { useZhihuInfiniteQuery } from '@/hooks/useZhihuInfiniteQuery';
+import type {
+  ZhihuBestAnswerer,
+  ZhihuTopic,
+  ZhihuTopicFeedItem,
+  ZhihuTopicFeedTarget,
+} from '@/types/zhihu';
 import { refreshInfiniteQuery } from '@/utils/query';
 
 export default function TopicDetail() {
@@ -50,19 +57,19 @@ export default function TopicDetail() {
     queryFn: () => getTopic(id),
   });
 
-  const followMutation = useOptimisticToggle({
+  const followMutation = useOptimisticToggle<NonNullable<typeof topic>>({
     queryKey: ['topic', id],
     isActive: topic?.is_following,
     mutationFn: async () => {
       if (topic?.is_following) return unfollowTopic(id);
       return followTopic(id);
     },
-    onUpdateCache: (old: any) => ({
+    onUpdateCache: (old) => ({
       ...old,
       is_following: !old?.is_following,
       followers_count: old?.is_following
-        ? old.followers_count - 1
-        : old.followers_count + 1,
+        ? Math.max(0, (old.followers_count ?? 0) - 1)
+        : (old.followers_count ?? 0) + 1,
     }),
     successMessage: (isActive) => (isActive ? '已取消关注' : '已关注话题'),
   });
@@ -128,8 +135,10 @@ export default function TopicDetail() {
   const items = useMemo(() => {
     if (activeTab === 'structure') return [];
     return (
-      feedData?.pages.flatMap((page: any) =>
-        page.data.map((item: any) => parseTopicFeedItem(item)).filter(Boolean),
+      feedData?.pages.flatMap((page) =>
+        page.data
+          .map((item) => parseTopicFeedItem(item))
+          .filter((item): item is FeedItem => Boolean(item)),
       ) || []
     );
   }, [feedData, activeTab]);
@@ -204,15 +213,17 @@ export default function TopicDetail() {
           className="flex-row border-b bg-transparent"
           style={{ borderColor: Colors[colorScheme].border }}
         >
-          {[
-            // { id: 'hot', name: '讨论' }, // api 404
-            { id: 'top-answers', name: '精华' },
-            { id: 'unanswered', name: '等待回答' },
-            { id: 'structure', name: '话题结构' },
-          ].map((tab) => (
+          {(
+            [
+              // { id: 'hot', name: '讨论' }, // api 404
+              { id: 'top-answers', name: '精华' },
+              { id: 'unanswered', name: '等待回答' },
+              { id: 'structure', name: '话题结构' },
+            ] as const
+          ).map((tab) => (
             <BouncyButton
               key={tab.id}
-              onPress={() => setActiveTab(tab.id as any)}
+              onPress={() => setActiveTab(tab.id)}
               className="flex-1 py-3 items-center"
             >
               <Text
@@ -268,7 +279,7 @@ export default function TopicDetail() {
 
       <FlashList
         data={activeTab === 'structure' ? [] : items}
-        renderItem={({ item }) => <FeedCard item={item as any} />}
+        renderItem={({ item }) => <FeedCard item={item} />}
         ListHeaderComponent={() => (
           <>
             {renderHeader}
@@ -346,9 +357,9 @@ function TopicStructureView({
   hasError,
   onRetry,
 }: {
-  parents: any[];
-  childTopics: any[];
-  bestAnswerers: any[];
+  parents: ZhihuTopic[];
+  childTopics: ZhihuTopic[];
+  bestAnswerers: ZhihuBestAnswerer[];
   isLoading: boolean;
   hasError: boolean;
   onRetry: () => void;
@@ -378,7 +389,7 @@ function TopicStructureView({
             <Text className="text-base font-bold">最佳回答者</Text>
           </View>
           <View className="bg-transparent">
-            {bestAnswerers.map((item: any) => (
+            {bestAnswerers.map((item) => (
               <BouncyButton
                 key={item.member.id}
                 className="flex-row items-center mb-4"
@@ -422,7 +433,7 @@ function TopicStructureView({
         <View className="px-5 py-4 bg-transparent border-b border-gray-100 dark:border-gray-800">
           <Text className="text-base font-bold mb-3">父话题</Text>
           <View className="flex-row flex-wrap bg-transparent">
-            {parents.map((topic: any) => (
+            {parents.map((topic) => (
               <TopicItem key={topic.id} topic={topic} />
             ))}
           </View>
@@ -433,7 +444,7 @@ function TopicStructureView({
         <View className="px-5 py-4 bg-transparent">
           <Text className="text-base font-bold mb-3">子话题</Text>
           <View className="flex-row flex-wrap bg-transparent">
-            {childTopics.map((topic: any) => (
+            {childTopics.map((topic) => (
               <TopicItem key={topic.id} topic={topic} />
             ))}
           </View>
@@ -451,13 +462,13 @@ function TopicStructureView({
   );
 }
 
-function TopicItem({ topic }: { topic: any }) {
+function TopicItem({ topic }: { topic: ZhihuTopic }) {
   const router = useRouter();
   const colorScheme = useColorScheme();
 
   return (
     <BouncyButton
-      onPress={() => router.push(`/topic/${topic.id}` as any)}
+      onPress={() => router.push(`/topic/${topic.id}`)}
       className="flex-row items-center p-3 mb-3 mr-3 rounded-xl border w-[46%]"
       style={{
         borderColor: Colors[colorScheme].border,
@@ -477,9 +488,8 @@ function TopicItem({ topic }: { topic: any }) {
   );
 }
 
-function parseTopicFeedItem(item: any) {
-  const target = item.target || item;
-  if (!target) return null;
+function parseTopicFeedItem(item: ZhihuTopicFeedItem): FeedItem | null {
+  const target: ZhihuTopicFeedTarget = 'target' in item ? item.target : item;
   const type = target.type;
   let appType: 'answers' | 'articles' | 'pins' | 'questions' | null = null;
   if (type === 'answer') appType = 'answers';
@@ -492,9 +502,11 @@ function parseTopicFeedItem(item: any) {
   // Extract content for pins (thoughts)
   let excerpt = target.excerpt || '';
   if (type === 'pin' && Array.isArray(target.content)) {
-    const textContent = target.content.find((c: any) => c.type === 'text');
+    const textContent = target.content.find(
+      (content) => content.type === 'text',
+    );
     excerpt = textContent
-      ? textContent.content
+      ? (textContent.content ?? '')
       : target.content[0]?.content || '';
   }
 
@@ -504,9 +516,9 @@ function parseTopicFeedItem(item: any) {
     (target.topic_thumbnails && target.topic_thumbnails.length > 0
       ? target.topic_thumbnails[0]
       : null) ||
-    (target.content_img?.length > 0 ? target.content_img[0] : null) ||
+    target.content_img?.[0] ||
     (type === 'pin' && Array.isArray(target.content)
-      ? target.content.find((c: any) => c.type === 'image')?.url
+      ? target.content.find((content) => content.type === 'image')?.url
       : null);
 
   return {
@@ -525,7 +537,7 @@ function parseTopicFeedItem(item: any) {
       headline: target.author?.headline || '',
     },
     excerpt: excerpt.replace(/<[^>]+>/g, ''),
-    image: image,
+    image: image ?? null,
     voteCount: getContentVoteCount(appType, target) ?? 0,
     commentCount: target.comment_count || 0,
     voted: getContentVoteState(appType, target) ?? 0,
