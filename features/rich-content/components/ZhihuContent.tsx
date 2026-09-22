@@ -949,7 +949,9 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
         const { is_like, seg_ids, text, pid, startIndex, endIndex } =
           activeSegment;
         const segId = Array.isArray(seg_ids) ? seg_ids[0] : seg_ids;
-        if (!segId) return;
+        if (!segId) {
+          throw new Error('段落缺少有效的 seg_id');
+        }
 
         if (is_like) {
           return unreactAnswerSegment(objectId, segId);
@@ -976,6 +978,9 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
           });
           showToast(activeSegment.is_like ? '已取消赞同' : '已赞同');
         }
+      },
+      onError: () => {
+        showToast('操作失败，请重试');
       },
     });
 

@@ -198,7 +198,7 @@ export default function ChatScreen() {
         <FlatList
           ref={flatListRef}
           data={messages}
-          keyExtractor={(item, index) => item.info.id || index.toString()}
+          keyExtractor={(item, index) => item.info?.id || index.toString()}
           renderItem={renderMessage}
           inverted={true}
           onEndReached={() => {

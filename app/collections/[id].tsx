@@ -73,11 +73,11 @@ export default function CollectionDetailScreen() {
         ) : (
           <>
             <Text className="text-xl font-bold">
-              {collection?.collection.title || '收藏夹内容'}
+              {collection?.collection?.title || '收藏夹内容'}
             </Text>
-            {collection?.collection.description ? (
+            {collection?.collection?.description ? (
               <Text type="secondary" className="text-sm mt-2.5 leading-5">
-                {collection.collection.description}
+                {collection?.collection?.description}
               </Text>
             ) : null}
           </>
