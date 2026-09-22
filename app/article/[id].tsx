@@ -41,6 +41,7 @@ import { useCollectionStore } from '@/store/useCollectionStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import type { ZhihuArticle } from '@/types/zhihu';
 import { formatDate } from '@/utils/date';
+import { getZhihuErrorStatus } from '@/utils/zhihuError';
 
 export default function ArticleDetail() {
   const colorScheme = useColorScheme();
@@ -71,8 +72,8 @@ export default function ArticleDetail() {
     queryKey: ['daily-article', id],
     queryFn: () => getDailyDetail(id as string),
     enabled: source === 'daily',
-    retry: (failureCount, err: any) =>
-      err?.response?.status === 404 ? false : failureCount < 2,
+    retry: (failureCount, err) =>
+      getZhihuErrorStatus(err) === 404 ? false : failureCount < 2,
   });
 
   // 2. 获取知乎普通文章详情
@@ -86,8 +87,8 @@ export default function ArticleDetail() {
     queryFn: () => getArticle(id as string),
     enabled: source !== 'daily',
     staleTime: RICH_CONTENT_STALE_TIME,
-    retry: (failureCount, err: any) =>
-      err?.response?.status === 404 ? false : failureCount < 2,
+    retry: (failureCount, err) =>
+      getZhihuErrorStatus(err) === 404 ? false : failureCount < 2,
   });
 
   const isLoading = isDaily ? dailyLoading : zhihuLoading;
@@ -126,7 +127,7 @@ export default function ArticleDetail() {
   );
 
   const statusCollected = collectionStatus?.data?.some(
-    (item: any) => item.is_favorited,
+    (item) => item.is_favorited,
   );
   const storeCollected = useCollectionStore(
     (state) => state.collectedStatusMap[String(id)],
@@ -146,7 +147,7 @@ export default function ArticleDetail() {
       (isFetchedAfterMount || storeCollectedRef.current === undefined)
     ) {
       const activeCollected =
-        collectionStatus?.data?.some((item: any) => item.is_favorited) || false;
+        collectionStatus?.data?.some((item) => item.is_favorited) || false;
       setCollectedStatus(id as string, activeCollected);
     }
   }, [collectionStatus, id, isFetchedAfterMount, setCollectedStatus]);
@@ -183,7 +184,9 @@ export default function ArticleDetail() {
   const tintColor = useThemeColor({}, 'primary');
   const primaryTransparent = useThemeColor({}, 'primaryTransparent');
 
-  const columnFollowMutation = useOptimisticToggle({
+  const columnFollowMutation = useOptimisticToggle<
+    NonNullable<typeof columnCard>
+  >({
     queryKey: ['article-column-card', id],
     isActive: columnCard?.is_following,
     mutationFn: async () => {
@@ -191,7 +194,7 @@ export default function ArticleDetail() {
       if (columnCard.is_following) return unfollowColumn(columnCard.id);
       return followColumn(columnCard.id);
     },
-    onUpdateCache: (old: any) => ({
+    onUpdateCache: (old) => ({
       ...old,
       is_following: !old?.is_following,
     }),

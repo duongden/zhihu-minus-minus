@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { type Href, useRouter } from 'expo-router';
 import React, { useCallback, useMemo } from 'react';
 import { Image } from 'react-native';
 import Animated, {
@@ -267,7 +267,7 @@ export const DailyList = React.forwardRef<
                 router.push({
                   pathname: `/article/${story.id}`,
                   params: { source: 'daily' },
-                } as any)
+                } as Href)
               }
             >
               <View type="surface" className="flex-row p-3">

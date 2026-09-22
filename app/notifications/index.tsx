@@ -6,6 +6,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
+import type { ComponentProps } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet } from 'react-native';
 import { getNotifications, markAllNotificationsRead } from '@/api/zhihu';
@@ -15,8 +16,20 @@ import { StableAvatar } from '@/components/StableAvatar';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import type {
+  ZhihuNotificationContent,
+  ZhihuNotificationItem,
+} from '@/types/zhihu';
 import { formatDateTime } from '@/utils/date';
 import { refreshInfiniteQuery } from '@/utils/query';
+
+type NotificationIconName = ComponentProps<typeof Ionicons>['name'];
+
+function getNotificationContent(
+  content: ZhihuNotificationItem['content'],
+): ZhihuNotificationContent | undefined {
+  return content && typeof content === 'object' ? content : undefined;
+}
 
 const NOTIFICATION_TYPES = [
   { label: '全部', value: 'all' },
@@ -83,9 +96,9 @@ export default function NotificationScreen() {
 
   const notifications = data?.pages.flatMap((page) => page.data) || [];
 
-  const getIconConfig = (item: any) => {
+  const getIconConfig = (item: ZhihuNotificationItem) => {
     const type = item.type;
-    const verb = item.content?.verb || '';
+    const verb = getNotificationContent(item.content)?.verb || '';
     if (
       verb.includes('赞同') ||
       verb.includes('喜欢') ||
@@ -94,7 +107,7 @@ export default function NotificationScreen() {
     ) {
       const dangerColor = Colors[colorScheme].danger;
       return {
-        name: 'heart',
+        name: 'heart' as NotificationIconName,
         color: dangerColor,
         bg: isDark ? 'rgba(255, 77, 79, 0.15)' : 'rgba(255, 77, 79, 0.1)',
       };
@@ -105,7 +118,7 @@ export default function NotificationScreen() {
       type.includes('COMMENT')
     ) {
       return {
-        name: 'chatbubble-ellipses',
+        name: 'chatbubble-ellipses' as NotificationIconName,
         color: primaryColor,
         bg: `${primaryColor}1a`,
       };
@@ -113,7 +126,7 @@ export default function NotificationScreen() {
     if (verb.includes('关注') || type === 'FOLLOW_USER') {
       const successColor = Colors[colorScheme].success;
       return {
-        name: 'person-add',
+        name: 'person-add' as NotificationIconName,
         color: successColor,
         bg: isDark ? 'rgba(46, 204, 113, 0.15)' : 'rgba(46, 204, 113, 0.1)',
       };
@@ -121,21 +134,22 @@ export default function NotificationScreen() {
     if (verb.includes('邀请') || type.includes('INVITE')) {
       const warningColor = Colors[colorScheme].warning;
       return {
-        name: 'mail-open',
+        name: 'mail-open' as NotificationIconName,
         color: warningColor,
         bg: isDark ? 'rgba(255, 152, 0, 0.15)' : 'rgba(255, 152, 0, 0.1)',
       };
     }
     return {
-      name: 'notifications',
+      name: 'notifications' as NotificationIconName,
       color: Colors[colorScheme].textSecondary,
       bg: Colors[colorScheme].backgroundTertiary,
     };
   };
 
-  const renderItem = ({ item }: { item: any }) => {
-    const actor = item.content?.actors?.[0] || item.actors?.[0] || {};
-    const target = item.content?.target || item.target || {};
+  const renderItem = ({ item }: { item: ZhihuNotificationItem }) => {
+    const content = getNotificationContent(item.content);
+    const actor = content?.actors?.[0] || item.actors?.[0] || {};
+    const target = content?.target || item.target || {};
     const time = formatDateTime(item.create_time);
     const iconConfig = getIconConfig(item);
 
@@ -147,7 +161,7 @@ export default function NotificationScreen() {
           borderBottomColor: borderColor,
         }}
         onPress={() => {
-          const link = item.content?.target?.link;
+          const link = content?.target?.link;
           if (link) {
             if (link.includes('/answer/')) {
               const id = link.split('/answer/')[1];
@@ -173,11 +187,7 @@ export default function NotificationScreen() {
           className="w-[52px] h-[52px] rounded-full justify-center items-center"
           style={{ backgroundColor: iconConfig.bg }}
         >
-          <Ionicons
-            name={iconConfig.name as any}
-            size={28}
-            color={iconConfig.color}
-          />
+          <Ionicons name={iconConfig.name} size={28} color={iconConfig.color} />
         </View>
 
         <View className="ml-[15px] flex-1 bg-transparent">
@@ -198,23 +208,23 @@ export default function NotificationScreen() {
             </Text>
           </View>
           <Text className="text-sm leading-5" numberOfLines={3}>
-            {item.content?.verb ? (
+            {content?.verb ? (
               <Text style={{ color: iconConfig.color, fontWeight: 'bold' }}>
-                {item.content.verb}{' '}
+                {content.verb}{' '}
               </Text>
             ) : null}
-            {item.content?.text ||
-              item.content?.title ||
-              item.content?.sub_text ||
+            {content?.extend?.text ||
+              content?.target?.text ||
+              item.target?.content ||
               (typeof item.content === 'string' ? item.content : '新的动态')}
           </Text>
-          {item.content?.target?.text && (
+          {content?.target?.text && (
             <View
               className="mt-2 p-2 rounded"
               style={{ backgroundColor: `${borderColor}20` }}
             >
               <Text numberOfLines={1} type="secondary" className="text-xs">
-                {item.content.target.text}
+                {content.target.text}
               </Text>
             </View>
           )}

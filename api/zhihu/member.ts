@@ -16,18 +16,32 @@ const MEMBER_FALLBACK_INCLUDE =
   'id,url_token,name,avatar_url,follower_count,following_count,headline,cover_url,description,answer_count,articles_count,question_count,pins_count,voteup_count,is_following,mutual_followees_count';
 
 export interface ZhihuMember extends ZhihuAuthor {
+  headline_render?: string;
   answer_count?: number;
   articles_count?: number;
   question_count?: number;
   pins_count?: number;
+  project_count?: number;
   follower_count?: number;
+  follower_count_text?: string;
+  follower_count_num?: string;
+  follower_count_unit?: string;
   following_count?: number;
+  following_count_num?: string;
+  following_count_unit?: string;
   cover_url?: string;
   description?: string;
   voteup_count?: number;
   thanked_count?: number;
   favorited_count?: number;
   mutual_followees_count?: number;
+  available_medals_count?: number;
+  org_verify_status?: null;
+  is_realname?: boolean;
+  is_new_rename?: boolean;
+  has_applying_column?: boolean;
+  has_agent_content?: boolean;
+  ai_assistant_info?: null;
 }
 
 export interface ZhihuMemberListItem extends ZhihuMember {

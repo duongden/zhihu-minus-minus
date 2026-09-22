@@ -1,5 +1,6 @@
 import { FontAwesome6, Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import type { ComponentProps } from 'react';
 import React, { useEffect, useState } from 'react';
 import {
   type LayoutRectangle,
@@ -267,7 +268,9 @@ export function CustomContextMenu({
                     />
                   ) : (
                     <Ionicons
-                      name={option.icon as any}
+                      name={
+                        option.icon as ComponentProps<typeof Ionicons>['name']
+                      }
                       size={20}
                       color={
                         option.isDestructive

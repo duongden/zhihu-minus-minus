@@ -12,6 +12,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useCollectionStore } from '@/store/useCollectionStore';
 import { updateContentInteractionCaches } from '@/utils/contentCache';
 import { showToast as baseShowToast } from '@/utils/toast';
+import { getZhihuErrorMessage } from '@/utils/zhihuError';
 
 export function useCollectionAction() {
   const router = useRouter();
@@ -60,8 +61,8 @@ export function useCollectionAction() {
       const folderName = res?.collection?.title || '默认收藏夹';
       showToast(variables.id, variables.type, `已收藏到「${folderName}」`);
     },
-    onError: (err: any) => {
-      baseShowToast(err.response?.data?.error?.message || '收藏失败');
+    onError: (err: unknown) => {
+      baseShowToast(getZhihuErrorMessage(err) || '收藏失败');
     },
   });
 
@@ -80,10 +81,10 @@ export function useCollectionAction() {
           : await getArticleCollectionStatus(id);
 
       const favoritedFolders =
-        statusRes?.data?.filter((item: any) => item.is_favorited) || [];
+        statusRes?.data?.filter((item) => item.is_favorited) || [];
 
       // 2. 从所有收藏了它的收藏夹中移除
-      const promises = favoritedFolders.map((folder: any) => {
+      const promises = favoritedFolders.map((folder) => {
         if (type === 'answer') {
           return removeFromCollection(folder.id, id);
         } else {
@@ -112,11 +113,13 @@ export function useCollectionAction() {
         queryKey: ['article-collection-status', idStr],
       });
 
-      const foldersStr = removedFolders.map((f: any) => f.title).join('、');
+      const foldersStr = removedFolders
+        .map((folder) => folder.title)
+        .join('、');
       baseShowToast(foldersStr ? `已从「${foldersStr}」中移出` : '已取消收藏');
     },
-    onError: (err: any) => {
-      baseShowToast(err.response?.data?.error?.message || '取消收藏失败');
+    onError: (err: unknown) => {
+      baseShowToast(getZhihuErrorMessage(err) || '取消收藏失败');
     },
   });
 
@@ -126,7 +129,7 @@ export function useCollectionAction() {
     isCurrentlyCollected: boolean,
   ) => {
     if (!cookies) {
-      router.push('/login' as any);
+      router.push('/login');
       return;
     }
     if (isCurrentlyCollected) {

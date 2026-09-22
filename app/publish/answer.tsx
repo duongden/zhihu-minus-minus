@@ -9,6 +9,9 @@ import { BouncyButton } from '@/components/BouncyButton';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import type { ZhihuInvitationItem, ZhihuQuestion } from '@/types/zhihu';
+
+type PublishQuestionItem = ZhihuInvitationItem | ZhihuQuestion;
 
 export default function PublishAnswerScreen() {
   const insets = useSafeAreaInsets();
@@ -41,9 +44,9 @@ export default function PublishAnswerScreen() {
     enabled: activeTab === 'invite',
   });
 
-  const renderQuestionItem = ({ item }: { item: any }) => {
+  const renderQuestionItem = ({ item }: { item: PublishQuestionItem }) => {
     // Check if it's an invitation item
-    if (item.content?.text) {
+    if ('content' in item && item.content?.text) {
       const {
         title: inviter,
         sub_title: inviteMsg,
@@ -76,13 +79,19 @@ export default function PublishAnswerScreen() {
       );
     }
 
-    const question = item.question || item.target || item.extra?.data;
+    const question:
+      | Pick<ZhihuQuestion, 'id' | 'title' | 'follow_num'>
+      | undefined =
+      'id' in item && 'title' in item
+        ? item
+        : item.question || item.target || item.extra?.data;
     if (!question) return null;
 
-    const reaction = item.reaction || {};
+    const reaction = 'reaction' in item ? item.reaction || {} : {};
     const subText = reaction.pv
       ? `${reaction.pv} 浏览 · ${reaction.follow_num} 关注 · ${reaction.answer_num} 回答`
-      : item.target_source?.sub_text || `${question.follow_num || 0} 关注`;
+      : ('target_source' in item ? item.target_source?.sub_text : undefined) ||
+        `${question.follow_num || 0} 关注`;
 
     return (
       <BouncyButton

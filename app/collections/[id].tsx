@@ -9,6 +9,7 @@ import { QueryErrorView } from '@/components/QueryErrorView';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import type { ZhihuCollectionItem } from '@/types/zhihu';
 
 export default function CollectionDetailScreen() {
   const colorScheme = useColorScheme();
@@ -72,11 +73,11 @@ export default function CollectionDetailScreen() {
         ) : (
           <>
             <Text className="text-xl font-bold">
-              {collection?.title || '收藏夹内容'}
+              {collection?.collection.title || '收藏夹内容'}
             </Text>
-            {collection?.description ? (
+            {collection?.collection.description ? (
               <Text type="secondary" className="text-sm mt-2.5 leading-5">
-                {collection.description}
+                {collection.collection.description}
               </Text>
             ) : null}
           </>
@@ -85,7 +86,7 @@ export default function CollectionDetailScreen() {
 
       <FlashList
         data={contents}
-        renderItem={({ item }: { item: any }) => {
+        renderItem={({ item }: { item: ZhihuCollectionItem }) => {
           const content = item.content;
           if (!content) return null;
           let type: 'answer' | 'article' | 'pin' = 'answer';

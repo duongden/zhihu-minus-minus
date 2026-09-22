@@ -1,11 +1,16 @@
-import type { ZhihuSearchResponse } from '../../types/zhihu';
+import type {
+  ZhihuCreatorQuestionSearchResponse,
+  ZhihuInvitationResponse,
+  ZhihuSearchResponse,
+  ZhihuSearchSuggestResponse,
+} from '../../types/zhihu';
 import apiClient, { type ApiRequestOptions } from '../client';
 
 export const getSearchSuggest = async (
   query: string,
   options: ApiRequestOptions = {},
-) => {
-  const res = await apiClient.get(
+): Promise<ZhihuSearchSuggestResponse> => {
+  const res = await apiClient.get<ZhihuSearchSuggestResponse>(
     `/search/suggest?q=${encodeURIComponent(query)}`,
     { signal: options.signal },
   );
@@ -64,21 +69,27 @@ export const searchContent = async (
   if (options?.restricted_value)
     params.append('restricted_value', options.restricted_value);
 
-  const res = await apiClient.get(`/search_v3?${params.toString()}`, {
-    signal: options?.signal,
-  });
+  const res = await apiClient.get<ZhihuSearchResponse>(
+    `/search_v3?${params.toString()}`,
+    { signal: options?.signal },
+  );
   return res.data;
 };
 
-export const searchCreatorQuestions = async (query: string) => {
-  const res = await apiClient.get(
+export const searchCreatorQuestions = async (
+  query: string,
+): Promise<ZhihuCreatorQuestionSearchResponse> => {
+  const res = await apiClient.get<ZhihuCreatorQuestionSearchResponse>(
     `/creators/search/query?query=${encodeURIComponent(query)}`,
   );
   return res.data;
 };
 
-export const getInvitedQuestions = async (offset = 0, limit = 20) => {
-  const res = await apiClient.get(
+export const getInvitedQuestions = async (
+  offset = 0,
+  limit = 20,
+): Promise<ZhihuInvitationResponse> => {
+  const res = await apiClient.get<ZhihuInvitationResponse>(
     `/notifications/v3/timeline/entry/invite?invite_with_time_slice=1&limit=${limit}&offset=${offset}&invite_domain_score_ab=1`,
   );
   return res.data;

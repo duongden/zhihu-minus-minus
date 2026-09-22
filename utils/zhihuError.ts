@@ -4,6 +4,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
+export function getZhihuErrorStatus(error: unknown): number | undefined {
+  if (!isRecord(error) || !isRecord(error.response)) return undefined;
+  return typeof error.response.status === 'number'
+    ? error.response.status
+    : undefined;
+}
+
 export function getZhihuErrorMessage(error: unknown): string {
   if (isRecord(error) && isRecord(error.response)) {
     const status = error.response.status;

@@ -37,6 +37,7 @@ import { useReadingProgress } from '@/hooks/useReadingProgress';
 import { useScrollHeaderAnim } from '@/hooks/useScrollAnimation';
 import { useCollectionStore } from '@/store/useCollectionStore';
 import { formatDate } from '@/utils/date';
+import { getZhihuErrorMessage, getZhihuErrorStatus } from '@/utils/zhihuError';
 
 const _slowTransition = SharedTransition.duration(600);
 
@@ -88,8 +89,8 @@ export const AnswerDetailView = ({
     queryFn: () => getAnswer(id),
     enabled: isFocused,
     staleTime: RICH_CONTENT_STALE_TIME,
-    retry: (failureCount, err: any) =>
-      err?.response?.status === 404 ? false : failureCount < 2,
+    retry: (failureCount, err) =>
+      getZhihuErrorStatus(err) === 404 ? false : failureCount < 2,
   });
 
   const readingProgress = useReadingProgress({
@@ -151,11 +152,8 @@ export const AnswerDetailView = ({
       Alert.alert('删除成功', '你的回答已删除喵！');
       router.back();
     },
-    onError: (err: any) =>
-      Alert.alert(
-        '删除失败',
-        err.response?.data?.error?.message || '无法删除回答',
-      ),
+    onError: (err: unknown) =>
+      Alert.alert('删除失败', getZhihuErrorMessage(err) || '无法删除回答'),
   });
 
   const handleDelete = () => {
@@ -181,7 +179,7 @@ export const AnswerDetailView = ({
   );
 
   const statusCollected = collectionStatus?.data?.some(
-    (item: any) => item.is_favorited,
+    (item) => item.is_favorited,
   );
 
   const storeCollected = useCollectionStore(
@@ -211,7 +209,7 @@ export const AnswerDetailView = ({
       (isFetchedAfterMount || storeCollectedRef.current === undefined)
     ) {
       const activeCollected =
-        collectionStatus?.data?.some((item: any) => item.is_favorited) || false;
+        collectionStatus?.data?.some((item) => item.is_favorited) || false;
       setCollectedStatus(id, activeCollected);
     }
   }, [collectionStatus, id, isFetchedAfterMount, setCollectedStatus]);
@@ -369,7 +367,7 @@ export const AnswerDetailView = ({
               正在斟酌文字...喵
             </Text>
           </View>
-        ) : (isError || (error as any)?.response?.status === 404) && !answer ? (
+        ) : (isError || getZhihuErrorStatus(error) === 404) && !answer ? (
           <View className="h-[300px] justify-center items-center px-6 bg-transparent">
             <Ionicons name="compass-outline" size={48} color={secondaryColor} />
             <Text className="text-base font-bold mt-4 mb-2 text-foreground dark:text-foreground-dark">

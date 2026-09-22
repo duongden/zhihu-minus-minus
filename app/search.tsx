@@ -12,15 +12,29 @@ import {
   TextInput,
 } from 'react-native';
 import { getSearchSuggest, searchContent } from '@/api/zhihu';
+import type { FeedItem } from '@/api/zhihu/feed';
 import { BouncyButton } from '@/components/BouncyButton';
 import { FeedCard } from '@/components/FeedCard';
 import { BottomSheet } from '@/components/overlays/BottomSheet';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { Text, useThemeColor, View } from '@/components/Themed';
+import type { UserCardMember } from '@/components/UserCard';
 import { UserCard } from '@/components/UserCard';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useSearchStore } from '@/store/useSearchStore';
+import type {
+  ZhihuSearchResultItem,
+  ZhihuSearchSuggestItem,
+} from '@/types/zhihu';
+
+type ParsedPeople = Omit<UserCardMember, 'id' | 'name' | 'headline'> & {
+  id: string;
+  type: 'peoples';
+  name: React.ReactNode;
+  headline?: React.ReactNode;
+};
+type SearchListItem = FeedItem | ZhihuSearchResultItem | ParsedPeople;
 
 /** 转义正则元字符，避免用户输入（如 "C++"）构造出非法正则 */
 function escapeRegExp(str: string): string {
@@ -197,7 +211,9 @@ export default function SearchScreen() {
     );
   };
 
-  const parseSearchResult = (item: any) => {
+  const parseSearchResult = (
+    item: ZhihuSearchResultItem,
+  ): FeedItem | ParsedPeople | null => {
     const obj = item.object;
     if (!obj) return null;
     const highlight = item.highlight || {};
@@ -205,15 +221,26 @@ export default function SearchScreen() {
       return {
         ...obj,
         type: 'peoples',
-        name: highlight.title ? HighlightText(highlight.title) : obj.name,
+        id: String(obj.id),
+        avatar_url: obj.avatar_url || '',
+        name: highlight.title ? HighlightText(highlight.title) : obj.name || '',
         headline: highlight.description
           ? HighlightText(highlight.description)
-          : obj.headline,
+          : obj.headline || undefined,
       };
     }
     return {
-      id: obj.id ?? obj.question?.id ?? '',
-      type: `${obj.type}s`,
+      id: String(obj.id ?? obj.question?.id ?? ''),
+      type:
+        obj.type === 'answer'
+          ? 'answers'
+          : obj.type === 'article'
+            ? 'articles'
+            : obj.type === 'pin'
+              ? 'pins'
+              : obj.type === 'question'
+                ? 'questions'
+                : 'videos',
       title: highlight.title
         ? HighlightText(highlight.title)
         : obj.question?.name || obj.title || '无标题',
@@ -225,12 +252,12 @@ export default function SearchScreen() {
       voteCount: obj.voteup_count || 0,
       commentCount: obj.comment_count || 0,
       author: {
-        id: obj.author?.id,
+        id: String(obj.author?.id || ''),
         name: obj.author?.name || '匿名用户',
-        avatar: obj.author?.avatar_url,
+        avatar: obj.author?.avatar_url || '',
         url_token: obj.author?.url_token,
       },
-      questionId: obj.question?.id || obj.id,
+      questionId: String(obj.question?.id || obj.id || ''),
       voted: obj.relationship?.voting || 0,
     };
   };
@@ -238,13 +265,13 @@ export default function SearchScreen() {
   const flattenedResults =
     searchResults?.pages.flatMap((page) =>
       page.data
-        ?.map((item: any) =>
+        ?.map((item) =>
           searchType === 'people' ? item : parseSearchResult(item),
         )
-        .filter(Boolean),
+        .filter((item): item is SearchListItem => Boolean(item)),
     ) || [];
 
-  const renderSuggestion = ({ item }: { item: any }) => {
+  const renderSuggestion = ({ item }: { item: ZhihuSearchSuggestItem }) => {
     const text = item.query;
     if (!query) return null;
     const parts = text.split(new RegExp(`(${escapeRegExp(query)})`, 'gi'));
@@ -637,12 +664,18 @@ export default function SearchScreen() {
         <FlashList
           data={flattenedResults}
           key={searchType}
-          renderItem={({ item }: { item: any }) => {
-            if (searchType === 'people') {
-              const userObj = item.object || item;
-              const highlight = item.highlight || {};
-              const displayUser = {
+          renderItem={({ item }: { item: SearchListItem }) => {
+            if (
+              searchType === 'people' &&
+              ('object' in item || item.type === 'peoples')
+            ) {
+              const userObj = 'object' in item ? item.object : item;
+              const highlight = 'highlight' in item ? item.highlight : {};
+              const displayUser: UserCardMember = {
                 ...userObj,
+                id: String(userObj.id),
+                type: userObj.type || 'people',
+                avatar_url: userObj.avatar_url || '',
                 name:
                   typeof userObj.name === 'string'
                     ? HighlightText(highlight.title || userObj.name || '')
@@ -657,6 +690,7 @@ export default function SearchScreen() {
               return <UserCard user={displayUser} />;
             }
             if (item.type === 'peoples') return <UserCard user={item} />;
+            if ('object' in item) return null;
             return <FeedCard item={item} />;
           }}
           {...({
