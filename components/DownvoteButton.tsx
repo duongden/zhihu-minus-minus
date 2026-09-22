@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import React, { useState } from 'react';
 import { ActivityIndicator } from 'react-native';
@@ -21,6 +20,7 @@ import { getZhihuErrorMessage } from '@/utils/zhihuError';
 import { BouncyButton } from './BouncyButton';
 import { useThemeColor } from './Themed';
 import { useColorScheme } from './useColorScheme';
+import { VoteTriangle } from './VoteTriangle';
 
 export const DownvoteButton = ({
   id,
@@ -111,9 +111,8 @@ export const DownvoteButton = ({
         />
       ) : (
         <Animated.View style={animatedStyle}>
-          <Ionicons
-            name={isDownvoted ? 'caret-down' : 'caret-down-outline'}
-            size={variant === 'minimal' ? 28 : 20}
+          <VoteTriangle
+            active={isDownvoted}
             color={
               variant === 'minimal'
                 ? isDownvoted
@@ -123,6 +122,8 @@ export const DownvoteButton = ({
                   ? colors[colorScheme].textInverse
                   : tintColor
             }
+            direction="down"
+            size={variant === 'minimal' ? 24 : 20}
           />
         </Animated.View>
       )}

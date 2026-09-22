@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import React, { useState } from 'react';
 import { ActivityIndicator } from 'react-native';
@@ -22,6 +21,7 @@ import { getZhihuErrorMessage } from '@/utils/zhihuError';
 import { BouncyButton } from './BouncyButton';
 import { Text, useThemeColor } from './Themed';
 import { useColorScheme } from './useColorScheme';
+import { VoteTriangle } from './VoteTriangle';
 
 export const LikeButton = ({
   id,
@@ -156,9 +156,8 @@ export const LikeButton = ({
             { flexDirection: 'row', alignItems: 'center' },
           ]}
         >
-          <Ionicons
-            name={isUpvoted ? 'caret-up' : 'caret-up-outline'}
-            size={variant === 'default' ? 18 : variant === 'minimal' ? 28 : 16}
+          <VoteTriangle
+            active={isUpvoted}
             color={
               variant === 'minimal'
                 ? isUpvoted
@@ -172,6 +171,8 @@ export const LikeButton = ({
                     ? tintColor
                     : colors[colorScheme].iconMuted
             }
+            direction="up"
+            size={variant === 'default' ? 18 : variant === 'minimal' ? 24 : 16}
           />
           {variant === 'minimal' && (
             <Text
