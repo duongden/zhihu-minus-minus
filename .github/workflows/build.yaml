@@ -3,8 +3,16 @@ name: Build Android + iOS and Release
 on:
   workflow_dispatch:
     inputs:
+      build_mode:
+        description: Build artifacts only, or create a GitHub Release
+        required: true
+        default: build
+        type: choice
+        options:
+          - build
+          - release
       publish_release:
-        description: Publish immediately instead of creating a draft release
+        description: Publish immediately instead of creating a draft release (release mode only)
         required: true
         default: false
         type: boolean
@@ -40,6 +48,7 @@ jobs:
           cache: npm
 
       - name: Validate release metadata
+        if: ${{ inputs.build_mode == 'release' }}
         run: |
           if [ "$GITHUB_REF" != "refs/heads/main" ]; then
             echo "Releases must be created from the main branch"
@@ -292,6 +301,7 @@ jobs:
 
   release:
     name: Create GitHub Release
+    if: ${{ inputs.build_mode == 'release' }}
     needs:
       - build-android
       - build-ios
