@@ -17,7 +17,7 @@
 4. 如果启用 Sentry，设置 `EXPO_PUBLIC_SENTRY_DSN`。DSN 是运行时项目标识，不是 Sentry API 令牌。
 5. 运行 `npx expo prebuild`，然后使用 `npx expo run:android`、`npx expo run:ios` 或 EAS Build。Expo Go 不包含这些原生模块。
 
-未配置 Firebase 文件或环境变量时，Analytics 会退化为空实现；未配置 Sentry DSN 时，Sentry 也不会初始化，应用仍可开发和运行。
+`EXPO_PUBLIC_FIREBASE_ANALYTICS_ENABLED` 未设为 `true` 时，prebuild 会跳过 Firebase config plugins，Analytics 也会退化为空实现；因此本地无需准备两个 Firebase 配置文件即可开发、安装 CocoaPods 或生成原生项目。Firebase 原生依赖仍由 React Native 自动链接，但 iOS prebuild 会独立写入 `$RNFirebaseDisableSPM = true`，使其与项目的 static linkage 兼容，且运行时不会启用 Analytics。正式构建启用该变量后仍会使用原有插件和配置文件。未配置 Sentry DSN 时，Sentry 也不会初始化，应用仍可开发和运行。
 
 ## 隐私开关
 

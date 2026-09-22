@@ -249,6 +249,7 @@
       "expo-router",
       "./plugins/withAppIcons",
       "./plugins/withAndroidAbiSplits",
+      "./plugins/withIosFirebaseCocoaPods",
       "expo-secure-store",
       [
         "expo-build-properties",
