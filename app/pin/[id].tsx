@@ -220,13 +220,15 @@ export default function PinDetailScreen() {
             />
             <View className="ml-3 flex-1 bg-transparent">
               <Text className="text-base font-bold">{pin?.author?.name}</Text>
-              <Text
-                type="secondary"
-                className="text-[13px] mt-0.5"
-                numberOfLines={1}
-              >
-                {pin?.author?.headline}
-              </Text>
+              {pin?.author?.headline ? (
+                <Text
+                  type="secondary"
+                  className="text-[13px] mt-0.5"
+                  numberOfLines={1}
+                >
+                  {pin.author.headline}
+                </Text>
+              ) : null}
             </View>
           </BouncyButton>
           <BouncyButton

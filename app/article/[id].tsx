@@ -389,13 +389,15 @@ export default function ArticleDetail() {
                   <Text className="text-base font-bold">
                     {data.author?.name}
                   </Text>
-                  <Text
-                    type="secondary"
-                    className="text-[13px] text-tertiary dark:text-tertiary-dark mt-0.5"
-                    numberOfLines={1}
-                  >
-                    {data.author?.headline}
-                  </Text>
+                  {data.author?.headline ? (
+                    <Text
+                      type="secondary"
+                      className="text-[13px] text-tertiary dark:text-tertiary-dark mt-0.5"
+                      numberOfLines={1}
+                    >
+                      {data.author.headline}
+                    </Text>
+                  ) : null}
                 </View>
               </BouncyButton>
               <BouncyButton

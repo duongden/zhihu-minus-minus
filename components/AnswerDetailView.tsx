@@ -324,13 +324,15 @@ export const AnswerDetailView = ({
               <Text className="text-[16px] font-bold" numberOfLines={1}>
                 {answer?.author?.name}
               </Text>
-              <Text
-                type="secondary"
-                className="text-[13px] mt-0.5"
-                numberOfLines={1}
-              >
-                {answer?.author?.headline}
-              </Text>
+              {answer?.author?.headline ? (
+                <Text
+                  type="secondary"
+                  className="text-[13px] mt-0.5"
+                  numberOfLines={1}
+                >
+                  {answer.author.headline}
+                </Text>
+              ) : null}
             </View>
           </BouncyButton>
           <BouncyButton

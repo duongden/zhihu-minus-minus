@@ -423,13 +423,15 @@ const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
                 <Text className="text-[15px] font-bold">
                   {item.author?.name}
                 </Text>
-                <Text
-                  type="secondary"
-                  className="text-xs mt-0.5"
-                  numberOfLines={1}
-                >
-                  {item.author?.headline}
-                </Text>
+                {item.author?.headline ? (
+                  <Text
+                    type="secondary"
+                    className="text-xs mt-0.5"
+                    numberOfLines={1}
+                  >
+                    {item.author.headline}
+                  </Text>
+                ) : null}
               </View>
             </BouncyButton>
             {!item.relationship?.is_author && (
