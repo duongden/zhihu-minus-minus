@@ -23,6 +23,7 @@ import { BouncyButton } from '@/components/BouncyButton';
 import { DownvoteButton } from '@/components/DownvoteButton';
 import { LikeButton } from '@/components/LikeButton';
 import { ActionSheet } from '@/components/overlays/ActionSheet';
+import { ReadingProgressNotice } from '@/components/ReadingProgressNotice';
 import { ShareMenu } from '@/components/ShareMenu';
 import { StableAvatar } from '@/components/StableAvatar';
 import { Text, ThemedIcon, useThemeColor, View } from '@/components/Themed';
@@ -32,6 +33,7 @@ import Colors from '@/constants/Colors';
 import { RICH_CONTENT_STALE_TIME, ZhihuContent } from '@/features/rich-content';
 import { useCollectionAction } from '@/hooks/useCollectionAction';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
+import { useReadingProgress } from '@/hooks/useReadingProgress';
 import { useScrollHeaderAnim } from '@/hooks/useScrollAnimation';
 import { useCollectionStore } from '@/store/useCollectionStore';
 import { formatDate } from '@/utils/date';
@@ -62,25 +64,6 @@ export const AnswerDetailView = ({
   const _textColor = Colors[colorScheme].text;
 
   const scrollViewRef = useRef<NativeScrollView>(null);
-  const { headerVisible, handleScroll } = useScrollHeaderAnim(
-    300,
-    onScroll,
-    100,
-    scrollY,
-  );
-
-  const headerAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: headerVisible.value,
-    transform: [
-      {
-        translateY: interpolate(
-          headerVisible.value,
-          [0, 1],
-          [-insets.top - 50, 0],
-        ),
-      },
-    ],
-  }));
 
   const [isLiked, setIsLiked] = React.useState(false);
   const [menuVisible, setMenuVisible] = React.useState(false);
@@ -108,6 +91,39 @@ export const AnswerDetailView = ({
     retry: (failureCount, err: any) =>
       err?.response?.status === 404 ? false : failureCount < 2,
   });
+
+  const readingProgress = useReadingProgress({
+    contentKey: `answer:${id}`,
+    enabled: isFocused,
+    ready: Boolean(answer),
+    scrollRef: scrollViewRef,
+  });
+  const handleTrackedScroll = React.useCallback(
+    (offset: number) => {
+      onScroll?.(offset);
+      readingProgress.onScroll(offset);
+    },
+    [onScroll, readingProgress.onScroll],
+  );
+  const { headerVisible, handleScroll } = useScrollHeaderAnim(
+    300,
+    handleTrackedScroll,
+    100,
+    scrollY,
+  );
+
+  const headerAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: headerVisible.value,
+    transform: [
+      {
+        translateY: interpolate(
+          headerVisible.value,
+          [0, 1],
+          [-insets.top - 50, 0],
+        ),
+      },
+    ],
+  }));
 
   const followMutation = useOptimisticToggle<AnswerDetail>({
     queryKey: ['answer-detail', id],
@@ -286,6 +302,10 @@ export const AnswerDetailView = ({
         }}
         scrollEventThrottle={16}
         onScroll={handleScroll}
+        onLayout={readingProgress.onLayout}
+        onContentSizeChange={readingProgress.onContentSizeChange}
+        onScrollEndDrag={readingProgress.commitProgress}
+        onMomentumScrollEnd={readingProgress.commitProgress}
         contentContainerStyle={{
           paddingTop: insets.top + 76,
           paddingBottom: 100 + insets.bottom,
@@ -412,6 +432,12 @@ export const AnswerDetailView = ({
           </View>
         )}
       </Reanimated.ScrollView>
+
+      <ReadingProgressNotice
+        visible={readingProgress.restoredOffset !== null}
+        onBackToTop={readingProgress.scrollToTop}
+        onDismiss={readingProgress.dismissRestoreNotice}
+      />
 
       {/* Footer Actions */}
       <View

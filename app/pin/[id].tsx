@@ -12,6 +12,7 @@ import { getContentVoteCount, getContentVoteState } from '@/api/zhihu/voters';
 import { BouncyButton } from '@/components/BouncyButton';
 import { LikeButton } from '@/components/LikeButton';
 import { QueryErrorView } from '@/components/QueryErrorView';
+import { ReadingProgressNotice } from '@/components/ReadingProgressNotice';
 import { ShareMenu } from '@/components/ShareMenu';
 import { StableAvatar } from '@/components/StableAvatar';
 import { Text, ThemedIcon, useThemeColor, View } from '@/components/Themed';
@@ -20,6 +21,7 @@ import { VoterListModal } from '@/components/VoterListModal';
 import Colors from '@/constants/Colors';
 import { RICH_CONTENT_STALE_TIME, ZhihuContent } from '@/features/rich-content';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
+import { useReadingProgress } from '@/hooks/useReadingProgress';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import type { ZhihuPin, ZhihuPinPoll } from '@/types/zhihu';
 import { formatDateTime } from '@/utils/date';
@@ -42,6 +44,7 @@ export default function PinDetailScreen() {
   const [pollVotingOptionId, setPollVotingOptionId] = React.useState<
     string | null
   >(null);
+  const scrollViewRef = React.useRef<ScrollView>(null);
 
   const {
     data: pin,
@@ -54,6 +57,13 @@ export default function PinDetailScreen() {
     staleTime: RICH_CONTENT_STALE_TIME,
     retry: (failureCount, err: any) =>
       err?.response?.status === 404 ? false : failureCount < 2,
+  });
+
+  const readingProgress = useReadingProgress({
+    contentKey: `pin:${String(id ?? '')}`,
+    enabled: Boolean(id),
+    ready: Boolean(pin),
+    scrollRef: scrollViewRef,
   });
 
   const poll = pin?.bottom_poll?.voting as ZhihuPinPoll | undefined;
@@ -186,8 +196,16 @@ export default function PinDetailScreen() {
       />
 
       <ScrollView
+        ref={scrollViewRef}
         className="flex-1"
         scrollEventThrottle={16}
+        onScroll={(event) =>
+          readingProgress.onScroll(event.nativeEvent.contentOffset.y)
+        }
+        onLayout={readingProgress.onLayout}
+        onContentSizeChange={readingProgress.onContentSizeChange}
+        onScrollEndDrag={readingProgress.commitProgress}
+        onMomentumScrollEnd={readingProgress.commitProgress}
         contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
       >
         {/* 作者信息栏 */}
@@ -263,6 +281,12 @@ export default function PinDetailScreen() {
           </Text>
         </View>
       </ScrollView>
+
+      <ReadingProgressNotice
+        visible={readingProgress.restoredOffset !== null}
+        onBackToTop={readingProgress.scrollToTop}
+        onDismiss={readingProgress.dismissRestoreNotice}
+      />
 
       {/* 底部交互栏 */}
       <View

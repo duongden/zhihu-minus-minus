@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import type { ReadingProgressEntry } from '@/utils/readingProgress';
 
 // 适配器：让 Zustand 能用上 Expo 的安全存储
 const secureStorage = {
@@ -10,15 +11,11 @@ const secureStorage = {
   removeItem: (name: string) => SecureStore.deleteItemAsync(name),
 };
 
-interface ProgressEntry {
-  offset: number;
-  updatedAt: number;
-}
-
 interface ProgressState {
-  progress: Record<string, ProgressEntry>;
-  saveProgress: (id: string, offset: number) => void;
-  getProgress: (id: string) => number;
+  progress: Record<string, ReadingProgressEntry>;
+  saveProgress: (id: string, entry: ReadingProgressEntry) => void;
+  removeProgress: (id: string) => void;
+  getProgress: (id: string) => ReadingProgressEntry | undefined;
   clearProgress: () => void;
 }
 
@@ -29,12 +26,12 @@ export const useProgressStore = create<ProgressState>()(
     (set, get) => ({
       progress: {},
 
-      saveProgress: (id, offset) => {
+      saveProgress: (id, entry) => {
         if (!id) return;
         const { progress } = get();
         const newProgress = {
           ...progress,
-          [id]: { offset, updatedAt: Date.now() },
+          [id]: entry,
         };
 
         // 限制存储条数：保留最近更新的 100 条
@@ -52,9 +49,16 @@ export const useProgressStore = create<ProgressState>()(
         set({ progress: newProgress });
       },
 
+      removeProgress: (id) => {
+        if (!id || !get().progress[id]) return;
+        const nextProgress = { ...get().progress };
+        delete nextProgress[id];
+        set({ progress: nextProgress });
+      },
+
       getProgress: (id) => {
-        if (!id) return 0;
-        return get().progress[id]?.offset || 0;
+        if (!id) return undefined;
+        return get().progress[id];
       },
 
       clearProgress: () => set({ progress: {} }),
