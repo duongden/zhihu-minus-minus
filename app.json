@@ -257,6 +257,9 @@
             "enableShrinkResourcesInReleaseBuilds": true,
             "enableMinifyInReleaseBuilds": true,
             "useLegacyPackaging": true
+          },
+          "ios": {
+            "useFrameworks": "static"
           }
         }
       ],
@@ -273,7 +276,17 @@
         "@sentry/react-native",
         {
           "organization": "huamumu",
-          "project": "zhihuminusminus"
+          "project": "zhihuminusminus",
+          "url": "https://de.sentry.io/"
+        }
+      ],
+      "@react-native-firebase/app",
+      [
+        "@react-native-firebase/analytics",
+        {
+          "ios": {
+            "withoutAdIdSupport": true
+          }
         }
       ]
     ],
@@ -282,7 +295,6 @@
     },
     "extra": {
       "router": {},
-      "sentryDsn": "https://93a6099dd49b040d9c516485eb3c72f6@o4511051860672512.ingest.de.sentry.io/4511051866112080",
       "releaseNotes": {
         "v0.6.2": [
           "Android 架构兼容: Release 同时提供 arm64-v8a、armeabi-v7a、x86 与 x86_64 单 ABI 安装包。",

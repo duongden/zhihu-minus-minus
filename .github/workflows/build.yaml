@@ -99,13 +99,29 @@ jobs:
           echo "archive=${RUNNER_TEMP}/android-apks.tar.gz" >> "$GITHUB_OUTPUT"
           echo "directory=${RUNNER_TEMP}/android-apks" >> "$GITHUB_OUTPUT"
 
-      - name: Prepare Firebase config
+      - name: Prepare telemetry config
         env:
           FIREBASE_ANDROID_JSON_B64: ${{ secrets.FIREBASE_ANDROID_JSON_B64 }}
-        if: ${{ env.FIREBASE_ANDROID_JSON_B64 != '' }}
+          FIREBASE_IOS_PLIST_B64: ${{ secrets.FIREBASE_IOS_PLIST_B64 }}
+          EXPO_PUBLIC_SENTRY_DSN: ${{ secrets.EXPO_PUBLIC_SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
         run: |
-          mkdir -p assets/config/google-services
-          printf '%s' "$FIREBASE_ANDROID_JSON_B64" | base64 --decode > assets/config/google-services/google-services.real.json
+          set -euo pipefail
+          : "${FIREBASE_ANDROID_JSON_B64:?Missing GitHub Secret FIREBASE_ANDROID_JSON_B64}"
+          : "${FIREBASE_IOS_PLIST_B64:?Missing GitHub Secret FIREBASE_IOS_PLIST_B64}"
+          : "${EXPO_PUBLIC_SENTRY_DSN:?Missing GitHub Secret EXPO_PUBLIC_SENTRY_DSN}"
+          : "${SENTRY_AUTH_TOKEN:?Missing GitHub Secret SENTRY_AUTH_TOKEN}"
+
+          printf '%s' "$FIREBASE_ANDROID_JSON_B64" | base64 --decode > google-services.json
+          printf '%s' "$FIREBASE_IOS_PLIST_B64" | base64 --decode > GoogleService-Info.plist
+
+          {
+            echo "EXPO_PUBLIC_FIREBASE_ANALYTICS_ENABLED=true"
+            echo "EXPO_PUBLIC_SENTRY_DSN=$EXPO_PUBLIC_SENTRY_DSN"
+            echo "SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN"
+            echo "GOOGLE_SERVICES_JSON=./google-services.json"
+            echo "GOOGLE_SERVICE_INFO_PLIST=./GoogleService-Info.plist"
+          } >> "$GITHUB_ENV"
 
       - name: Build APKs
         run: eas build --platform android --profile "$EAS_PROFILE" --local --non-interactive --output="${{ steps.android-artifact.outputs.archive }}"
@@ -184,6 +200,30 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Prepare telemetry config
+        env:
+          FIREBASE_ANDROID_JSON_B64: ${{ secrets.FIREBASE_ANDROID_JSON_B64 }}
+          FIREBASE_IOS_PLIST_B64: ${{ secrets.FIREBASE_IOS_PLIST_B64 }}
+          EXPO_PUBLIC_SENTRY_DSN: ${{ secrets.EXPO_PUBLIC_SENTRY_DSN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+        run: |
+          set -euo pipefail
+          : "${FIREBASE_ANDROID_JSON_B64:?Missing GitHub Secret FIREBASE_ANDROID_JSON_B64}"
+          : "${FIREBASE_IOS_PLIST_B64:?Missing GitHub Secret FIREBASE_IOS_PLIST_B64}"
+          : "${EXPO_PUBLIC_SENTRY_DSN:?Missing GitHub Secret EXPO_PUBLIC_SENTRY_DSN}"
+          : "${SENTRY_AUTH_TOKEN:?Missing GitHub Secret SENTRY_AUTH_TOKEN}"
+
+          printf '%s' "$FIREBASE_ANDROID_JSON_B64" | base64 --decode > google-services.json
+          printf '%s' "$FIREBASE_IOS_PLIST_B64" | base64 --decode > GoogleService-Info.plist
+
+          {
+            echo "EXPO_PUBLIC_FIREBASE_ANALYTICS_ENABLED=true"
+            echo "EXPO_PUBLIC_SENTRY_DSN=$EXPO_PUBLIC_SENTRY_DSN"
+            echo "SENTRY_AUTH_TOKEN=$SENTRY_AUTH_TOKEN"
+            echo "GOOGLE_SERVICES_JSON=./google-services.json"
+            echo "GOOGLE_SERVICE_INFO_PLIST=./GoogleService-Info.plist"
+          } >> "$GITHUB_ENV"
+
       - name: Expo prebuild iOS
         run: npx expo prebuild --platform ios
 
@@ -193,14 +233,9 @@ jobs:
           pod install
 
       - name: Build unsigned iOS app
-        env:
-          SENTRY_DISABLE_AUTO_UPLOAD: "true"
-          SENTRY_NO_UPLOAD: "1"
         run: |
           cd ios
           echo "export NODE_BINARY=$(which node)" > .xcode.env.local
-          echo "export SENTRY_DISABLE_AUTO_UPLOAD=true" >> .xcode.env.local
-          echo "export SENTRY_NO_UPLOAD=1" >> .xcode.env.local
 
           WORKSPACE_PATH=$(find . -maxdepth 1 -name "*.xcworkspace" | head -n 1)
           WORKSPACE=$(basename "$WORKSPACE_PATH")

@@ -7,6 +7,7 @@ import {
   View as RNView,
   ScrollView,
   StyleSheet,
+  Switch,
   TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +17,7 @@ import { Text, useThemeColor } from '@/components/Themed';
 import { ThemeModeSelector } from '@/components/ThemeModeSelector';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import { useTelemetryStore } from '@/store/useTelemetryStore';
 
 interface SettingsRouteRowProps {
   description: string;
@@ -26,10 +28,11 @@ interface SettingsRouteRowProps {
 
 interface SearchEntry {
   description: string;
-  href: string;
+  href?: string;
   icon: React.ComponentProps<typeof Ionicons>['name'];
   keywords: string;
   label: string;
+  kind?: 'telemetry';
 }
 
 const SEARCH_ENTRIES: ReadonlyArray<SearchEntry> = [
@@ -62,6 +65,14 @@ const SEARCH_ENTRIES: ReadonlyArray<SearchEntry> = [
     icon: 'options-outline',
     href: '/settings/features',
     keywords: '功能 开关 webview 网页 渲染 私信 im 聊天 浏览 历史 记录',
+  },
+  {
+    label: '分享数据（App崩溃报告&匿名数据）',
+    description: '控制 App 崩溃报告和匿名使用数据分享',
+    icon: 'analytics-outline',
+    keywords:
+      '分享数据 隐私 统计 分析 analytics sentry 错误 崩溃 上报 匿名 诊断',
+    kind: 'telemetry',
   },
   {
     label: '关于 知乎--',
@@ -98,6 +109,33 @@ function SettingsRouteRow({
       </RNView>
       <Ionicons name="chevron-forward" size={18} color={mutedColor} />
     </BouncyButton>
+  );
+}
+
+function TelemetrySettingRow() {
+  const primaryColor = useThemeColor({}, 'primary');
+  const controlBackground = useThemeColor({}, 'controlBackground');
+  const mutedColor = useThemeColor({}, 'textSecondary');
+  const enabled = useTelemetryStore((state) => state.enabled);
+  const setEnabled = useTelemetryStore((state) => state.setEnabled);
+
+  return (
+    <RNView style={styles.telemetryRow}>
+      <RNView
+        style={[styles.iconWrapper, { backgroundColor: controlBackground }]}
+      >
+        <Ionicons name="analytics-outline" size={19} color={primaryColor} />
+      </RNView>
+      <RNView style={styles.routeCopy}>
+        <Text style={styles.routeLabel}>分享数据（App崩溃报告&匿名数据）</Text>
+      </RNView>
+      <Switch
+        value={enabled}
+        onValueChange={setEnabled}
+        trackColor={{ false: mutedColor, true: primaryColor }}
+        thumbColor="#ffffff"
+      />
+    </RNView>
   );
 }
 
@@ -181,15 +219,21 @@ export default function SettingsScreen() {
               title={`搜索结果 · ${searchResults.length}`}
               colorScheme={colorScheme}
             >
-              {searchResults.map((entry) => (
-                <SettingsRouteRow
-                  key={entry.href}
-                  icon={entry.icon}
-                  label={entry.label}
-                  description={entry.description}
-                  onPress={() => router.push(entry.href as Href)}
-                />
-              ))}
+              {searchResults.map((entry) => {
+                if (entry.kind === 'telemetry') {
+                  return <TelemetrySettingRow key={entry.label} />;
+                }
+                if (!entry.href) return null;
+                return (
+                  <SettingsRouteRow
+                    key={entry.href}
+                    icon={entry.icon}
+                    label={entry.label}
+                    description={entry.description}
+                    onPress={() => router.push(entry.href as Href)}
+                  />
+                );
+              })}
             </Section>
           ) : (
             <RNView
@@ -230,6 +274,10 @@ export default function SettingsScreen() {
                 description="WebView、私信与浏览历史"
                 onPress={() => router.push('/settings/features' as Href)}
               />
+            </Section>
+
+            <Section title="分享数据" colorScheme={colorScheme}>
+              <TelemetrySettingRow />
             </Section>
 
             <Section title="关于与支持" colorScheme={colorScheme}>
@@ -277,6 +325,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   routeRow: {
+    minHeight: 70,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  telemetryRow: {
     minHeight: 70,
     paddingHorizontal: 16,
     paddingVertical: 12,
