@@ -27,7 +27,7 @@ import { ZhihuContent } from '@/features/rich-content';
 ```bash
 npm run analyze:rich-content
 npm run analyze:rich-content:inbox
-npm run test:rich-content
+npm test -- features/rich-content/tests --runInBand
 ```
 
 第一个分析命令校验 manifest 中的稳定案例；带 `inbox` 的命令递归扫描新投递文件，只输出结构统计，不要求先维护 manifest。对于完整知乎 API JSON，案例通过 `contentPath` 选择正文，同时可以用 `expectedMetadata` 覆盖作者、问题、徽章、反应、权限、截断状态、@ 提及和 # 话题等正文之外或 HTML 属性之外的行为输入。

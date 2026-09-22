@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
 import {
   buildZhihuAppMomentOriginUrl,
   buildZhihuAppMomentsUrl,
@@ -7,8 +6,8 @@ import {
   buildZhihuAppRecommendUrl,
   getZhihuAppEndpointHeaders,
   ZHIHU_APP_QUESTION_FEEDS_INCLUDE,
-} from '../api/zhihu/appApi.ts';
-import { normalizeZhihuAppQuestionFeeds } from '../api/zhihu/questionFeed.ts';
+} from '../api/zhihu/appApi';
+import { normalizeZhihuAppQuestionFeeds } from '../api/zhihu/questionFeed';
 
 test('builds the initial app recommendation request', () => {
   const url = new URL(buildZhihuAppRecommendUrl());
@@ -38,15 +37,16 @@ test('serializes app recommendation pagination state without hardcoded tokens', 
 
   assert.equal(url.searchParams.get('after_id'), '30');
   assert.equal(url.searchParams.get('session_token'), 'runtime-session');
-  assert.deepEqual(
-    JSON.parse(url.searchParams.get('component_frequency_state')),
-    {
-      top_reason: {
-        last_shown_position: -18,
-        last_shown_dedup_key: '603',
-      },
-    },
+  const componentFrequencyState = url.searchParams.get(
+    'component_frequency_state',
   );
+  assert.ok(componentFrequencyState);
+  assert.deepEqual(JSON.parse(componentFrequencyState), {
+    top_reason: {
+      last_shown_position: -18,
+      last_shown_dedup_key: '603',
+    },
+  });
 });
 
 test('maps question answer sort and paging parameters to native feeds', () => {
@@ -134,5 +134,6 @@ test('normalizes question feed cards into renderable answer details', () => {
   assert.equal(normalized.data[0].voteup_count, 10969);
   assert.match(normalized.data[0].content, /第一行<br \/>第二行/);
   assert.equal(normalized.data[0].content_need_truncated, true);
+  assert.ok(normalized.paging);
   assert.equal(normalized.paging.need_force_login, true);
 });

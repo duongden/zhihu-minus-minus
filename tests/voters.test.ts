@@ -1,12 +1,11 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
 import {
   buildVotePayload,
   getContentVoteCount,
   getContentVoteState,
   getVoteSuccessMessage,
   normalizeVoteMutationResponse,
-} from '../api/zhihu/votePayload.ts';
+} from '../api/zhihu/votePayload';
 
 test('maps article votes to the numeric voting payload expected by Zhihu', () => {
   assert.deepEqual(buildVotePayload('articles', 'up'), { voting: 1 });

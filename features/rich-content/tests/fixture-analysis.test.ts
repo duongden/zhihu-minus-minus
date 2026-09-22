@@ -2,8 +2,6 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import test from 'node:test';
-import { fileURLToPath } from 'node:url';
 import {
   analyzeFixtureCase,
   analyzeFixtureDirectory,
@@ -12,9 +10,7 @@ import {
   normalizeFixtureHtml,
 } from '../tools/fixture-lib.mjs';
 
-const manifestPath = fileURLToPath(
-  new URL('../fixtures/manifest.json', import.meta.url),
-);
+const manifestPath = path.join(__dirname, '../fixtures/manifest.json');
 
 test('normalizes captured escaped HTML values', () => {
   assert.equal(
@@ -122,12 +118,10 @@ test('analyzes JSON API envelopes and asserts metadata beside content', async ()
   }
 });
 
-test('all registered real-world fixtures retain their expected structure', async (t) => {
+test('all registered real-world fixtures retain their expected structure', async () => {
   const manifest = await loadManifest(manifestPath);
   for (const fixtureCase of manifest.cases) {
-    await t.test(fixtureCase.id, async () => {
-      const result = await analyzeFixtureCase(fixtureCase, manifestPath);
-      assert.deepEqual(result.errors, []);
-    });
+    const result = await analyzeFixtureCase(fixtureCase, manifestPath);
+    assert.deepEqual(result.errors, [], fixtureCase.id);
   }
 });
