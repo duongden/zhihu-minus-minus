@@ -260,6 +260,7 @@
             "useLegacyPackaging": true
           },
           "ios": {
+            "deploymentTarget": "15.1",
             "useFrameworks": "static",
             "forceStaticLinking": ["RNFBApp", "RNFBAnalytics"]
           }
