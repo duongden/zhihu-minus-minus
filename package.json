@@ -27,6 +27,7 @@
     "check": "npm run typecheck && npm run lint && npm test && npm run analyze:rich-content"
   },
   "dependencies": {
+    "@expo/vector-icons": "^15.1.1",
     "@preeternal/react-native-cookie-manager": "^6.4.0",
     "@react-native-community/cli": "^20.0.1",
     "@react-native-firebase/analytics": "^26.4.0",
