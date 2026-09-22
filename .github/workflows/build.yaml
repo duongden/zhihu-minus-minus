@@ -121,8 +121,19 @@ jobs:
           : "${EXPO_PUBLIC_SENTRY_DSN:?Missing GitHub Secret EXPO_PUBLIC_SENTRY_DSN}"
           : "${SENTRY_AUTH_TOKEN:?Missing GitHub Secret SENTRY_AUTH_TOKEN}"
 
-          printf '%s' "$FIREBASE_ANDROID_JSON_B64" | base64 --decode > google-services.json
-          printf '%s' "$FIREBASE_IOS_PLIST_B64" | base64 --decode > GoogleService-Info.plist
+          decode_base64_secret() {
+            local secret_name="$1"
+            local encoded="$2"
+            local output_path="$3"
+            encoded="$(printf '%s' "$encoded" | tr -d '[:space:]')"
+            if ! printf '%s' "$encoded" | base64 --decode > "$output_path"; then
+              echo "Invalid base64 in GitHub Secret ${secret_name}. Store one-line base64 only, without backticks."
+              exit 1
+            fi
+          }
+
+          decode_base64_secret FIREBASE_ANDROID_JSON_B64 "$FIREBASE_ANDROID_JSON_B64" google-services.json
+          decode_base64_secret FIREBASE_IOS_PLIST_B64 "$FIREBASE_IOS_PLIST_B64" GoogleService-Info.plist
 
           {
             echo "EXPO_PUBLIC_FIREBASE_ANALYTICS_ENABLED=true"
@@ -222,8 +233,19 @@ jobs:
           : "${EXPO_PUBLIC_SENTRY_DSN:?Missing GitHub Secret EXPO_PUBLIC_SENTRY_DSN}"
           : "${SENTRY_AUTH_TOKEN:?Missing GitHub Secret SENTRY_AUTH_TOKEN}"
 
-          printf '%s' "$FIREBASE_ANDROID_JSON_B64" | base64 --decode > google-services.json
-          printf '%s' "$FIREBASE_IOS_PLIST_B64" | base64 --decode > GoogleService-Info.plist
+          decode_base64_secret() {
+            local secret_name="$1"
+            local encoded="$2"
+            local output_path="$3"
+            encoded="$(printf '%s' "$encoded" | tr -d '[:space:]')"
+            if ! printf '%s' "$encoded" | base64 --decode > "$output_path"; then
+              echo "Invalid base64 in GitHub Secret ${secret_name}. Store one-line base64 only, without backticks."
+              exit 1
+            fi
+          }
+
+          decode_base64_secret FIREBASE_ANDROID_JSON_B64 "$FIREBASE_ANDROID_JSON_B64" google-services.json
+          decode_base64_secret FIREBASE_IOS_PLIST_B64 "$FIREBASE_IOS_PLIST_B64" GoogleService-Info.plist
 
           {
             echo "EXPO_PUBLIC_FIREBASE_ANALYTICS_ENABLED=true"
