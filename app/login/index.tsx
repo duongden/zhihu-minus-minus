@@ -3,7 +3,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Platform, StyleSheet } from 'react-native';
-import { WebView } from 'react-native-webview';
+import {
+  WebView,
+  type WebViewMessageEvent,
+  type WebViewNavigation,
+  type WebViewProps,
+} from 'react-native-webview';
 import { getMe } from '@/api/zhihu';
 import { BouncyButton } from '@/components/BouncyButton';
 import { Text, useThemeColor, View } from '@/components/Themed';
@@ -20,7 +25,7 @@ export default function LoginScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [loading, setLoading] = useState(true);
-  const webViewRef = useRef<WebView>(null);
+  const webViewRef = useRef<WebView<WebViewProps>>(null);
   const borderColor = Colors[colorScheme].border;
 
   const handleCookies = async (web_cookie: string) => {
@@ -143,15 +148,15 @@ export default function LoginScreen() {
         <View className="w-10 bg-transparent" />
       </View>
 
-      <WebView
+      <WebView<WebViewProps>
         ref={webViewRef}
         source={{ uri: 'https://www.zhihu.com/signin' }}
         sharedCookiesEnabled={true}
         incognito={false}
-        onMessage={(event) => {
+        onMessage={(event: WebViewMessageEvent) => {
           handleCookies(event.nativeEvent.data);
         }}
-        onNavigationStateChange={(navState) => {
+        onNavigationStateChange={(navState: WebViewNavigation) => {
           const { url } = navState;
           let safeUrl = url.split('?')[0];
           try {
