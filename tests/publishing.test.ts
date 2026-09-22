@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
 import {
   deserializePublishingHtml,
   serializePinText,
   serializePublishingMarkdown,
-} from '../features/publishing/serializer.ts';
+} from '../features/publishing/serializer';
 
 test('serializes the supported publishing Markdown blocks', () => {
   assert.equal(

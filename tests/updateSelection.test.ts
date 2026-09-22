@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
-import { isVersionNewer, selectAndroidApk } from '../utils/updateSelection.ts';
+import { isVersionNewer, selectAndroidApk } from '../utils/updateSelection';
 
 const assets = [
   {

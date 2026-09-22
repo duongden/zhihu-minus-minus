@@ -1,26 +1,10 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import test from 'node:test';
-import ts from 'typescript';
-
-const policySource = await readFile(
-  new URL('../queryPolicy.ts', import.meta.url),
-  'utf8',
-);
-const { outputText: policyJavaScript } = ts.transpileModule(policySource, {
-  compilerOptions: {
-    module: ts.ModuleKind.ESNext,
-    target: ts.ScriptTarget.ES2022,
-  },
-});
-const {
+import {
   getNeighborAnswerIds,
   getRichContentQueryKey,
   hasInlineRichContent,
   hasReusableAnswerDetail,
-} = await import(
-  `data:text/javascript;base64,${Buffer.from(policyJavaScript).toString('base64')}`
-);
+} from '../queryPolicy';
 
 test('recognizes reusable inline rich content', () => {
   assert.equal(hasInlineRichContent('<p>完整正文</p>'), true);

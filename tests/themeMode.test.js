@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import test from 'node:test';
+import path from 'node:path';
 import { setImmediate } from 'node:timers/promises';
 import { runInNewContext } from 'node:vm';
 import { transformSync } from '@babel/core';
@@ -9,7 +9,7 @@ import ts from 'typescript';
 import * as middleware from 'zustand/middleware';
 import { createStore } from 'zustand/vanilla';
 
-const require = createRequire(import.meta.url);
+const require = createRequire(__filename);
 const { code: appearanceSource } = transformSync(
   readFileSync(
     require.resolve('react-native/Libraries/Utilities/Appearance.js'),
@@ -47,7 +47,7 @@ function loadModule(source, modules) {
 }
 
 const source = readFileSync(
-  new URL('../store/useThemeStore.ts', import.meta.url),
+  path.join(__dirname, '../store/useThemeStore.ts'),
   'utf8',
 );
 const { outputText } = ts.transpileModule(source, {

@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
 import {
   calculateReadingProgress,
   resolveReadingProgressOffset,
-} from '../utils/readingProgress.ts';
+} from '../utils/readingProgress';
 
 test('does not retain a position near the start', () => {
   assert.deepEqual(calculateReadingProgress(100, 2000, 500), {

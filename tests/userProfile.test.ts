@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
-import { parseZhihuUrl } from '../utils/url.ts';
+import { parseZhihuUrl } from '../utils/url';
 import {
   getNextPageOffset,
   getNextRecentActivityCursor,
@@ -9,7 +8,7 @@ import {
   isOwnMemberProfile,
   isSameMember,
   normalizeUserFeedType,
-} from '../utils/userProfile.ts';
+} from '../utils/userProfile';
 
 test('matches a member by immutable id or url token', () => {
   const member = { id: 'hash-id', url_token: 'friendly-token' };

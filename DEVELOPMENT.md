@@ -85,20 +85,16 @@ Web 适合检查路由和不依赖原生模块的页面，不代表 Android/iOS 
 npm run check
 ```
 
-它依次执行类型检查、只读 Biome 检查、全部 Node 测试和富文本 fixture 分析。常用的专项命令如下：
+它依次执行类型检查、只读 Biome 检查、全部 Jest 测试和富文本 fixture 分析。测试运行在 `jest-expo` preset 下；逻辑测试使用 `.test.ts`，React Native 组件测试使用 `.test.tsx`，交互断言使用 React Native Testing Library。常用命令如下：
 
 ```bash
 npm run typecheck
 npm run lint
-npm run test:rich-content
-npm run test:theme
-npm run test:user-profile
-npm run test:publishing
-npm run test:zhihu-app-api
-npm run test:network-failure
-npm run test:voters
-npm run test:update-selection
-npm run test:reading-progress
+npm test
+npm run test:watch
+npm run test:coverage
+npm test -- tests/themeMode.test.js --runInBand
+npm test -- features/rich-content/tests/fixture-analysis.test.ts --runInBand
 npm run analyze:rich-content
 npm run analyze:rich-content:inbox
 ```

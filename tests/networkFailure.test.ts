@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
 import {
   classifyNetworkError,
   classifyNetworkFailure,
-} from '../utils/networkFailure.ts';
+} from '../utils/networkFailure';
 
 test('classifies cancellation and timeout before native messages', () => {
   assert.equal(
