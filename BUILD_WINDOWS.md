@@ -35,7 +35,7 @@ npm run android
 
 | 组件 | 要求 | 说明 |
 |---|---|---|
-| Node.js | ≥ 20 | 运行 Expo / Metro |
+| Node.js | **22.x（推荐）** | 与 CI 和发布工作流保持一致，运行 Expo / Metro |
 | JDK | **17**（LTS） | RN 0.83 使用 Gradle 9.0.0，要求 JVM 17+ |
 | Android SDK | 命令行工具即可 | 不需要完整 Android Studio |
 
@@ -60,7 +60,7 @@ platform-tools
 ## 二、安装依赖并生成原生工程
 
 ```powershell
-npm install          # postinstall 会自动执行 patch-package 打补丁
+npm ci               # 按 package-lock.json 安装；postinstall 会自动执行 patch-package
 npx expo prebuild    # 生成 android/ 目录（已被 .gitignore 忽略）
 ```
 

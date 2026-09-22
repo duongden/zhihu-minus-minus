@@ -33,10 +33,13 @@
 
 GitHub Actions 不需要把 Firebase 文件提交到仓库。请在仓库的 `Settings → Secrets and variables → Actions` 中创建以下 Secrets：
 
+- `EXPO_TOKEN`：Expo Access Token，Android 本地 EAS Build 使用；
 - `FIREBASE_ANDROID_JSON_B64`：`google-services.json` 的 base64 内容；
 - `FIREBASE_IOS_PLIST_B64`：`GoogleService-Info.plist` 的 base64 内容；
 - `EXPO_PUBLIC_SENTRY_DSN`：Sentry DSN；
 - `SENTRY_AUTH_TOKEN`：Sentry Organization Auth Token，用于构建时上传 source map。
+
+Android job 通过 Expo GitHub Action 使用 `EXPO_TOKEN`，并校验另外 4 个 telemetry Secret；iOS job 只校验这 4 个 telemetry Secret。由于当前 workflow 总是同时运行 Android 和 iOS，完整构建（包括只选择 artifact、不创建 GitHub Release 的模式）仍需要配置全部 5 个 Secret。
 
 本项目的 Sentry 组织位于 DE 区域，配置中的 Sentry URL 已固定为 `https://de.sentry.io/`。
 

@@ -14,19 +14,21 @@
 ## ✨ 特性
 
 - **纯净与轻量**: 只有你想看的内容，没有广告，没有臃肿的功能。
-- **沉浸式体验**: 适配系统亮色与暗色模式，支持**全局主题色自定义**，支持感应设备自动旋转。
+- **沉浸式体验**: 适配系统亮色与暗色模式，支持**全局主题色自定义**、阅读背景/对比度调整、支持感应设备自动旋转。
 - **多账号与游客**: 支持**多账号无缝切换**，并提供基础阅读的**游客模式**（免登录浏览 Feed 流）。
 - **完善的功能**:
-  - **首页**: 热榜、推荐、关注动态。顶部 Tab 实时联动，底部 Tab 支持点击刷新。
+  - **首页**: 热榜、推荐、关注动态、同城和知乎日报。顶部 Tab 实时联动，底部 Tab 支持点击刷新。
   - **滑动浏览**: 首页子频道、发布中心、个人中心通过统一的水平滑动轴无缝切换；问题详情页支持**左右滑动快速切换回答**。
   - **搜索**: 全站与个人主页深度搜索，支持联想词、综合/用户搜索、回答/文章/最新发布筛选及关键词高亮。
   - **内容渲染**: 集中维护的富文本渲染模块，支持图片、公式、链接卡片、段落互动与回答详情预取。
   - **创作发布**: 发布中心支持写回答、写文章、发想法和提问题；正文编辑器支持标题、粗体、引用、列表、链接及图片上传预览，回答支持搜索问题或查看受邀问题。
   - **互动交流**: 完善的评论区交互（支持查看和上传图片、二级回复、复制评论及删除自己的评论），支持文章 (Articles)、想法与话题 (Topics) 的展示与评论。
-  - **个人中心**: 个人主页展示。支持**多收藏夹管理**、**浏览历史记录云端同步**（可选开启/多选删除/一键清空）、全面的关注列表（用户/专栏/话题/收藏夹），并可查看关注用户的最近发布内容。
+  - **个人中心**: 支持**多收藏夹管理**、**浏览历史记录云端同步**（可选开启/多选删除/一键清空）、全面的关注列表（用户/专栏/话题/收藏夹），并可查看关注用户的最近发布内容。
+- **阅读与推荐控制**: 详情页支持恢复上次阅读位置；可选启用推荐流本地去重、启动缓存和内容过滤，过滤规则覆盖付费、推广、机构号、外链引流及内容质量。
 - **深度链接 (Deep Linking)**: 完整支持 `zhihu.com` 外部链接及 `zhihu://` 协议唤起应用，知乎内部链接智能归一化跳转。
-- **个性化交互设置**: 自由定制列表点击反馈（安卓水波纹 / 透明度+缩放模式），自定义动画数值。
+- **个性化交互设置**: 自由定制列表点击反馈（安卓水波纹 / 透明度+缩放模式）、iOS 原生底部 Tab、主屏幕 App 图标和应用内震动反馈。
 - **一键更新**: 支持从 GitHub Releases 自动检测并下载安装新版本。
+- **隐私控制**: 可在设置中关闭崩溃报告和匿名统计；未配置 Firebase/Sentry 的本地开发构建不会发送这些数据。
 - **现代化架构**: 全面拥抱 Expo Router、TanStack Query V5、Tailwind CSS (NativeWind) 和 Zustand。
 
 ## 📸 界面预览
@@ -70,7 +72,7 @@
 你可以直接前往 [GitHub Releases](https://github.com/huamurui/zhihu-minus-minus/releases) 下载最新的 APK 文件进行安装。
 
 > [!NOTE]
-> 请留意 APK 文件名。当前 preview 构建只包含 `arm64-v8a`，不支持 32 位或 x86 设备。
+> 请留意 APK 文件名。GitHub Release 会提供 `arm64-v8a`、`armeabi-v7a`、`x86` 和 `x86_64` 四个单 ABI APK；`arm64-v8a` 是默认验证过的主包，其余 `compat-*` 包目前主要用于兼容设备和模拟器，未完成完整实机验证。应用内更新会根据设备 ABI 选择匹配附件。
 
 也可以从源码构建：
 
@@ -83,14 +85,16 @@ npm run prebuild
 eas build --platform android --profile preview --local
 ```
 
+本地 EAS 构建需要 Expo Token；如果启用了 telemetry，还要准备对应的 Firebase 配置文件和 Sentry 环境变量，详见 [数据统计与错误上报](./docs/TELEMETRY.md)。
+
 Windows 无法运行 `eas build --local`，请使用 [Windows 本地构建指南](./BUILD_WINDOWS.md) 中的 Gradle 流程。
 
 ### 🍎 iOS
 
 本应用不会在 App Store 上架。
-[GitHub Releases](https://github.com/huamurui/zhihu-minus-minus/releases) 可以在这里找找，有尝试打包的未签名 ipa 但我没什么 ios 越狱经验和设备，可能无法使用。
+[GitHub Releases](https://github.com/huamurui/zhihu-minus-minus/releases) 会提供未签名 IPA；需要用户自行处理签名和安装环境。
 
-- rn 打的 ipa 包 ios 最低要求 ios15.1，但具体什么情况不清楚喵...
+- 当前原生配置的 iOS 最低版本为 **15.1**。Release 中的 IPA 未签名，不能直接当作可安装成品使用。
 
 如果你有 mac，可以试试自己打包：
 
@@ -104,19 +108,17 @@ cd ios && pod install
 npx expo run:ios --configuration Release --device
 ```
 
-⬆️ 这个在 ios26 也不好用了，建议 Xcode 里 build。
-
-(有认试过 expo 的线上打包一定要 apple 开发者账号哦...)
+如果 `npx expo run:ios` 在较新的 Xcode 上无法完成签名或安装，建议打开生成的 `ios/*.xcworkspace`，在 Xcode 中选择自己的 Team 后直接 Build。
 
 ## 🚀 快速开始
 
-Windows 上启动、调试和打包 Android 应用，请参考 [Windows 本地构建指南](./BUILD_WINDOWS.md)。
+完整的环境、原生重建、调试和测试说明见 [开发指南](./DEVELOPMENT.md)。Windows 上启动、调试和打包 Android 应用，可以参考 [Windows 本地构建指南](./BUILD_WINDOWS.md)。
 
 本项目涉及到一些原生库，推荐使用 **Development Build** 进行开发。
 
 基础环境：
 
-- Node.js 20 或更高版本、npm；
+- Node.js **22.x（推荐）**、npm；
 - Android：JDK 17、Android SDK、ADB 或模拟器；
 - iOS：macOS、Xcode、CocoaPods；
 - EAS CLI 仅在使用 EAS 构建时需要。
@@ -133,7 +135,7 @@ npm ci
 npm run prebuild
 ```
 
-`android/` 与 `ios/` 是生成物且不会提交到仓库。修改原生依赖、原生配置或 `app.json` 后需要重新运行 prebuild。
+`android/` 与 `ios/` 是生成物且不会提交到仓库。修改原生依赖、config plugin、原生配置或 `app.json` 后需要重新运行 prebuild；只修改 TypeScript/样式时通常不需要。
 
 3. **运行 Android**（需要 ADB 或模拟器环境）
 
@@ -153,33 +155,9 @@ npm run ios
 npm run check
 ```
 
-`npm run check` 会依次执行 TypeScript、Biome、全部测试和富文本 fixture 分析。全仓只读检查也可单独运行 `npm run lint`；需要应用 Biome 修复时使用 `npm run lint:fix`，并逐项复核改动。截至 2026-09-05（基于 `906aade` 的未提交工作流改动），聚合检查通过；全仓 Biome 为 0 个 error、143 个 warning，详情见 [最新代码审查记录](./docs/CODE_REVIEW_2026-09-05.md)。
+`npm run check` 会依次执行 TypeScript、Biome、全部测试和富文本 fixture 分析。全仓只读检查也可单独运行 `npm run lint`；需要应用 Biome 修复时使用 `npm run lint:fix`，并逐项复核改动。
 
-富文本模块的目录约定、fixture 与专项命令见 [features/rich-content/README.md](./features/rich-content/README.md)。面向自动化开发者的维护规则见 [AGENTS.md](./AGENTS.md)。
-
-## 📦 GitHub Actions
-
-本项目配置了两类 GitHub Actions 工作流：
-
-- **Pull Request 与 main 分支质量检查**（[`.github/workflows/ci.yml`](.github/workflows/ci.yml)）
-- **同时构建 Android APK、iOS 未签名 IPA 并创建 Release**（[`.github/workflows/build.yaml`](.github/workflows/build.yaml)）
-
-### 1. 前置准备 (Fork 与 Secrets 配置)
-
-1. **Fork 仓库**：点击项目右上角的 **Fork** 按钮，将仓库复制到你自己的 GitHub 账号下。
-2. **启用 Actions**：进入你 Fork 的仓库，点击 **Actions** 标签页，点击 *“I understand my workflows, go ahead and enable them”* 开启工作流权限。
-3. **配置密钥 (Secrets)**：在 Fork 仓库设置中（`Settings` -> `Secrets and variables` -> `Actions`）点击 **New repository secret** 添加：
-   - `EXPO_TOKEN` *(Android 构建必填)*: 你的 Expo Token（需先在 [Expo 官网](https://expo.dev) 注册账号，然后在 [Access Tokens](https://expo.dev/settings/access-tokens) 页面新建并复制 Token）。
-   - `FIREBASE_ANDROID_JSON_B64` *(可选)*：需要 Firebase 配置时提供 base64 内容；未设置会自动跳过。
-
-### 2. 触发打包步骤
-
-1. 同步修改 `package.json` 与 `app.json` 的版本号，提交并推送到 `main`。
-2. 进入仓库的 **Actions** 页面，选择 **Build Android + iOS and Release**。
-3. 点击 **Run workflow** 并选择 `main`。默认生成草稿 Release；勾选 `publish_release` 后会在成功构建后直接公开发布。
-
-> [!NOTE]
-> Ubuntu 和 macOS job 会在同一次运行中分别构建 APK 与 IPA，再由 Release job 自动下载两个 artifact、生成 `SHA256SUMS.txt` 并上传，无需手动中转 IPA。完整流程和失败重试说明见 [发布指南](./docs/RELEASING.md)。
+富文本模块的目录约定、fixture 与专项命令见 [features/rich-content/README.md](./features/rich-content/README.md)。更多开发约定见 [DEVELOPMENT.md](./DEVELOPMENT.md)；面向自动化开发者的维护规则见 [AGENTS.md](./AGENTS.md)。
 
 ## 🔐 登录说明
 
@@ -200,4 +178,4 @@ npm run check
 </a>
 
 ---
-**Version**: v0.6.2 | **Last Updated**: 2026-09-21
+**Version**: v0.6.2 | **Last Updated**: 2026-09-22
