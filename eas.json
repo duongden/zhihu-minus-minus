@@ -6,8 +6,7 @@
         "gradleCommand": ":app:bundleRelease"
       },
       "env": {
-        "NODE_ENV": "production",
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+        "NODE_ENV": "production"
       }
     },
     "preview": {
@@ -15,9 +14,6 @@
         "buildType": "apk",
         "gradleCommand": ":app:assembleRelease",
         "applicationArchivePath": "android/app/build/outputs/apk/release/*.apk"
-      },
-      "env": {
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     }
   }

@@ -5,7 +5,6 @@ import {
 } from '@react-navigation/native';
 import * as Sentry from '@sentry/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import Constants from 'expo-constants';
 import { type Href, Stack, useRouter } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as SplashScreen from 'expo-splash-screen';
@@ -31,31 +30,12 @@ import { AppState, type AppStateStatus, Linking } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { resolveThemeColors } from '@/constants/theme';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import { useTelemetryStore } from '@/store/useTelemetryStore';
 import { consumeAppClipboardText } from '@/utils/clipboard';
 import { shouldRetryQuery } from '@/utils/query';
+import { initializeTelemetry, setTelemetryEnabled } from '@/utils/telemetry';
 
-Sentry.init({
-  dsn: 'https://93a6099dd49b040d9c516485eb3c72f6@o4511051860672512.ingest.de.sentry.io/4511051866112080',
-  debug: __DEV__,
-  enableAutoSessionTracking: true,
-});
-
-const deviceContext = {
-  appVersion: Constants.expoConfig?.version,
-  deviceName: Constants.deviceName,
-  osVersion: Constants.systemVersion,
-  platform: Constants.platform,
-};
-Sentry.setContext('device', deviceContext);
-Sentry.setTag('app_version', deviceContext.appVersion || 'unknown');
-Sentry.setTag(
-  'platform',
-  deviceContext.platform?.ios
-    ? 'ios'
-    : deviceContext.platform?.android
-      ? 'android'
-      : 'other',
-);
+initializeTelemetry();
 
 // 保持启动页显示，直到资源加载完成
 SplashScreen.preventAutoHideAsync();
@@ -79,6 +59,8 @@ function RootLayout() {
   const _colorScheme = useColorScheme();
   const isDark = useThemeStore((state) => state.isDark);
   const hasThemeHydrated = useThemeStore((state) => state.hasHydrated);
+  const telemetryEnabled = useTelemetryStore((state) => state.enabled);
+  const hasTelemetryHydrated = useTelemetryStore((state) => state.hasHydrated);
   const { primaryColor, readingBackground, textContrast, surfaceStyle } =
     useSettingsStore();
   const appColorScheme = isDark ? 'dark' : 'light';
@@ -105,6 +87,11 @@ function RootLayout() {
 
   // Sync NativeWind dark mode with zustand store
   useSyncThemeWithNativeWind();
+
+  useEffect(() => {
+    if (!hasTelemetryHydrated) return;
+    void setTelemetryEnabled(telemetryEnabled);
+  }, [hasTelemetryHydrated, telemetryEnabled]);
 
   // 默认开启感应自动旋转
   useEffect(() => {
