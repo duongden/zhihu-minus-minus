@@ -1,7 +1,7 @@
 {
   "name": "zhihu--",
   "main": "expo-router/entry",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "expo": {
     "autolinking": {
       "nativeModulesDir": "./modules"
@@ -71,7 +71,7 @@
     "react-native": "0.83.10",
     "react-native-gesture-handler": "~2.30.0",
     "react-native-image-zoom-viewer": "^3.0.1",
-    "react-native-pager-view": "8.0.5",
+    "react-native-pager-view": "8.0.0",
     "react-native-reanimated": "4.2.3",
     "react-native-render-html": "^6.3.4",
     "react-native-root-siblings": "^5.0.1",

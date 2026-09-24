@@ -2,7 +2,7 @@
   "expo": {
     "name": "知乎--",
     "slug": "ZhihuMinusMinus",
-    "version": "0.6.2",
+    "version": "0.6.3",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "zhihu--",
@@ -27,7 +27,7 @@
       }
     },
     "android": {
-      "versionCode": 602,
+      "versionCode": 603,
       "splash": {
         "backgroundColor": "#ffffff",
         "image": "./assets/images/android-icon-monochrome.png",
@@ -306,6 +306,9 @@
     "extra": {
       "router": {},
       "releaseNotes": {
+        "v0.6.3": [
+          "iOS 页面布局修复: 修复首页等页面顶部留白，以及回答详情页底部操作栏被遮挡的问题。"
+        ],
         "v0.6.2": [
           "Android 架构兼容: Release 同时提供 arm64-v8a、armeabi-v7a、x86 与 x86_64 单 ABI 安装包。",
           "一键更新更稳定: 根据设备支持的 CPU 架构精确选择 APK，无法确认兼容包时不再盲目下载。"
@@ -351,8 +354,8 @@
           "基础稳定性优化: 修复了若干 UI 细节与已知的小概率崩溃问题。"
         ]
       },
-      "status": "🚀 v0.6.2 - Android 多架构发布与稳定更新",
-      "lastUpdated": "2026-09-21",
+      "status": "🚀 v0.6.3 - iOS 页面布局修复",
+      "lastUpdated": "2026-09-24",
       "eas": {
         "projectId": "faa0f061-50e6-4ec4-bb6f-accda0dbd24f"
       }
