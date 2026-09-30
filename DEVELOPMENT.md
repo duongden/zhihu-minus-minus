@@ -101,6 +101,8 @@ npm run analyze:rich-content:inbox
 
 `npm run lint` 不修改文件；需要自动修复时使用 `npm run lint:fix` 或 `npm run format`，然后逐项检查 diff。富文本专项的 fixture 投递、脱敏和 manifest 规则见 [`features/rich-content/README.md`](./features/rich-content/README.md)。
 
+富文本后续路线按 [Issue #40](https://github.com/huamurui/zhihu-minus-minus/issues/40) 更新为原生 attributed text / Text Flow Island，候选 backend 与未完成项见 [Renderer V2 计划](./features/rich-content/docs/renderer-v2-plan.md)，Release 指标见 [基准计划](./features/rich-content/docs/benchmark-plan.md)。当前 `ZhihuDocument` 和局部验证工具尚未接入新 backend；现有 `useNative` 分支仍是 RNRH。将来验证 enriched-html 或 Tiqian 的原生依赖/模块时，应核验锁定工具链并按原生改动流程重新 prebuild。
+
 ## 代码结构与数据边界
 
 | 目录 | 责任 |

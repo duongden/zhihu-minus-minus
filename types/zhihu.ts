@@ -91,25 +91,25 @@ export interface ZhihuAuthor {
   badge_v2?: ZhihuBadgeV2;
 }
 
+export interface ZhihuSegmentReaction {
+  like_count: number;
+  comment_count: number;
+  is_like: boolean;
+  seg_ids?: string[] | string;
+}
+
+export interface ZhihuSegmentMark {
+  /** 当前渲染器按 JS UTF-16 下标处理，范围为 [start_index, end_index)。 */
+  start_index: number;
+  end_index: number;
+  seg_info?: ZhihuSegmentReaction;
+  master_seg_info?: ZhihuSegmentReaction;
+}
+
 export interface ZhihuSegmentInfo {
   pid: string;
   text: string;
-  marks: Array<{
-    start_index: number;
-    end_index: number;
-    seg_info?: {
-      like_count: number;
-      comment_count: number;
-      is_like: boolean;
-      seg_ids?: string[] | string;
-    };
-    master_seg_info?: {
-      like_count: number;
-      comment_count: number;
-      is_like: boolean;
-      seg_ids?: string[] | string;
-    };
-  }>;
+  marks: ZhihuSegmentMark[];
 }
 
 export interface ZhihuQuestion {

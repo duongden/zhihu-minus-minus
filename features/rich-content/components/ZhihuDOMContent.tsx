@@ -1,17 +1,15 @@
 import React, { useMemo, useState } from 'react';
-import { View } from 'react-native';
+import { type StyleProp, View, type ViewStyle } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { colors, radii, typography } from '@/constants/designTokens';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import {
+  parseRichContentBridgeMessage,
+  type TextSelectionInfo,
+} from '../bridge';
 import { DAILY_AVATAR_SIZE, type RichContentVariant } from '../imagePolicy';
 
-export interface TextSelectionInfo {
-  text: string;
-  startParagraphId: string;
-  endParagraphId: string;
-  startOffset: number;
-  endOffset: number;
-}
+export type { TextSelectionInfo } from '../bridge';
 
 export interface ZhihuDOMContentProps {
   htmlContent: string;
@@ -24,7 +22,7 @@ export interface ZhihuDOMContentProps {
   onSegmentPress: (pid: string) => void;
   onTextSelected?: (info: TextSelectionInfo | null) => void;
   onReady?: () => void;
-  style?: object;
+  style?: StyleProp<ViewStyle>;
   variant?: RichContentVariant;
 }
 
@@ -682,24 +680,29 @@ export default React.memo(function ZhihuDOMContent({
         style={{ backgroundColor: 'transparent' }}
         scrollEnabled={false}
         onMessage={(event) => {
-          try {
-            const data = JSON.parse(event.nativeEvent.data);
-            if (data.type === 'height') {
+          const data = parseRichContentBridgeMessage(event.nativeEvent.data);
+          if (!data) return;
+
+          switch (data.type) {
+            case 'height':
               setHeight(data.height);
               onReady?.();
-            } else if (data.type === 'image') {
+              break;
+            case 'image':
               onImagePress(data.src);
-            } else if (data.type === 'image_long_press') {
+              break;
+            case 'image_long_press':
               onImageLongPress?.(data.src);
-            } else if (data.type === 'link') {
+              break;
+            case 'link':
               onLinkPress(data.href);
-            } else if (data.type === 'segment') {
+              break;
+            case 'segment':
               onSegmentPress(data.pid);
-            } else if (data.type === 'selection') {
+              break;
+            case 'selection':
               onTextSelected?.(data.info);
-            }
-          } catch (e) {
-            console.error('Failed to parse message from WebView', e);
+              break;
           }
         }}
       />

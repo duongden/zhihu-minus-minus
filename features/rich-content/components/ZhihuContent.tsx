@@ -54,7 +54,11 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { typography } from '@/constants/designTokens';
 import { useSettingsStore } from '@/store/useSettingsStore';
-import type { ZhihuSegmentInfo } from '@/types/zhihu';
+import type {
+  ZhihuSegmentInfo,
+  ZhihuSegmentMark,
+  ZhihuSegmentReaction,
+} from '@/types/zhihu';
 import { showToast } from '@/utils/toast';
 import { extractZhihuRedirectTarget, parseZhihuUrl } from '@/utils/url';
 import { getZhihuErrorStatus } from '@/utils/zhihuError';
@@ -63,28 +67,10 @@ import {
   isDailyAvatar,
   type RichContentVariant,
 } from '../imagePolicy';
+import type { LinkCardProps, ZhihuContentProps } from '../types';
 import ZhihuDOMContent, { type TextSelectionInfo } from './ZhihuDOMContent';
 
-export interface ZhihuContentProps {
-  content?: string;
-  contentArray?: PinContentItem[];
-  segmentInfos?: ZhihuSegmentInfo[];
-  linkCardInfo?: Record<string, unknown>;
-  objectId: string;
-  type: 'answer' | 'article' | 'pin' | 'question';
-  onRefresh?: () => void;
-  useNative?: boolean;
-  selectable?: boolean;
-  variant?: RichContentVariant;
-}
-
-interface PinContentItem {
-  type?: string;
-  content?: string;
-  url?: string;
-  data_draft_title?: string;
-  data_draft_cover?: string;
-}
+export type { ZhihuContentProps } from '../types';
 
 interface LinkCardDisplay {
   title?: unknown;
@@ -189,15 +175,7 @@ function isLinkCardElement(element: LinkCardElementLike): boolean {
   );
 }
 
-export const LinkCard: React.FC<{
-  url: string;
-  title?: string;
-  image?: string;
-  cardInfo?: unknown;
-  onPress: (url: string) => void;
-  surfaceColor: string;
-  colorScheme: 'light' | 'dark';
-}> = React.memo(
+export const LinkCard: React.FC<LinkCardProps> = React.memo(
   ({ url, title, image, cardInfo, onPress, surfaceColor, colorScheme }) => {
     const metadata = useMemo(() => parseLinkCardMetadata(cardInfo), [cardInfo]);
     const display = asRecord(metadata?.display) as LinkCardDisplay | null;
@@ -349,9 +327,8 @@ interface TextSlice {
   isLiked?: boolean;
 }
 
-type SegmentMark = ZhihuSegmentInfo['marks'][number];
-type SegmentInteraction = NonNullable<SegmentMark['seg_info']> & {
-  mark?: SegmentMark;
+type SegmentInteraction = ZhihuSegmentReaction & {
+  mark?: ZhihuSegmentMark;
 };
 
 function sliceParagraphText(
@@ -1284,7 +1261,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
         if (item.type === 'text') {
           return (
             <RenderHtml
-              // biome-ignore lint/suspicious/noArrayIndexKey: contentArray 是想法正文的解析结果,按原文顺序混排文本/图片/链接卡片。PinContentItem 没有 id,内容本身也不保证唯一,index 是这里唯一稳定的标识。
+              // biome-ignore lint/suspicious/noArrayIndexKey: contentArray 是想法正文的解析结果,按原文顺序混排文本/图片/链接卡片。ZhihuContentSegment 没有 id,内容本身也不保证唯一,index 是这里唯一稳定的标识。
               key={index}
               contentWidth={width - 40}
               source={{ html: `<div>${item.content}</div>` }}

@@ -4,6 +4,7 @@ import { Linking } from 'react-native';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { LinkCard } from '@/features/rich-content';
+import type { ZhihuContentSegment } from '@/types/zhihu';
 import { extractZhihuRedirectTarget, parseZhihuUrl } from '@/utils/url';
 import { Text, View } from './Themed';
 
@@ -22,20 +23,12 @@ function parseExcerpt(html: string): { text: string; links: string[] } {
   return { text, links };
 }
 
-interface PinContentItem {
-  type: string;
-  content?: string;
-  url?: string;
-  data_draft_title?: string;
-  data_draft_cover?: string;
-}
-
-function parsePinContent(contentArray: PinContentItem[]): {
+function parsePinContent(contentArray: readonly ZhihuContentSegment[]): {
   text: string;
-  links: PinContentItem[];
+  links: ZhihuContentSegment[];
 } {
   const textBlocks: string[] = [];
-  const links: PinContentItem[] = [];
+  const links: ZhihuContentSegment[] = [];
   for (const item of contentArray) {
     if (item.type === 'text' && item.content) {
       textBlocks.push(
@@ -54,7 +47,7 @@ function isString(v: unknown): v is string {
 
 export const FeedExcerpt: React.FC<{
   html?: string | React.ReactNode;
-  contentArray?: PinContentItem[];
+  contentArray?: readonly ZhihuContentSegment[];
   numberOfLines?: number;
 }> = React.memo(({ html, contentArray, numberOfLines = 3 }) => {
   const router = useRouter();
