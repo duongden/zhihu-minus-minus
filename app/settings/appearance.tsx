@@ -31,6 +31,7 @@ import {
   SURFACE_STYLE_OPTIONS,
   TEXT_CONTRAST_OPTIONS,
 } from '@/constants/theme';
+import type { RichContentRenderer } from '@/features/rich-content';
 import { useSettingsStore } from '@/store/useSettingsStore';
 
 // 开启 Android 下的 LayoutAnimation
@@ -48,6 +49,29 @@ export interface ColorPreset {
 
 const PRESET_COLORS: ColorPreset[] = designTokens.primaryPresets;
 
+const CONTENT_RENDERER_OPTIONS: readonly {
+  value: RichContentRenderer;
+  label: string;
+  description: string;
+}[] = [
+  {
+    value: 'rnrh',
+    label: '经典排版',
+    description: '保持现有阅读体验，适用于多数正文。',
+  },
+  {
+    value: 'native-v2',
+    label: '原生排版 V2',
+    description:
+      '支持 Android，可跨段选择与显示知识点划线；其他设备使用经典排版。',
+  },
+  {
+    value: 'webview',
+    label: '网页排版',
+    description: '使用网页布局显示正文。',
+  },
+];
+
 export default function AppearanceSettings() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -59,6 +83,7 @@ export default function AppearanceSettings() {
     readingBackground,
     textContrast,
     surfaceStyle,
+    richContentRenderer,
     updateSettings,
   } = useSettingsStore();
 
@@ -122,6 +147,37 @@ export default function AppearanceSettings() {
 
         <Section title="显示模式" colorScheme={colorScheme}>
           <ThemeModeSelector />
+        </Section>
+
+        <Section title="正文排版" colorScheme={colorScheme}>
+          {CONTENT_RENDERER_OPTIONS.map((option) => {
+            const isSelected = richContentRenderer === option.value;
+            return (
+              <BouncyButton
+                key={option.value}
+                onPress={() =>
+                  updateSettings({ richContentRenderer: option.value })
+                }
+                accessibilityRole="radio"
+                accessibilityState={{ checked: isSelected }}
+                style={styles.rendererOptionRow}
+              >
+                <Ionicons
+                  name={isSelected ? 'radio-button-on' : 'radio-button-off'}
+                  size={22}
+                  color={
+                    isSelected ? tintColor : Colors[colorScheme].textSecondary
+                  }
+                />
+                <RNView style={styles.rendererOptionCopy}>
+                  <Text style={styles.rendererOptionLabel}>{option.label}</Text>
+                  <Text type="secondary" style={styles.routeDescription}>
+                    {option.description}
+                  </Text>
+                </RNView>
+              </BouncyButton>
+            );
+          })}
         </Section>
 
         {/* 1. 字体风格 */}
@@ -815,6 +871,16 @@ const styles = StyleSheet.create({
   routeCopy: { flex: 1, marginHorizontal: 12 },
   routeLabel: { fontSize: 16, fontWeight: '600' },
   routeDescription: { fontSize: 12, lineHeight: 18, marginTop: 2 },
+  rendererOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    minHeight: 66,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  rendererOptionCopy: { flex: 1 },
+  rendererOptionLabel: { fontSize: 15, fontWeight: '600' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

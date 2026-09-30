@@ -1,14 +1,16 @@
 # Renderer V2 实验 01：Enriched HTML
 
-本记录保留 EnrichedText 接入和 native patch 的阶段历史。当前架构以 [Renderer V2 计划](./renderer-v2-plan.md) 的 `ZhihuDocument` → Text Flow Island / Rich Text IR → backend adapter 为准；Enriched 仍是候选 PoC，不是生产替换结论。
+**已于2026-09-30正式删除Enriched运行链路。** 按用户决定，组件、专属normalizer与测试、`react-native-enriched-html`依赖、native patch及开发入口均已移除；非Android/缺模块客户端回退RNRH。当前开发主线为直接消费IR的[本地Native V2](./renderer-v2-experiment-03-native-flow.md)。
 
-## 当前边界（2026-09-30 同步）
+本文仅保留当时的研究、接入和构建历史，下面出现的API、入口与patch均描述已删除实现，不是当前可运行路线或待办承诺。
+
+## 删除前的实现边界（历史快照）
 
 已有 JS/Fabric 接入、开发三后端案例页、共享交互/排版外壳和 SVG/lineHeight patch。`normalizeZhihuHtmlForEnriched` 直接输出 Enriched 专属受限 HTML dialect；其中的标签/URL scheme 过滤、诊断和媒体降级，不等于完整 HTML 清洗、HTML → `ZhihuDocument` 或 Rich Text IR 编译。
 
 原生 selection range 事件、自定义跨行 decoration、source map、精确 intrinsic metrics / baseline offset、独立媒体/block adapter 和 attachment 长按/无障碍映射仍未完成。已有 `selectable` 的连续选择行为也须按真机矩阵验收。下文没有明确列为已实现的 API、IR、独立 block 和扩展口均为方案示例，不能从类型或图示推断已接入。
 
-2026-09-14 的构建记录保留如下。2026-09-30 本轮 main 同步已通过 `npm ci`、Android / iOS prebuild 和 `npm run check`（17 个 test suites、240 项测试、8 个稳定 fixtures）；本轮没有执行新的 native 构建或真机 Release 验证。依赖安装、生成工程和质量检查通过不能代替双端原生验收，目前没有 Release 性能数据。`react-native-enriched-html` 固定为 `1.1.1` 以匹配仓库 patch，不能将历史编译结果推广为任意上游版本可用。
+2026-09-14的构建记录保留如下。2026-09-30初始main同步曾通过 `npm ci`、Android / iOS prebuild和 `npm run check`（17个test suites、240项测试、8个稳定fixtures），这些均发生在删除之前。依赖安装、生成工程和质量检查通过不能代替双端原生验收。已删除候选当时固定 `react-native-enriched-html@1.1.1` 以匹配patch；该版本约束不再适用于当前项目。Native V2与删除后的验证见实验03。
 
 ## 接入与 patch 历史（2026-09-14）
 
@@ -45,7 +47,7 @@
 
 当前上游只读 `EnrichedText` 已有 `selectable`，但没有 `onSelectionChange`；`htmlStyle` 的 underline 也只有开关和颜色，没有 thickness / offset / line style。因此这两项仍明确属于下一批 native extension，不在本批伪造 JS 事件或视觉模拟。
 
-真机验证入口：
+当时的真机验证入口（已移除）：
 
 ```text
 我的

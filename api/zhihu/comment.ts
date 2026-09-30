@@ -232,6 +232,143 @@ export interface CreateCommentPayload {
   reply_comment_id?: string | number;
 }
 
+export interface AnswerSegmentCommentTarget {
+  readonly answerId: string;
+  readonly segmentIds: readonly string[];
+}
+
+export interface AnswerSegmentCommentContext
+  extends AnswerSegmentCommentTarget {
+  readonly segmentText: string;
+  readonly paragraphId: string;
+  readonly startOffset: number;
+  readonly endOffset: number;
+}
+
+function segmentRouteRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/** Legacy links can read an answer thread without source-position metadata. */
+export function parseAnswerSegmentCommentTarget(
+  value: unknown,
+): AnswerSegmentCommentTarget | null {
+  const route = segmentRouteRecord(value);
+  if (
+    !route ||
+    (route.type !== undefined &&
+      route.type !== 'answer' &&
+      route.type !== 'answers') ||
+    typeof route.id !== 'string' ||
+    !/^[1-9]\d*$/.test(route.id) ||
+    typeof route.segmentId !== 'string'
+  )
+    return null;
+  const ids = route.segmentId.split(',').map((id) => id.trim());
+  return ids.length && ids.every((id) => /^[1-9]\d*$/.test(id))
+    ? { answerId: route.id, segmentIds: [...new Set(ids)] }
+    : null;
+}
+
+function segmentTextOffset(value: unknown): number | null {
+  const offset =
+    typeof value === 'string' && /^(?:0|[1-9]\d*)$/.test(value)
+      ? Number(value)
+      : value;
+  return typeof offset === 'number' &&
+    Number.isSafeInteger(offset) &&
+    offset >= 0
+    ? offset
+    : null;
+}
+
+/** A posting context must carry the exact single-paragraph UTF-16 source slice. */
+export function parseAnswerSegmentCommentContext(
+  value: unknown,
+): AnswerSegmentCommentContext | null {
+  const route = segmentRouteRecord(value);
+  const target = parseAnswerSegmentCommentTarget(value);
+  if (
+    !route ||
+    !target ||
+    (route.type !== 'answer' && route.type !== 'answers')
+  )
+    return null;
+  const startOffset = segmentTextOffset(route.startOffset);
+  const endOffset = segmentTextOffset(route.endOffset);
+  if (
+    typeof route.text !== 'string' ||
+    !route.text.trim() ||
+    /[\uD800-\uDFFF]/u.test(route.text) ||
+    route.text.includes('\uFFFC') ||
+    typeof route.pid !== 'string' ||
+    !route.pid.trim() ||
+    route.pid !== route.pid.trim() ||
+    startOffset === null ||
+    endOffset === null ||
+    endOffset <= startOffset ||
+    endOffset - startOffset !== route.text.length
+  )
+    return null;
+  return {
+    ...target,
+    segmentText: route.text,
+    paragraphId: route.pid,
+    startOffset,
+    endOffset,
+  };
+}
+
+/** Segment-thread replies use the same endpoint and source context as roots. */
+export async function createAnswerSegmentComment(
+  context: AnswerSegmentCommentContext,
+  content: string,
+  replyToCommentId?: string | number,
+): Promise<CreateCommentResponse> {
+  const verified = parseAnswerSegmentCommentContext({
+    id: context.answerId,
+    type: 'answer',
+    segmentId: context.segmentIds.join(','),
+    text: context.segmentText,
+    pid: context.paragraphId,
+    startOffset: context.startOffset,
+    endOffset: context.endOffset,
+  });
+  if (!verified)
+    throw new Error('知识点缺少有效的原文位置，请返回正文重新选择');
+  if (
+    replyToCommentId !== undefined &&
+    !/^[1-9]\d*$/.test(String(replyToCommentId))
+  )
+    throw new Error('回复目标无效');
+  const payload = {
+    content,
+    ...(replyToCommentId !== undefined && {
+      reply_comment_id: replyToCommentId,
+    }),
+    segment: {
+      content: verified.segmentText,
+      position: {
+        start: {
+          paragraph_id: verified.paragraphId,
+          offset: verified.startOffset,
+        },
+        end: {
+          paragraph_id: verified.paragraphId,
+          offset: verified.endOffset,
+        },
+      },
+    },
+  };
+  const response = await apiClient.post<CreateCommentResponse>(
+    `/comment_v5/answers/${encodeURIComponent(verified.answerId)}/segment/comment`,
+    payload,
+  );
+  return response.data;
+}
+
 export const getComment = async (id: string | number): Promise<CommentItem> => {
   const res = await apiClient.get<CommentItem>(`/comments/${id}`);
   return normalizeComment(res.data);

@@ -8,6 +8,12 @@ import {
   type TextSelectionInfo,
 } from '../bridge';
 import { DAILY_AVATAR_SIZE, type RichContentVariant } from '../imagePolicy';
+import {
+  createRichContentMetrics,
+  RICH_CONTENT_LIST_ITEM_SPACING,
+  RICH_CONTENT_PARAGRAPH_SPACING,
+} from '../presentation';
+import type { RichContentTypographyOptions } from '../types';
 
 export type { TextSelectionInfo } from '../bridge';
 
@@ -24,6 +30,9 @@ export interface ZhihuDOMContentProps {
   onReady?: () => void;
   style?: StyleProp<ViewStyle>;
   variant?: RichContentVariant;
+  fontSizeScale?: number;
+  lineHeightScale?: number;
+  typographyOptions?: RichContentTypographyOptions;
 }
 
 export default React.memo(function ZhihuDOMContent({
@@ -39,12 +48,26 @@ export default React.memo(function ZhihuDOMContent({
   onReady,
   style,
   variant = 'default',
+  fontSizeScale: fontSizeOverride,
+  lineHeightScale: lineHeightOverride,
+  typographyOptions,
 }: ZhihuDOMContentProps) {
   const [height, setHeight] = useState(400);
   const [_loading, _setLoading] = useState(true);
 
   const textColor = colors[colorScheme].text;
-  const { primaryColor: customPrimaryColor } = useSettingsStore();
+  const settings = useSettingsStore();
+  const customPrimaryColor = settings.primaryColor;
+  const metrics = createRichContentMetrics(
+    fontSizeOverride ?? settings.fontSizeScale,
+    lineHeightOverride ?? settings.lineHeightScale,
+  );
+  const headingStyles = Object.entries(metrics.headings)
+    .map(
+      ([tag, metric]) =>
+        `.zhihu-content ${tag} { font-size: ${metric.fontSize}px; line-height: ${metric.lineHeight}px; font-weight: bold; margin: ${metric.marginTop}px 0 ${metric.marginBottom}px; }`,
+    )
+    .join('\n');
   const primaryColor = customPrimaryColor || colors.light.primary;
   const dailyStyles =
     variant === 'daily'
@@ -84,7 +107,7 @@ export default React.memo(function ZhihuDOMContent({
 
   const html = `
     <!DOCTYPE html>
-    <html>
+    <html lang="zh-Hans">
     <head>
       <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
       <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
@@ -102,10 +125,17 @@ export default React.memo(function ZhihuDOMContent({
         }
         .zhihu-content {
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-          font-size: ${typography.fontSize.subtitle}px;
-          line-height: ${typography.lineHeight.reading};
+          font-size: ${metrics.body.fontSize}px;
+          line-height: ${metrics.body.lineHeight}px;
           color: ${textColor};
           max-width: 100%;
+          word-break: normal;
+          line-break: ${typographyOptions?.lineBreak ?? 'auto'};
+          overflow-wrap: break-word;
+          text-align: ${typographyOptions?.justify ? 'justify' : 'start'};
+          text-align-last: start;
+          ${typographyOptions?.autoSpacing ? 'text-autospace: ideograph-alpha ideograph-numeric;' : ''}
+          ${typographyOptions?.trimPunctuation ? 'text-spacing-trim: trim-both;' : ''}
         }
         .katex { color: ${textColor}; }
         .katex-display {
@@ -118,7 +148,9 @@ export default React.memo(function ZhihuDOMContent({
           overflow-x: auto;
           color: ${textColor};
           font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-          font-size: 14px;
+          font-size: ${metrics.codeFontSize}px;
+          text-align: start;
+          text-autospace: no-autospace;
         }
         .highlight {
           background-color: ${colors[colorScheme].backgroundSecondary};
@@ -128,7 +160,7 @@ export default React.memo(function ZhihuDOMContent({
           border: 1px solid ${colors[colorScheme].border};
         }
         .zhihu-content p {
-          margin-bottom: 20px;
+          margin: 0 0 ${RICH_CONTENT_PARAGRAPH_SPACING}px;
         }
         .zhihu-content img {
           max-width: 100%;
@@ -143,9 +175,10 @@ export default React.memo(function ZhihuDOMContent({
         }
         .zhihu-content figcaption {
           color: ${colors[colorScheme].iconMuted};
-          font-size: 13px;
+          font-size: ${metrics.captionFontSize}px;
           margin-top: 8px;
           font-style: italic;
+          text-align: center;
         }
         .zhihu-content a {
           color: ${primaryColor};
@@ -200,21 +233,19 @@ export default React.memo(function ZhihuDOMContent({
           background-color: transparent;
           padding: 12px 18px;
           margin: 15px 0;
-          font-size: ${typography.fontSize.subtitle}px;
-          line-height: ${typography.lineHeight.reading};
+          font-size: ${metrics.body.fontSize}px;
+          line-height: ${metrics.body.lineHeight}px;
           color: ${colors[colorScheme].textSecondary};
         }
         .zhihu-content blockquote p {
           color: ${colors[colorScheme].textSecondary};
-          font-size: ${typography.fontSize.subtitle}px;
-          line-height: ${typography.lineHeight.reading};
+          font-size: ${metrics.body.fontSize}px;
+          line-height: ${metrics.body.lineHeight}px;
         }
-        .zhihu-content h1, .zhihu-content h2, .zhihu-content h3 { color: ${textColor}; }
-        .zhihu-content h1 { font-size: 22px; font-weight: bold; margin: 20px 0; line-height: 1.4; }
-        .zhihu-content h2 { font-size: 20px; font-weight: bold; margin: 18px 0; line-height: 1.4; }
-        .zhihu-content h3 { font-size: 18px; font-weight: bold; margin: 15px 0; line-height: 1.4; }
+        .zhihu-content h1, .zhihu-content h2, .zhihu-content h3, .zhihu-content h4, .zhihu-content h5, .zhihu-content h6 { color: ${textColor}; text-align: start; }
+        ${headingStyles}
         .zhihu-content ul, .zhihu-content ol { padding-left: 20px; margin: 10px 0; }
-        .zhihu-content li { margin-bottom: 8px; font-size: 17px; }
+        .zhihu-content li { margin-bottom: ${RICH_CONTENT_LIST_ITEM_SPACING}px; font-size: ${metrics.body.fontSize}px; line-height: ${metrics.body.lineHeight}px; }
         .zhihu-content hr { height: 1px; background-color: ${colors[colorScheme].contentBorder}; border: none; margin: 25px 0; }
         ${dailyStyles}
 
@@ -641,7 +672,25 @@ export default React.memo(function ZhihuDOMContent({
         });
 
         // Send height
+        function updateTextMeasure() {
+          if (!${Boolean(typographyOptions?.integerMeasure)}) return;
+          var em = parseFloat(window.getComputedStyle(container).fontSize);
+          var available = container.clientWidth;
+          if (!(em > 0 && available > 0)) return;
+          var measure = Math.max(em, Math.floor(available / em) * em);
+          // Keep media full width; narrow only top-level text containers.
+          Array.from(container.children).forEach(function(node) {
+            if (/^(P|H[1-6]|UL|OL|BLOCKQUOTE)$/.test(node.tagName)) {
+              node.style.boxSizing = 'border-box';
+              node.style.width = measure + 'px';
+              node.style.marginLeft = 'auto';
+              node.style.marginRight = 'auto';
+            }
+          });
+        }
+
         function sendHeight() {
+          updateTextMeasure();
           const height = Math.max(
             document.body.scrollHeight,
             document.documentElement.scrollHeight,

@@ -290,6 +290,25 @@ export function decodeRichContentDevFixture(
                 content: item.content,
               }),
               ...(typeof item.url === 'string' && { url: item.url }),
+              ...(typeof item.width === 'number' &&
+                Number.isFinite(item.width) &&
+                item.width > 0 && { width: item.width }),
+              ...(typeof item.height === 'number' &&
+                Number.isFinite(item.height) &&
+                item.height > 0 && { height: item.height }),
+              ...(typeof item.duration === 'number' &&
+                Number.isFinite(item.duration) &&
+                item.duration >= 0 && { duration: item.duration }),
+              ...(typeof item.title === 'string' && { title: item.title }),
+              ...(typeof item.thumbnail === 'string' && {
+                thumbnail: item.thumbnail,
+              }),
+              ...(typeof item.video_id === 'string' && {
+                video_id: item.video_id,
+              }),
+              ...(typeof item.video_bo_id === 'string' && {
+                video_bo_id: item.video_bo_id,
+              }),
               ...(typeof item.data_draft_title === 'string' && {
                 data_draft_title: item.data_draft_title,
               }),

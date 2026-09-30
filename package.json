@@ -70,7 +70,6 @@
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-native": "0.83.10",
-    "react-native-enriched-html": "1.1.1",
     "react-native-gesture-handler": "~2.30.0",
     "react-native-image-zoom-viewer": "^3.0.1",
     "react-native-pager-view": "8.0.0",
@@ -98,10 +97,6 @@
     "patch-package": "^8.0.1",
     "test-renderer": "~1.2.0",
     "typescript": "~5.9.2"
-  },
-  "overrides": {
-    "@tiptap/extension-bubble-menu": "3.27.1",
-    "@tiptap/extension-floating-menu": "3.27.1"
   },
   "private": true
 }

@@ -2,11 +2,15 @@
 
 > 尚未接入或验证。本记录保留 Android native module / adapter 的分阶段历史草案；当前架构与验收以 [Renderer V2 计划](./renderer-v2-plan.md) 为准。曾按 Expo 55/57、RN 0.87 等版本讨论接入时机，但这不是已核实的兼容矩阵或升级要求。正式 PoC 前须对照项目锁文件和选定 Tiqian 版本，核验 Kotlin、AGP、Compose、JDK、最低 Android 版本及依赖/API；iOS 没有在本仓完成对应路径。
 
+2026-09-30当前实施已由[本地Native V2系统TextView原型](./renderer-v2-experiment-03-native-flow.md)接替，Enriched运行链路、依赖和patch已正式删除。本草案及示例保留为研究依据，不代表活动接入任务或运行入口；只有系统布局存在明确缺口时再评估Tiqian，当前不以引擎接入阻塞功能试用。
+
+2026-09-30 的上游源码调研、Android View / Apple / Web 入口及可先独立采用的排版策略，见 [Tiqian 排版策略评估](./tiqian-typography-strategies.md)。其中区分系统/CSS 小实验与完整引擎接入，不把下文历史示例当作当前已核实 API。
+
 ## 与当前模型的关系（2026-09-30 同步）
 
 本仓已有 [`ZhihuDocument`](../document.ts) 语义模型、遍历和局部属性/消息验证。下文 `RendererDocument` / 最小 Document V0、native API、Gradle 和目录示例均是尚未落地的草案，不应再创建另一份应用公共 AST。真实正文应先规范化为 `ZhihuDocument`，由独立 adapter 编译为选定 Tiqian 版本需要的输入；传输 DTO 只在模块内部定义，并保留节点/段落身份、UTF-16 范围和 source map 的对应。
 
-Enriched 专属 HTML dialect lowering 不能直接替代这一转换。完整 HTML → Document、Rich Text IR、source map、宿主 measurement/scroll/gesture/lifecycle、原生事件与 Release 真机数据仍需分别验证。下面的类型与方法名用于说明边界，不能视为 Tiqian 当前 API 或已完成的 production 模块。
+本地Native V2已初步实现HTML → Document、Rich Text IR、source map和Android事件；完整知乎覆盖、宿主手势/生命周期、iOS adapter与Release真机数据仍需验证。已删除的Enriched专属HTML dialect不能作为通用模型。下面的类型与方法名仅保留历史边界示意，不能视为Tiqian当前API或已完成的production模块。
 
 ## 目标
 
@@ -1220,7 +1224,7 @@ modules/tiqian-renderer/
 ```text
 features/rich-content/
 ├─ document.ts              # 已有中立模型，不再创建重复 AST
-├─ normalization/           # 中立转换待实现；Enriched dialect 已有独立实现
+├─ normalization/           # 中立转换已有初步实现；继续扩充知乎覆盖
 ├─ adapters/                # Tiqian adapter 待设计/实现
 └─ fixtures/                # 沿用现有 cases / manifest
 ```

@@ -27,9 +27,8 @@ export interface RichContentMetrics {
 }
 
 /**
- * Renderer-independent typography used by both the RNRH baseline and the
- * EnrichedText experiment. Keep numeric tuning here so the two backends do
- * not silently drift when appearance settings change.
+ * Shared typography for RNRH, WebView and Native V2. Keep numeric tuning here
+ * so the backends do not drift when appearance settings change.
  */
 export function createRichContentMetrics(
   fontSizeScale: number,
@@ -41,7 +40,7 @@ export function createRichContentMetrics(
     marginBottom: number,
   ): RichContentHeadingMetrics => ({
     fontSize: fontSize * fontSizeScale,
-    lineHeight: fontSize * lineHeightScale,
+    lineHeight: fontSize * fontSizeScale * lineHeightScale,
     marginTop,
     marginBottom,
   });
@@ -49,7 +48,7 @@ export function createRichContentMetrics(
   return {
     body: {
       fontSize: RICH_CONTENT_BODY_FONT_SIZE * fontSizeScale,
-      lineHeight: RICH_CONTENT_BODY_FONT_SIZE * lineHeightScale,
+      lineHeight: RICH_CONTENT_BODY_FONT_SIZE * fontSizeScale * lineHeightScale,
     },
     headings: {
       h1: heading(21, 24, 10),

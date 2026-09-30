@@ -8,7 +8,6 @@ import { Text, useThemeColor } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import {
-  type EnrichedNormalizationResult,
   type RichContentRenderer,
   ZhihuContent,
 } from '@/features/rich-content';
@@ -26,15 +25,15 @@ export default function RichContentFixtureDetailScreen() {
   const backgroundColor = useThemeColor({}, 'background');
   const surfaceColor = useThemeColor({}, 'backgroundSecondary');
   const borderColor = useThemeColor({}, 'border');
-  const { useWebView, updateSettings } = useSettingsStore();
+  const richContentRenderer = useSettingsStore(
+    (state) => state.richContentRenderer,
+  );
   const scrollViewRef = useRef<ScrollView>(null);
   const [mountIndex, setMountIndex] = useState(0);
   const [interactionsEnabled, setInteractionsEnabled] = useState(false);
-  const [renderer, setRenderer] = useState<RichContentRenderer>(() =>
-    useWebView ? 'webview' : 'rnrh',
+  const [renderer, setRenderer] = useState<RichContentRenderer>(
+    () => richContentRenderer,
   );
-  const [normalizationResult, setNormalizationResult] =
-    useState<EnrichedNormalizationResult | null>(null);
 
   const fixture = useMemo(
     () => (caseId ? getRichContentDevFixture(caseId) : null),
@@ -44,20 +43,13 @@ export default function RichContentFixtureDetailScreen() {
   useEffect(() => {
     if (!caseId) return;
     setInteractionsEnabled(false);
-    setNormalizationResult(null);
     setMountIndex(0);
     scrollViewRef.current?.scrollTo({ y: 0, animated: false });
   }, [caseId]);
 
-  const selectRenderer = useCallback(
-    (nextRenderer: RichContentRenderer) => {
-      setRenderer(nextRenderer);
-      if (nextRenderer !== 'enriched') {
-        updateSettings({ useWebView: nextRenderer === 'webview' });
-      }
-    },
-    [updateSettings],
-  );
+  const selectRenderer = useCallback((nextRenderer: RichContentRenderer) => {
+    setRenderer(nextRenderer);
+  }, []);
 
   if (!fixture) {
     return (
@@ -80,8 +72,8 @@ export default function RichContentFixtureDetailScreen() {
     ? 'Pin 结构化内容'
     : renderer === 'webview'
       ? 'WebView / DOM'
-      : renderer === 'enriched'
-        ? 'EnrichedText（实验）'
+      : renderer === 'native-v2'
+        ? 'Native V2'
         : 'RNRH';
 
   return (
@@ -160,11 +152,11 @@ export default function RichContentFixtureDetailScreen() {
                   </Text>
                 </BouncyButton>
                 <BouncyButton
-                  onPress={() => selectRenderer('enriched')}
+                  onPress={() => selectRenderer('native-v2')}
                   disabled={usesStructuredPinContent}
                   style={[
                     styles.rendererButton,
-                    renderer === 'enriched' && !usesStructuredPinContent
+                    renderer === 'native-v2' && !usesStructuredPinContent
                       ? { backgroundColor: primaryColor }
                       : { borderColor },
                   ]}
@@ -172,12 +164,12 @@ export default function RichContentFixtureDetailScreen() {
                   <Text
                     style={[
                       styles.rendererButtonText,
-                      renderer === 'enriched' && !usesStructuredPinContent
+                      renderer === 'native-v2' && !usesStructuredPinContent
                         ? { color: Colors[colorScheme].textInverse }
                         : undefined,
                     ]}
                   >
-                    Enriched
+                    Native V2
                   </Text>
                 </BouncyButton>
               </RNView>
@@ -193,17 +185,9 @@ export default function RichContentFixtureDetailScreen() {
             </BouncyButton>
           </RNView>
           <Text type="secondary" style={styles.rendererHint}>
-            当前：{rendererLabel}。RNRH / WebView 与“外观与定制”设置共用；
-            Enriched 仅在本开发页生效。
+            当前：{rendererLabel}
+            。本页按“正文排版”偏好初始化，切换渲染器仅用于本地对照，不会更改阅读设置。
           </Text>
-          {renderer === 'enriched' ? (
-            <Text type="secondary" style={styles.rendererHint}>
-              单一 native text surface · selectable（需打开正文交互）·{' '}
-              {normalizationResult
-                ? `${normalizationResult.inlineImageCount} 个行内附件 · ${normalizationResult.blockImageCount} 个块图附件 · ${normalizationResult.diagnostics.length} 条诊断`
-                : '正在规范化 HTML'}
-            </Text>
-          ) : null}
 
           <RNView
             style={[
@@ -250,7 +234,6 @@ export default function RichContentFixtureDetailScreen() {
             renderer={renderer}
             selectable={interactionsEnabled}
             variant={fixture.variant}
-            onEnrichedNormalized={setNormalizationResult}
           />
         </RNView>
       </ScrollView>

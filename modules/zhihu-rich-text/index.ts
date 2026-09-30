@@ -1,0 +1,68 @@
+import { requireNativeView, requireOptionalNativeModule } from 'expo';
+import { type ComponentType, createElement } from 'react';
+import { Platform, type ViewProps } from 'react-native';
+
+export interface RichTextSelectionEventData {
+  readonly flowId: string;
+  readonly textVersion: string;
+  readonly start: number;
+  readonly end: number;
+}
+
+export interface RichTextHeightEventData {
+  readonly flowId: string;
+  readonly textVersion: string;
+  readonly layoutKey: string;
+  readonly height: number;
+}
+
+export interface RichTextActionEventData extends RichTextSelectionEventData {
+  readonly kind: 'link' | 'segment' | 'attachment' | 'attachmentLongPress';
+  readonly id: string;
+  readonly url?: string;
+}
+
+/** Expo view events use nativeEvent; the flat shape supports existing callers. */
+export type RichTextNativeEvent<T> = T & { readonly nativeEvent?: T };
+
+export interface RichTextNativeViewProps extends ViewProps {
+  readonly flowJson: string;
+  readonly configJson: string;
+  readonly contentWidth: number;
+  readonly layoutKey: string;
+  readonly selectable: boolean;
+  readonly onSelectionChange?: (
+    event: RichTextNativeEvent<RichTextSelectionEventData>,
+  ) => void;
+  readonly onHeightChange?: (
+    event: RichTextNativeEvent<RichTextHeightEventData>,
+  ) => void;
+  readonly onAction?: (
+    event: RichTextNativeEvent<RichTextActionEventData>,
+  ) => void;
+}
+
+let nativeView: ComponentType<RichTextNativeViewProps> | null | undefined;
+
+function getNativeView(): ComponentType<RichTextNativeViewProps> | null {
+  if (Platform.OS !== 'android') return null;
+  if (nativeView !== undefined) return nativeView;
+  try {
+    nativeView = requireOptionalNativeModule('ZhihuRichText')
+      ? requireNativeView<RichTextNativeViewProps>('ZhihuRichText')
+      : null;
+  } catch {
+    nativeView = null;
+  }
+  return nativeView;
+}
+
+export function isRichTextNativeAvailable(): boolean {
+  return getNativeView() !== null;
+}
+
+/** Android prototype; callers choose their fallback on unsupported clients. */
+export function RichTextNativeView(props: RichTextNativeViewProps) {
+  const NativeView = getNativeView();
+  return NativeView ? createElement(NativeView, props) : null;
+}

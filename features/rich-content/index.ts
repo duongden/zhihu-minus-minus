@@ -1,10 +1,19 @@
 export type { RichContentBridgeMessage, TextSelectionInfo } from './bridge';
+export {
+  compileZhihuDocument,
+  getRichTextSelectionText,
+  mapRichTextSelection,
+} from './compileRichText';
 export { LinkCard, ZhihuContent } from './components/ZhihuContent';
 export type { ZhihuDOMContentProps } from './components/ZhihuDOMContent';
 export {
-  ZhihuEnrichedContent,
-  type ZhihuEnrichedContentProps,
-} from './components/ZhihuEnrichedContent';
+  isRichTextNativeAvailable,
+  ZhihuNativeContent,
+  type ZhihuNativeContentProps,
+  type ZhihuNativeContentSelection,
+  type ZhihuNativeSegmentAction,
+  type ZhihuNativeTypographyOptions,
+} from './components/ZhihuNativeContent';
 export type {
   ZhihuBlock,
   ZhihuBlockFormula,
@@ -61,14 +70,7 @@ export {
   walkZhihuDocument,
 } from './documentTraversal';
 export type { RichContentVariant } from './imagePolicy';
-export {
-  type EnrichedFallbackKind,
-  type EnrichedNormalizationDiagnostic,
-  type EnrichedNormalizationOptions,
-  type EnrichedNormalizationResult,
-  getEnrichedImageLinkSource,
-  normalizeZhihuHtmlForEnriched,
-} from './normalization/normalizeZhihuHtml';
+export { normalizeZhihuDocument } from './normalization/normalizeZhihuDocument';
 export {
   getNeighborAnswerIds,
   getRichContentQueryKey,
@@ -77,10 +79,24 @@ export {
   RICH_CONTENT_STALE_TIME,
   type RichContentEntityType,
 } from './queryPolicy';
+export type {
+  RichTextAttachment,
+  RichTextCompilation,
+  RichTextDecoration,
+  RichTextDiagnostic,
+  RichTextFlow,
+  RichTextParagraph,
+  RichTextPart,
+  RichTextSelectionEndpoint,
+  RichTextSelectionMapping,
+  RichTextSourceRange,
+  RichTextSpan,
+} from './richText';
 export { parseZhihuSegmentHighlight } from './segmentHighlight';
 export type {
   LinkCardProps,
   RichContentObjectType,
   RichContentRenderer,
+  RichContentTypographyOptions,
   ZhihuContentProps,
 } from './types';

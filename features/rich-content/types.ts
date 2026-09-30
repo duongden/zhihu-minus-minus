@@ -1,12 +1,21 @@
+import type { ReactNode } from 'react';
 import type { ZhihuContentSegment, ZhihuSegmentInfo } from '@/types/zhihu';
 import type { RichContentVariant } from './imagePolicy';
-import type { EnrichedNormalizationResult } from './normalization/normalizeZhihuHtml';
 
 /** 单个正文的对象类型；查询 key 使用 queryPolicy 中的复数类型。 */
 export type RichContentObjectType = 'answer' | 'article' | 'pin' | 'question';
 
-/** Enriched 是开发案例页使用的实验后端，业务页仍沿用原有默认选择。 */
-export type RichContentRenderer = 'rnrh' | 'webview' | 'enriched';
+/** 用户可选择的正文后端；单个正文可通过 renderer 显式覆盖设置。 */
+export type RichContentRenderer = 'rnrh' | 'webview' | 'native-v2';
+
+/** Layout-only experiments; source text and persistent settings stay intact. */
+export interface RichContentTypographyOptions {
+  justify?: boolean;
+  integerMeasure?: boolean;
+  autoSpacing?: boolean;
+  trimPunctuation?: boolean;
+  lineBreak?: 'auto' | 'strict';
+}
 
 export interface ZhihuContentProps {
   /** 回答、文章和问题等接口返回的 HTML，尚未规范化为 ZhihuDocument。 */
@@ -19,8 +28,16 @@ export interface ZhihuContentProps {
   objectId: string;
   type: RichContentObjectType;
   onRefresh?: () => void;
-  onEnrichedNormalized?: (result: EnrichedNormalizationResult) => void;
   renderer?: RichContentRenderer;
+  /** Keep an existing preview visible while the native text completes its first layout. */
+  renderPlaceholder?: () => ReactNode;
+  /** Native V2 has measured its current text layout and can reveal the body. */
+  onLayoutReady?: () => void;
+  /** Per-surface overrides used by the development comparison page. */
+  fontSizeScale?: number;
+  lineHeightScale?: number;
+  typographyOptions?: RichContentTypographyOptions;
+  /** 跳过 WebView；用户选用 Native V2 时仍遵循其设置。 */
   useNative?: boolean;
   selectable?: boolean;
   variant?: RichContentVariant;

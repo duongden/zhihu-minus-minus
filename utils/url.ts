@@ -4,6 +4,22 @@ export function isExpoInternalUrl(url: string): boolean {
   );
 }
 
+/** Only the development entry point calls this; production Zhihu links are separate. */
+export function parseRichContentDevelopmentUrl(value: string): string | null {
+  let candidate = value;
+  if (value.includes('://')) {
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol !== 'zhihu--:') return null;
+      candidate = `${parsed.hostname ? `/${parsed.hostname}` : ''}${parsed.pathname}`;
+    } catch {
+      return null;
+    }
+  }
+  const path = candidate.split(/[?#]/, 1)[0];
+  return /^\/dev\/rich-content(?:\/[a-zA-Z0-9_-]+)?$/.test(path) ? path : null;
+}
+
 const ZHIHU_WEB_HOSTS = new Set([
   'zhihu.com',
   'www.zhihu.com',

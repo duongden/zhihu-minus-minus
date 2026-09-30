@@ -382,27 +382,79 @@ export const deleteAnswer = async (id: string | number) => {
   return res.data;
 };
 
+export type AnswerSegmentIds = string | readonly string[];
+
+export interface AnswerSegmentReactionResult extends ZhihuActionResponse {
+  /** A like may replace the master ID with the current user's reaction IDs. */
+  readonly segmentIds?: readonly string[];
+}
+
+function segmentIdList(value: AnswerSegmentIds): string[] {
+  const values = typeof value === 'string' ? [value] : Array.from(value);
+  const result: string[] = [];
+  for (const entry of values) {
+    if (typeof entry !== 'string') throw new Error('段落缺少有效的 seg_id');
+    for (const rawId of entry.split(',')) {
+      const id = rawId.trim();
+      if (!/^[A-Za-z0-9_-]+$/.test(id))
+        throw new Error('段落缺少有效的 seg_id');
+      if (!result.includes(id)) result.push(id);
+    }
+  }
+  if (!result.length) throw new Error('段落缺少有效的 seg_id');
+  return result;
+}
+
+function parseSegmentReactionResult(
+  value: unknown,
+): AnswerSegmentReactionResult {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const response = value as Record<string, unknown>;
+  const result: AnswerSegmentReactionResult = {
+    ...(typeof response.status === 'number' &&
+      Number.isSafeInteger(response.status) && { status: response.status }),
+    ...(typeof response.message === 'string' && { message: response.message }),
+    ...(typeof response.success === 'boolean' && { success: response.success }),
+  };
+  const payload = response.payload;
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload))
+    return result;
+  const rawId = (payload as Record<string, unknown>).segId;
+  const ids =
+    typeof rawId === 'string'
+      ? rawId
+      : typeof rawId === 'number' && Number.isSafeInteger(rawId) && rawId > 0
+        ? String(rawId)
+        : undefined;
+  if (!ids) return result;
+  try {
+    return { ...result, segmentIds: segmentIdList(ids) };
+  } catch {
+    return result;
+  }
+}
+
 export const reactAnswerSegment = async (
   answerId: string | number,
-  segId: string,
+  segIds: AnswerSegmentIds,
   content: string,
   paragraphId: string,
   startOffset: number,
   endOffset: number,
-) => {
+): Promise<AnswerSegmentReactionResult> => {
   const payload = {
-    seg_id: segId,
+    seg_id: segmentIdList(segIds).join(','),
     content: content,
     position: {
       start: { paragraph_id: paragraphId, offset: startOffset },
       end: { paragraph_id: paragraphId, offset: endOffset },
     },
   };
-  const res = await apiClient.post<ZhihuActionResponse>(
-    `/reaction/answers/${answerId}/segment_reaction`,
+  const res = await apiClient.post<unknown>(
+    `/reaction/answers/${encodeURIComponent(String(answerId))}/segment_reaction`,
     payload,
   );
-  return res.data;
+  return parseSegmentReactionResult(res.data);
 };
 
 export const createSegmentReaction = async (
@@ -429,16 +481,16 @@ export const createSegmentReaction = async (
 
 export const unreactAnswerSegment = async (
   answerId: string | number,
-  segId: string,
-) => {
+  segIds: AnswerSegmentIds,
+): Promise<AnswerSegmentReactionResult> => {
   // 根据抓包，这里 body 是 seg_ids 且为字符串
-  const res = await apiClient.delete<ZhihuActionResponse>(
-    `/reaction/answers/${answerId}/segment_reaction`,
+  const res = await apiClient.delete<unknown>(
+    `/reaction/answers/${encodeURIComponent(String(answerId))}/segment_reaction`,
     {
-      data: { seg_ids: segId },
+      data: { seg_ids: segmentIdList(segIds).join(',') },
     },
   );
-  return res.data;
+  return parseSegmentReactionResult(res.data);
 };
 
 type SegmentCommentAuthor = CommentAuthor | Partial<CommentMember>;

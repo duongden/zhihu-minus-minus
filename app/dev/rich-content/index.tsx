@@ -67,6 +67,25 @@ export default function RichContentFixturesScreen() {
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={
           <RNView>
+            <BouncyButton
+              onPress={() => router.push('/dev/rich-content/prototype')}
+              style={[
+                styles.card,
+                {
+                  backgroundColor: surfaceColor,
+                  borderColor,
+                  marginBottom: 16,
+                },
+              ]}
+            >
+              <RNView style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>V2 功能原型</Text>
+                <Ionicons name="flask-outline" size={20} color={primaryColor} />
+              </RNView>
+              <Text type="secondary" style={styles.meta}>
+                跨段选择、装饰线、行内附件、知识点与独立媒体
+              </Text>
+            </BouncyButton>
             <RNView
               style={[
                 styles.notice,

@@ -85,7 +85,7 @@ Web 适合检查路由和不依赖原生模块的页面，不代表 Android/iOS 
 npm run check
 ```
 
-它依次执行类型检查、只读 Biome 检查、全部 Jest 测试和富文本 fixture 分析。测试运行在 `jest-expo` preset 下；当前 `testMatch` 收集 `tests/` 下的 `.test.ts` / `.test.js` 和富文本测试目录下的 `.test.ts`。组件交互断言可使用 React Native Testing Library；新增 `.test.tsx` 前需先扩展 `jest.config.js` 的收集范围。常用命令如下：
+它依次执行类型检查、只读 Biome 检查、全部 Jest 测试和富文本 fixture 分析。测试运行在 `jest-expo` preset 下；当前 `testMatch` 收集 `tests/` 下的 `.test.ts` / `.test.js`，以及 `features/rich-content/tests/` 下的 `.test.ts` / `.test.tsx`。组件交互断言可使用 React Native Testing Library；其他目录或扩展名需要同步调整 `jest.config.js`。常用命令如下：
 
 ```bash
 npm run typecheck
@@ -101,11 +101,17 @@ npm run analyze:rich-content:inbox
 
 `npm run lint` 不修改文件；需要自动修复时使用 `npm run lint:fix` 或 `npm run format`，然后逐项检查 diff。富文本专项的 fixture 投递、脱敏和 manifest 规则见 [`features/rich-content/README.md`](./features/rich-content/README.md)。
 
-富文本后续路线按 [Issue #40](https://github.com/huamurui/zhihu-minus-minus/issues/40) 更新为原生 attributed text / Text Flow Island，候选 backend 与未完成项见 [Renderer V2 计划](./features/rich-content/docs/renderer-v2-plan.md)，Release 指标见 [基准计划](./features/rich-content/docs/benchmark-plan.md)。当前 `ZhihuDocument` 和局部验证工具尚未接入新 backend；现有 `useNative` 分支仍是 RNRH。本分支已有 Enriched JS/Fabric PoC、SVG/lineHeight patch 和三后端开发案例页：从“我的 → 富文本测试案例（开发）”选择稳定 fixture，再切换 RNRH / WebView / Enriched。生产构建隐藏入口并重定向 `/dev/*`；Enriched 不改变业务默认 renderer。
+富文本后续路线按 [Issue #40](https://github.com/huamurui/zhihu-minus-minus/issues/40) 更新为原生 attributed text / Text Flow Island，实施进度与未完成项见 [Renderer V2 计划](./features/rich-content/docs/renderer-v2-plan.md)，Release指标见 [基准计划](./features/rich-content/docs/benchmark-plan.md)。“设置 → 外观与阅读 → 正文排版”提供经典排版、原生排版 V2、网页排版三选项；“功能开关 → 正文排版”也会进入同一页面。业务 `ZhihuContent` 默认读取持久偏好，也可显式传 `renderer` 覆盖。从“我的 → 富文本测试案例（开发）”进入功能原型或稳定fixture，可对照这三个后端；案例内切换仅保留于该页面，不写生产偏好。生产构建隐藏开发入口并重定向 `/dev/*`，但真实正文仍可通过设置选择Native V2。
 
-Enriched 的 normalization 只输出后端专属受限 HTML dialect，尚未实现 HTML → `ZhihuDocument`、Rich Text IR、source map、原生选择范围事件、自定义装饰和精确 attachment baseline。历史构建边界见 [Enriched 实验记录](./features/rich-content/docs/renderer-v2-experiment-01-enriched-html.md)，不能代替合并后验证。原生依赖或 `patches/` 中的 native patch 变更后，应核验锁文件、重新安装依赖以应用 patch，并按原生流程 prebuild、编译和真机检查；不要只靠 Fast Refresh。Tiqian 仍是[待核验草案](./features/rich-content/docs/renderer-v2-experiment-02-tiqian.md)，接口和工具链需先确认，再决定是否实现模块。
+新增的 [Android V2 功能原型](./features/rich-content/docs/renderer-v2-experiment-03-native-flow.md) 经过 HTML → `ZhihuDocument` → Rich Text IR → 本地 `modules/zhihu-rich-text`，初步支持同一流跨段选择、source map、装饰和行内附件。入口为上述案例列表的“V2 功能原型”，也可在开发构建打开 `zhihu--:///dev/rich-content/prototype`。未包含该模块或非Android客户端回退到RNRH。新增模块后运行 `npx expo prebuild --platform android --no-install` 并重新编译/安装development build；Fast Refresh不能添加原生模块，Expo Go不支持此能力。
 
-2026-09-30 本轮 main 同步已通过 `npm ci`、Android / iOS prebuild 和 `npm run check`；质量检查覆盖 17 个 test suites、240 项测试及 8 个稳定 fixtures。本轮没有执行新的 Android/iOS native 构建或真机 Release 验证，prebuild 和逻辑测试通过不代表原生排版、选择或性能已验收。
+公共推荐入口为 `ZhihuContent`，默认采用用户正文偏好，需要固定后端时可传 `renderer="native-v2"`；该外壳已封装完整RNRH fallback。直接使用 `ZhihuNativeContent` 必须提供 `renderFallback` callback，由宿主返回RNRH正文与原有图片/链接交互；V2选区和知识点事件仅在native模块可用时生效。
+
+正文后端偏好保存为 `richContentRenderer`，默认 `rnrh`。settings持久化版本递增到13，并从旧 `useWebView` 迁移：原值为true时保留网页排版，否则使用经典排版，不静默替用户开启Native V2。原生模块缺失或非Android时，只对本次渲染回退RNRH，保留用户选择供可用客户端继续使用。
+
+2026-09-30按用户决定正式移除Enriched：组件、专属normalizer与测试、依赖、native patch和开发入口均已删除，研发集中到本地Native V2。[Enriched 实验记录](./features/rich-content/docs/renderer-v2-experiment-01-enriched-html.md)仅保留研究与历史构建依据。原生依赖移除后需用锁文件安装依赖，重新prebuild、编译和真机检查，以免旧生成工程继续链接已移除的库。当前尚未实现iOS原生adapter或完成Release验收；Tiqian保留为[历史集成草案](./features/rich-content/docs/renderer-v2-experiment-02-tiqian.md)，未接入本轮Android原型。
+
+2026-09-30初始main同步的 `npm ci`、Android / iOS prebuild和质量检查属于移除Enriched之前的记录。本轮Native V2实现、Android Debug真机查看与Enriched移除后的验证结果以 [实验03](./features/rich-content/docs/renderer-v2-experiment-03-native-flow.md) 为准；prebuild和逻辑测试通过不代表双端原生排版、选择或Release性能已验收。
 
 ## 代码结构与数据边界
 

@@ -8,6 +8,7 @@ import {
   Alert,
   type ScrollView as NativeScrollView,
   StyleSheet,
+  useWindowDimensions,
 } from 'react-native';
 import Reanimated, {
   interpolate,
@@ -30,12 +31,17 @@ import { Text, ThemedIcon, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import { VoterListModal } from '@/components/VoterListModal';
 import Colors from '@/constants/Colors';
-import { RICH_CONTENT_STALE_TIME, ZhihuContent } from '@/features/rich-content';
+import {
+  isRichTextNativeAvailable,
+  RICH_CONTENT_STALE_TIME,
+  ZhihuContent,
+} from '@/features/rich-content';
 import { useCollectionAction } from '@/hooks/useCollectionAction';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
 import { useReadingProgress } from '@/hooks/useReadingProgress';
 import { useScrollHeaderAnim } from '@/hooks/useScrollAnimation';
 import { useCollectionStore } from '@/store/useCollectionStore';
+import { useSettingsStore } from '@/store/useSettingsStore';
 import { formatDate } from '@/utils/date';
 import { getZhihuErrorMessage, getZhihuErrorStatus } from '@/utils/zhihuError';
 
@@ -93,10 +99,44 @@ export const AnswerDetailView = ({
       getZhihuErrorStatus(err) === 404 ? false : failureCount < 2,
   });
 
+  const { richContentRenderer, fontSizeScale, lineHeightScale } =
+    useSettingsStore();
+  const dimensions = useWindowDimensions();
+  const waitForNativeLayout =
+    richContentRenderer === 'native-v2' && isRichTextNativeAvailable();
+  const contentLayoutSource = React.useMemo(
+    () => ({
+      id,
+      content: answer?.content,
+      fontSizeScale,
+      lineHeightScale,
+      width: dimensions.width,
+      fontScale: dimensions.fontScale,
+      waitForNativeLayout,
+    }),
+    [
+      id,
+      answer?.content,
+      fontSizeScale,
+      lineHeightScale,
+      dimensions.width,
+      dimensions.fontScale,
+      waitForNativeLayout,
+    ],
+  );
+  const [readyLayoutSource, setReadyLayoutSource] = React.useState<
+    typeof contentLayoutSource | null
+  >(null);
+  const handleContentLayoutReady = React.useCallback(() => {
+    setReadyLayoutSource(contentLayoutSource);
+  }, [contentLayoutSource]);
+
   const readingProgress = useReadingProgress({
     contentKey: `answer:${id}`,
     enabled: isFocused,
-    ready: Boolean(answer),
+    ready:
+      Boolean(answer) &&
+      (!waitForNativeLayout || readyLayoutSource === contentLayoutSource),
     scrollRef: scrollViewRef,
   });
   const handleTrackedScroll = React.useCallback(
@@ -227,6 +267,17 @@ export const AnswerDetailView = ({
   const primaryColor = useThemeColor({}, 'primary');
   const primaryTransparent = useThemeColor({}, 'primaryTransparent');
   const secondaryColor = useThemeColor({}, 'textSecondary');
+  const renderContentPlaceholder = React.useCallback(
+    () => (
+      <View className="h-[200px] justify-center items-center bg-transparent">
+        <ActivityIndicator size="small" color={primaryColor} />
+        <Text type="secondary" className="mt-[15px]">
+          正在斟酌文字...喵
+        </Text>
+      </View>
+    ),
+    [primaryColor],
+  );
   const warningColor = useThemeColor({}, 'warning');
 
   if (!hasBeenFocused) {
@@ -361,12 +412,7 @@ export const AnswerDetailView = ({
         </View>
 
         {queryLoading && !answer ? (
-          <View className="h-[200px] justify-center items-center bg-transparent">
-            <ActivityIndicator size="small" color={primaryColor} />
-            <Text type="secondary" className="mt-[15px]">
-              正在斟酌文字...喵
-            </Text>
-          </View>
+          renderContentPlaceholder()
         ) : (isError || getZhihuErrorStatus(error) === 404) && !answer ? (
           <View className="h-[300px] justify-center items-center px-6 bg-transparent">
             <Ionicons name="compass-outline" size={48} color={secondaryColor} />
@@ -398,6 +444,8 @@ export const AnswerDetailView = ({
               objectId={id}
               type="answer"
               onRefresh={refetch}
+              renderPlaceholder={renderContentPlaceholder}
+              onLayoutReady={handleContentLayoutReady}
             />
             {/* Meta info */}
             <View

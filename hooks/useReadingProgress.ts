@@ -41,6 +41,8 @@ export function useReadingProgress({
   const restoredRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const restoreEligibilityRef = useRef({ contentKey, enabled, ready });
+  restoreEligibilityRef.current = { contentKey, enabled, ready };
 
   useEffect(() => {
     const unsubscribe = useProgressStore.persist.onFinishHydration(() =>
@@ -88,6 +90,15 @@ export function useReadingProgress({
 
     if (restoreTimerRef.current) clearTimeout(restoreTimerRef.current);
     restoreTimerRef.current = setTimeout(() => {
+      restoreTimerRef.current = null;
+      const current = restoreEligibilityRef.current;
+      if (
+        !current.enabled ||
+        !current.ready ||
+        current.contentKey !== contentKey ||
+        restoredRef.current
+      )
+        return;
       const targetOffset = resolveReadingProgressOffset(
         entry,
         contentHeightRef.current,
@@ -98,11 +109,16 @@ export function useReadingProgress({
       restoredRef.current = true;
       setRestoredOffset(targetOffset);
     }, RESTORE_DELAY_MS);
-  }, [enabled, entry, hasHydrated, ready, scrollRef]);
+  }, [contentKey, enabled, entry, hasHydrated, ready, scrollRef]);
 
   useEffect(() => {
+    if (!ready) contentMeasuredWhileReadyRef.current = false;
     tryRestore();
-  }, [tryRestore]);
+    return () => {
+      if (restoreTimerRef.current) clearTimeout(restoreTimerRef.current);
+      restoreTimerRef.current = null;
+    };
+  }, [ready, tryRestore]);
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {

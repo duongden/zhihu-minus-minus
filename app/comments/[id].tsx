@@ -27,8 +27,8 @@ import {
   type CommentItem,
   type CommentResourceType,
   createAnswerComment,
+  createAnswerSegmentComment,
   createArticleComment,
-  createCommentReply,
   createCommentV5,
   createPinComment,
   createQuestionComment,
@@ -37,6 +37,8 @@ import {
   getArticleCommentsV5 as getArticleComments,
   getPinCommentsV5 as getPinComments,
   getQuestionCommentsV5 as getQuestionComments,
+  parseAnswerSegmentCommentContext,
+  parseAnswerSegmentCommentTarget,
 } from '@/api/zhihu';
 import type { ZhihuCommentResponse } from '@/api/zhihu/comment';
 import { BouncyButton } from '@/components/BouncyButton';
@@ -56,13 +58,17 @@ import { buildZhihuContent, buildZhihuImageHtml } from '@/utils/zhihuContent';
 import { getZhihuErrorMessage } from '@/utils/zhihuError';
 
 export default function CommentScreen() {
-  const { id, type, segmentId, count, text } = useLocalSearchParams<{
-    id: string;
-    type: string;
-    segmentId?: string;
-    count?: string;
-    text?: string;
-  }>();
+  const { id, type, segmentId, count, text, pid, startOffset, endOffset } =
+    useLocalSearchParams<{
+      id: string;
+      type: string;
+      segmentId?: string;
+      count?: string;
+      text?: string;
+      pid?: string;
+      startOffset?: string;
+      endOffset?: string;
+    }>();
   const router = useRouter();
   const [inputText, setInputText] = useState('');
   const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(
@@ -94,6 +100,26 @@ export default function CommentScreen() {
         : type === 'pin'
           ? 'pins'
           : 'answers';
+  const isSegmentDiscussion = segmentId !== undefined;
+  const segmentRoute = {
+    id,
+    type,
+    segmentId,
+    text,
+    pid,
+    startOffset,
+    endOffset,
+  };
+  const segmentTarget = isSegmentDiscussion
+    ? parseAnswerSegmentCommentTarget(segmentRoute)
+    : null;
+  const segmentContext = isSegmentDiscussion
+    ? parseAnswerSegmentCommentContext(segmentRoute)
+    : null;
+  const canPostComment = !isSegmentDiscussion || segmentContext !== null;
+  const segmentPostingHint = segmentTarget
+    ? '这个知识点链接缺少完整的原文位置。可以查看评论，请返回正文重新选择知识点后发布。'
+    : '这个知识点链接暂不支持评论。请返回正文重新选择知识点。';
 
   // 键盘高度动画：解决键盘收起后输入框无法回到底部的 bug
   const keyboardHeight = useSharedValue(0);
@@ -139,12 +165,18 @@ export default function CommentScreen() {
     refetch,
   } = useInfiniteQuery({
     queryKey: ['comments', id, type, segmentId, orderBy],
+    enabled: !isSegmentDiscussion || segmentTarget !== null,
     queryFn: async ({ pageParam = '' }): Promise<ZhihuCommentResponse> => {
-      if (segmentId) {
+      if (isSegmentDiscussion) {
+        if (!segmentTarget) throw new Error('知识点评论目标无效');
+        const offset = Number(pageParam || 0);
+        if (!Number.isSafeInteger(offset) || offset < 0)
+          throw new Error('知识点评论分页位置无效');
         const { getSegmentComments } = await import('@/api/zhihu/answer');
         const segmentResponse = await getSegmentComments(
-          id as string,
-          segmentId as string,
+          segmentTarget.answerId,
+          segmentTarget.segmentIds.join(','),
+          offset,
         );
         return {
           data: segmentResponse.data || [],
@@ -181,7 +213,11 @@ export default function CommentScreen() {
     mutationFn: async ({ text: commentText, images }: CommentDraft) => {
       const imageHtml = images.map(buildZhihuImageHtml).join('<br/>');
       const content = buildZhihuContent(commentText, imageHtml);
-      if (replyTo && !segmentId) {
+      if (isSegmentDiscussion) {
+        if (!segmentContext) throw new Error(segmentPostingHint);
+        return createAnswerSegmentComment(segmentContext, content, replyTo?.id);
+      }
+      if (replyTo) {
         return createCommentV5(
           commentResourceType,
           id as string,
@@ -189,7 +225,6 @@ export default function CommentScreen() {
           replyTo.id,
         );
       }
-      if (replyTo) return createCommentReply(replyTo.id, content);
       if (type === 'question')
         return createQuestionComment(id as string, content);
       if (type === 'article')
@@ -321,6 +356,7 @@ export default function CommentScreen() {
                   variant="ghost"
                 />
                 <BouncyButton
+                  disabled={!canPostComment}
                   onPress={() => {
                     setReplyTo({
                       id: item.id as string,
@@ -540,24 +576,38 @@ export default function CommentScreen() {
             overflow: 'hidden',
           }}
         >
-          <CommentComposer
-            colorScheme={colorScheme}
-            borderColor={borderColor}
-            inputRef={inputRef}
-            inputText={inputText}
-            isSubmitting={mutation.isPending}
-            onChangeText={setInputText}
-            onSubmit={submitComment}
-            onCancelReply={() => setReplyTo(null)}
-            placeholder={
-              replyTo
-                ? `回复 ${replyTo.name}...`
-                : '既然来了，就留下点什么吧...'
-            }
-            replyToName={replyTo?.name}
-            textColor={textColor}
-            tintColor={tintColor}
-          />
+          {canPostComment ? (
+            <CommentComposer
+              colorScheme={colorScheme}
+              borderColor={borderColor}
+              inputRef={inputRef}
+              inputText={inputText}
+              isSubmitting={mutation.isPending}
+              onChangeText={setInputText}
+              onSubmit={submitComment}
+              onCancelReply={() => setReplyTo(null)}
+              placeholder={
+                replyTo
+                  ? `回复 ${replyTo.name}...`
+                  : '既然来了，就留下点什么吧...'
+              }
+              replyToName={replyTo?.name}
+              textColor={textColor}
+              tintColor={tintColor}
+            />
+          ) : (
+            <Text
+              type="secondary"
+              style={{
+                paddingHorizontal: 18,
+                paddingVertical: 14,
+                fontSize: 13,
+                lineHeight: 19,
+              }}
+            >
+              {segmentPostingHint}
+            </Text>
+          )}
         </BlurView>
       </Reanimated.View>
 
