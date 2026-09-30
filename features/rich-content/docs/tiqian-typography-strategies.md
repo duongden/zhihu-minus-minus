@@ -149,7 +149,7 @@ RNRH可以试 `textAlign: 'justify'`，但不保证两端系统使用相同规�
 | 接入路径 | 值得验证的入口 | 本仓难度与尚缺工作 |
 | --- | --- | --- |
 | Android 原生 View | 上游 `CjkTextView`、`CjkTextSurface`；本地 Expo module 承载 | 高。现有 View 前端可避免第一轮额外引入 Compose 宿主，但仍需核验 Gradle/工具链、RN 测量、滚动/手势、跨段选择、媒体、生命周期与 source map |
-| iOS 原生 | 上游 Apple `CJKTextView` / `TiqianUI`、Core Text 路径 | 高。当前上游已有 iOS 只读前端，不能再笼统说上游“没有 iOS”；本仓仍没有 RN/Expo adapter 或兼容验证 |
+| iOS 原生 | 上游 Apple `CJKTextView` / `TiqianUI`、Core Text 路径 | 高。当前上游已有 iOS 只读前端，不能再笼统说上游“没有 iOS”；本仓未接入Tiqian的RN/Expo adapter或完成其兼容验证；现有UIKit/TextKit模块是独立系统后端 |
 | WebView 完整引擎 | `@tiqian/prose` 渐进增强现有 HTML | 中高。需处理 runtime/字体资产、动态正文生命周期、降级、消息与选择映射、缓存及长文性能；比几条 CSS 大得多 |
 
 入口信息来自固定版本的 [Android View 指南][T-ANDROID]、[Apple 前端][T-APPLE]、[Web 指南][T-WEB]，不构成本仓兼容矩阵或可直接安装的稳定版本承诺。既有 [Tiqian 集成草案](./renderer-v2-experiment-02-tiqian.md) 继续保留为历史实验路线，正式 PoC 要重新核验当前 API。原生依赖/配置变化必须 prebuild，不提交生成的 `android/`、`ios/`。

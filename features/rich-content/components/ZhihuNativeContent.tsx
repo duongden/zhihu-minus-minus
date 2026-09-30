@@ -825,7 +825,7 @@ function NativeBlock(props: BlockViewProps) {
   }
 }
 
-/** Android V2 prototype: native text flows, React Native media boundaries. */
+/** Native V2 text flows with React Native media boundaries. */
 export const ZhihuNativeContent = React.memo(function ZhihuNativeContent({
   content,
   contentArray,

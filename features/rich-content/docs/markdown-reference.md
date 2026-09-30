@@ -2,9 +2,9 @@
 
 本轮根据用户提供的本地 Zhihu++ 仓库补充 Renderer V2 内容模型。参考路径为 `shared/src/commonMain/kotlin/com/github/zly2006/zhihu/markdown/`，其中 `MdAst.kt` 负责 HTML/Markdown 转 AST，`RenderMarkdown.kt` 负责渲染与图片画廊，`MarkdownRuntime.kt` 负责平台字体和资源加载。知识点高亮另参考 `util/SegmentHighlightUtils.kt` 与 `ui/components/SegmentHighlight.kt`。2026-09-30再次核对本地HEAD `5d12475b`，相关参考目录无未提交修改，并补查 `shared/src/tiqianMarkdownMain/kotlin/com/github/zly2006/zhihu/markdown/TiqianMarkdownRenderer.kt`。
 
-2026-09-30已初步实现HTML → `ZhihuDocument`、Text Flow Island / Rich Text IR编译与Android原生adapter；完整知乎dialect、Markdown parser、iOS adapter和编辑器序列化尚未接入。Enriched运行链路已正式移除，下面的模型参考继续供[本地Native V2](./renderer-v2-experiment-03-native-flow.md)使用。
+2026-09-30已初步实现HTML → `ZhihuDocument`、Text Flow Island / Rich Text IR编译与Android原生adapter；2026-10-01新增iOS UIKit/TextKit初步adapter，两端共享语义模型与编译器。完整知乎dialect、Markdown parser和编辑器序列化尚未接入，双端平台验收仍待完成。Enriched运行链路已正式移除，下面的模型参考继续供[本地Native V2](./renderer-v2-experiment-03-native-flow.md)使用。
 
-根据 [Issue #40 当前方向](https://github.com/huamurui/zhihu-minus-minus/issues/40) 和 [早期候选讨论](https://github.com/huamurui/zhihu-minus-minus/issues/40#issuecomment-5595047992)，这些参考用于中立语义层与adapter。`ZhihuDocument` 不规定WebView或逐块虚拟化；现有native IR将连续段落合成flow，把复杂媒体保留为独立block。Zhihu++的Tiqian实践继续帮助研究排版语义；Tiqian本身未接入，本仓iOS路径仍待实现。
+根据 [Issue #40 当前方向](https://github.com/huamurui/zhihu-minus-minus/issues/40) 和 [早期候选讨论](https://github.com/huamurui/zhihu-minus-minus/issues/40#issuecomment-5595047992)，这些参考用于中立语义层与adapter。`ZhihuDocument` 不规定WebView或逐块虚拟化；现有native IR将连续段落合成flow，把复杂媒体保留为独立block。Zhihu++的Tiqian实践继续帮助研究排版语义；Tiqian本身未接入，其iOS集成路径也未验证，现有UIKit/TextKit模块属于独立系统后端。
 
 ## 结构映射
 

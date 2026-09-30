@@ -94,6 +94,6 @@ export const richContentPrototypeCases: readonly RichContentPrototypeCase[] = [
     id: 'typography',
     title: '中西混排',
     hint: '调整字号、行高、双齐和整字版心；浏览器对照还可观察中西间距与标点压缩。',
-    html: '<h2>让阅读的节奏更稳定</h2><p data-pid="typography-a">React Native 0.83 与 Expo SDK 55 让这段文字在 Android 上保持系统原生排版。中文与 Latin letters、2026 年、17px、UTF-16 混排时，先统一字号、行高和段距，再观察最小的排版策略带来的变化。</p><p data-pid="typography-b">“引号不应孤零零地留在行尾”，括号（以及嵌套的〈书名〉）也需要合适的断行。A long English word like internationalization should follow the platform line breaker，而链接 https://example.com/reading 则要有可用的换行机会。</p><p data-pid="typography-c">双齐使用 Android 系统 justification；整字版心以当前字号与系统字体缩放确定文字宽度。中西文自动间距和标点压缩在 WebView 对照中用 CSS 试验，原生流仍保留原始字符与偏移。</p><hr/><p>最后一行不需要为了填满右边缘而过度拉开，段落之间保持清楚的层次。</p>',
+    html: '<h2>让阅读的节奏更稳定</h2><p data-pid="typography-a">React Native 0.83 与 Expo SDK 55 让这段文字在 Android 与 iOS 上保持系统原生排版。中文与 Latin letters、2026 年、17px、UTF-16 混排时，先统一字号、行高和段距，再观察最小的排版策略带来的变化。</p><p data-pid="typography-b">“引号不应孤零零地留在行尾”，括号（以及嵌套的〈书名〉）也需要合适的断行。A long English word like internationalization should follow the platform line breaker，而链接 https://example.com/reading 则要有可用的换行机会。</p><p data-pid="typography-c">双齐使用各平台的系统文字布局；整字版心以当前字号与系统字体缩放确定文字宽度。中西文自动间距和标点压缩在 WebView 对照中用 CSS 试验，原生流仍保留原始字符与偏移。</p><hr/><p>最后一行不需要为了填满右边缘而过度拉开，段落之间保持清楚的层次。</p>',
   },
 ];

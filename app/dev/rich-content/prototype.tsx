@@ -1,6 +1,6 @@
 import * as Clipboard from 'expo-clipboard';
-import { Stack } from 'expo-router';
-import { useCallback, useRef, useState } from 'react';
+import { Stack, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Image,
   Modal,
@@ -97,6 +97,13 @@ function Toggle({
 }
 
 export default function RichContentPrototypeScreen() {
+  const params = useLocalSearchParams<{ caseId?: string | string[] }>();
+  const requestedCaseId = Array.isArray(params.caseId)
+    ? params.caseId[0]
+    : params.caseId;
+  const requestedCase = richContentPrototypeCases.find(
+    (item) => item.id === requestedCaseId,
+  )?.id;
   const insets = useSafeAreaInsets();
   const dimensions = useWindowDimensions();
   const backgroundColor = useThemeColor({}, 'background');
@@ -105,7 +112,7 @@ export default function RichContentPrototypeScreen() {
   const secondaryColor = useThemeColor({}, 'textSecondary');
   const primaryColor = useThemeColor({}, 'primary');
   const borderColor = useThemeColor({}, 'border');
-  const [caseId, setCaseId] = useState('selection');
+  const [caseId, setCaseId] = useState(() => requestedCase ?? 'selection');
   const [renderer, setRenderer] = useState<RichContentRenderer>('native-v2');
   const [controlsExpanded, setControlsExpanded] = useState(false);
   const [fontSizeScale, setFontSizeScale] = useState(1);
@@ -144,6 +151,12 @@ export default function RichContentPrototypeScreen() {
     setLinkPreview(null);
     setLastAction('尚未操作');
   }, []);
+  useEffect(() => {
+    if (!requestedCase) return;
+    setCaseId(requestedCase);
+    resetInteractions();
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [requestedCase, resetInteractions]);
   const selectCase = useCallback(
     (nextCaseId: string) => {
       activeViewKey.current = `${nextCaseId}:${renderer}`;
@@ -370,9 +383,9 @@ export default function RichContentPrototypeScreen() {
           {renderer === 'native-v2' && !nativeAvailable ? (
             <Text style={[styles.hint, { color: primaryColor }]}>
               当前
-              {Platform.OS === 'android'
+              {Platform.OS === 'android' || Platform.OS === 'ios'
                 ? '开发构建缺少 V2 原生模块'
-                : '平台尚无 V2 原生模块'}
+                : '平台暂不支持 V2 原生模块'}
               ，正文使用 RNRH fallback
               与其图片、链接交互；本地选区和知识点菜单在 Native V2 中演示。
             </Text>

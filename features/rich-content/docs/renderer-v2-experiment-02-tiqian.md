@@ -10,7 +10,7 @@
 
 本仓已有 [`ZhihuDocument`](../document.ts) 语义模型、遍历和局部属性/消息验证。下文 `RendererDocument` / 最小 Document V0、native API、Gradle 和目录示例均是尚未落地的草案，不应再创建另一份应用公共 AST。真实正文应先规范化为 `ZhihuDocument`，由独立 adapter 编译为选定 Tiqian 版本需要的输入；传输 DTO 只在模块内部定义，并保留节点/段落身份、UTF-16 范围和 source map 的对应。
 
-本地Native V2已初步实现HTML → Document、Rich Text IR、source map和Android事件；完整知乎覆盖、宿主手势/生命周期、iOS adapter与Release真机数据仍需验证。已删除的Enriched专属HTML dialect不能作为通用模型。下面的类型与方法名仅保留历史边界示意，不能视为Tiqian当前API或已完成的production模块。
+本地Native V2已初步实现HTML → Document、Rich Text IR、source map和Android事件，2026-10-01新增UIKit/TextKit iOS adapter；完整知乎覆盖、双端宿主手势/生命周期与Release真机数据仍需验证。这不是Tiqian的iOS接入。已删除的Enriched专属HTML dialect不能作为通用模型。下面的类型与方法名仅保留历史边界示意，不能视为Tiqian当前API或已完成的production模块。
 
 ## 目标
 

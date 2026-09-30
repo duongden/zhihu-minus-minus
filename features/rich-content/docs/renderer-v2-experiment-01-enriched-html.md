@@ -1,6 +1,6 @@
 # Renderer V2 实验 01：Enriched HTML
 
-**已于2026-09-30正式删除Enriched运行链路。** 按用户决定，组件、专属normalizer与测试、`react-native-enriched-html`依赖、native patch及开发入口均已移除；非Android/缺模块客户端回退RNRH。当前开发主线为直接消费IR的[本地Native V2](./renderer-v2-experiment-03-native-flow.md)。
+**已于2026-09-30正式删除Enriched运行链路。** 按用户决定，组件、专属normalizer与测试、`react-native-enriched-html`依赖、native patch及开发入口均已移除；不支持平台/缺模块客户端回退RNRH。当前开发主线为直接消费IR的[本地Native V2](./renderer-v2-experiment-03-native-flow.md)。
 
 本文仅保留当时的研究、接入和构建历史，下面出现的API、入口与patch均描述已删除实现，不是当前可运行路线或待办承诺。
 

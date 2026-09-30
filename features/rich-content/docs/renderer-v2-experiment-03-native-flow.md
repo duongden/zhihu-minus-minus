@@ -1,6 +1,6 @@
-# Renderer V2：Android 连续文本流与真实正文试用
+# Renderer V2：连续文本流与真实正文试用
 
-2026-09-30。本轮先实现各项能力的最小可见版本，随后按用户要求开放真实正文的可选入口；性能门槛、长文本基准与全量默认迁移暂不展开。排版策略依据 [Tiqian 评估](./tiqian-typography-strategies.md)，架构依据 [V2 计划](./renderer-v2-plan.md)。这次使用 Android 系统 TextView / Spannable，并未接入 Tiqian 排版引擎。
+2026-09-30开始。本轮先实现各项能力的最小可见版本，随后按用户要求开放真实正文的可选入口；性能门槛、长文本基准与全量默认迁移暂不展开。排版策略依据 [Tiqian 评估](./tiqian-typography-strategies.md)，架构依据 [V2 计划](./renderer-v2-plan.md)。首先使用Android系统TextView/Spannable，2026-10-01开始增加iOS UIKit/TextKit adapter；两者均未接入Tiqian排版引擎。Android阶段的已验证结果与新增iOS验证分别记录。
 
 ## 入口与数据链路
 
@@ -14,11 +14,11 @@ HTML + segment_infos / 想法 content 分段数组
   → ZhihuDocument
   → compileZhihuDocument
   → RichTextFlow（UTF-16 text / spans / paragraphs / decorations / attachments / sourceMap）
-  → Android ZhihuRichText TextView
+  → ZhihuRichText（Android TextView / iOS UITextView）
   + React Native 独立媒体 block
 ```
 
-公开能力从 `@/features/rich-content` 导入。原生实现位于 [`modules/zhihu-rich-text`](../../../modules/zhihu-rich-text/README.md)。业务默认读取 `richContentRenderer`，也可显式传 `renderer="native-v2"` 覆盖；新安装默认仍为RNRH。未包含新模块或非Android客户端使用完整RNRH fallback，保留保存的偏好；原型页标明可用性。开发对照只保留Native V2 / RNRH / WebView。
+公开能力从 `@/features/rich-content` 导入。原生实现位于 [`modules/zhihu-rich-text`](../../../modules/zhihu-rich-text/README.md)。业务默认读取 `richContentRenderer`，也可显式传 `renderer="native-v2"` 覆盖；新安装默认仍为RNRH。未包含新模块或Android/iOS以外的平台使用完整RNRH fallback，保留保存的偏好；原型页标明可用性。开发对照只保留Native V2 / RNRH / WebView。
 
 推荐通过 `ZhihuContent` 使用该能力，默认采用正文设置，其交互外壳已经提供完整RNRH fallback；需要固定后端时显式传 `renderer="native-v2"`。直接挂载 `ZhihuNativeContent` 必须传入 `renderFallback: () => React.ReactNode`；功能原型宿主同样提供现有RNRH adapter，复用图片预览和链接分流。模块不反向导入外壳，避免fallback循环依赖。V2源选区和知识点事件仅在native可用时运行。
 
@@ -95,7 +95,7 @@ WebView对照使用同一套字号/行高，并可实验 `line-break: strict`、
 
 两个正文预览宿主在数据获取和native准备阶段保留同一个ready callback，每次打开只执行一次open animation，后续frame重测仅更新关闭目标，不重复fade。回答详情在两个阶段都保留同一200px加载提示。renderer与预览测试验证native等待不调用fallback、宽度/布局key一致后单次切换与动画不重播；Jest已纳入富文本 `.test.tsx`。真机合成原型已确认标题及native正文出现、骨架退出，新layoutKey桥生效；更多实际内容的首载变化仍需继续核对。
 
-阅读进度还定位到一个可重复的问题：数据返回即设置ready，会在短placeholder停留超过180ms时，把已保存的1200px位置提前截为0；随后长正文出现也不再恢复。修补通过公开 `onLayoutReady` 在最后一个有效flow测高与正文揭开的同一event batch通知，再开启回答页恢复；阅读进度hook还要求就绪后的新contentSize，撤销ready会取消旧恢复计时。正文就绪按原始内容、对象/变体及宽度配置保持；同一文字、段落指标、有效字形样式和附件资源/尺寸可沿用已验证的精确高度。仅节点、action、decoration或反应元数据变化不会让可见正文退回骨架，也不会让尚在首测的其他flow丢失有效测量。过期事件仍按当前身份拒绝，新的有效高度仍可校正。非Android/模块不可用继续按原有回答数据就绪路径运行。不修改持久schema，也不把未知附件的最终尺寸作为首测前置条件。
+阅读进度还定位到一个可重复的问题：数据返回即设置ready，会在短placeholder停留超过180ms时，把已保存的1200px位置提前截为0；随后长正文出现也不再恢复。修补通过公开 `onLayoutReady` 在最后一个有效flow测高与正文揭开的同一event batch通知，再开启回答页恢复；阅读进度hook还要求就绪后的新contentSize，撤销ready会取消旧恢复计时。正文就绪按原始内容、对象/变体及宽度配置保持；同一文字、段落指标、有效字形样式和附件资源/尺寸可沿用已验证的精确高度。仅节点、action、decoration或反应元数据变化不会让可见正文退回骨架，也不会让尚在首测的其他flow丢失有效测量。过期事件仍按当前身份拒绝，新的有效高度仍可校正。不支持的平台/模块不可用继续按原有回答数据就绪路径运行。不修改持久schema，也不把未知附件的最终尺寸作为首测前置条件。
 
 就绪与阅读进度两组Jest测试共16项已通过：短placeholder延迟1秒期间保留保存位置，正文新测量后恢复1200px；撤销ready取消旧180ms计时；无保存位置不触发滚动。另覆盖旧宽度/配置/正文事件不通知、无flow文档通过实际容器layout通知、仅反应元数据更新保持正文挂载可见、知识点mark改变版本后保留已验证高度并拒绝旧事件，以及首测中另一flow元数据更新时保留未变flow的测量。TypeScript及改动文件Biome检查通过；这些测试保证首次正文布局门禁，真机阅读位置及所有异步媒体最终高度尚未据此验收。
 
@@ -112,15 +112,15 @@ WebView对照使用同一套字号/行高，并可实验 `line-break: strict`、
 - `segment_infos`与`highlight-wrap`显示原生跨行虚线；点击“稳定范围”打开本地知识点菜单，源范围为 `segment-a:[9, 13)`。四种线型的全部调节组合、长按附件、复制内容、脚注与复杂表格交互尚未逐项人工验收。
 - 本轮不进行Release性能门槛、长文本压力、iOS原生实现或生产默认切换。真机截图仅用于合成页面的本地查看，不登记真实知乎正文。
 
-后续优先根据真机反馈修复交互和显示，再决定补齐iOS TextKit adapter、引入Tiqian，或继续扩展系统布局。不要用这轮功能原型替代[V2完整验收](./renderer-v2-plan.md#第一阶段验收)。
+Android原型阶段优先根据真机反馈修复交互和显示；后续新增iOS TextKit adapter，构建与平台验证单独记录。是否引入Tiqian仍由系统布局的实际缺口决定。不要用这轮功能原型替代[V2完整验收](./renderer-v2-plan.md#第一阶段验收)。
 
 ## 真机试用后的路线调整
 
 用户认为在当前重点功能上，Native V2的显示效果明显优于Enriched与现有RNRH，并随后明确要求正式删除Enriched。后续优先投入直接消费IR的本地原生后端。RNRH继续用于现有业务正文和迁移fallback。
 
-2026-09-30正式移除范围：Enriched组件、后端专属dialect normalizer及其测试、依赖与锁文件条目、native patch、公共属性与开发入口。Native V2在非Android/缺模块客户端回退RNRH，现存对照为Native V2 / RNRH / WebView。实验01保留历史依据，Enriched不再是运行后端或fallback。
+2026-09-30正式移除范围：Enriched组件、后端专属dialect normalizer及其测试、依赖与锁文件条目、native patch、公共属性与开发入口。当时Native V2仅有Android实现，其他平台/缺模块客户端回退RNRH，现存对照为Native V2 / RNRH / WebView。实验01保留历史依据，Enriched不再是运行后端或fallback。
 
-Native V2接下来重点是附件基线、复杂公式与背景语义、装饰命中及更多实际正文结构，随后补iOS adapter；不为维持已删除候选重复实现能力。
+当时确定的后续重点为附件基线、复杂公式与背景语义、装饰命中及更多实际正文结构，再补iOS adapter；不为维持已删除候选重复实现能力。
 
 ## 正式移除后的验证
 
@@ -136,8 +136,35 @@ Native V2接下来重点是附件基线、复杂公式与背景语义、装饰�
 
 2026-10-01首载处理模块完成native prebuild、arm64 Debug构建及APK更新安装，真机合成原型的标题和native正文出现、骨架退出。信息流原生摘要扩展已精准撤回，FeedExcerpt保留原Text。其后的暗色公式绘制另行完成Android prebuild和最终arm64 Debug构建（约10秒）；编译产物更新时间晚于最后源码修改。约50.5MB的 `app-arm64-v8a-debug.apk` 通过 `adb install --no-streaming -r` 更新安装成功，设备为vivo / API36。mask边界和65,536组alpha/gray不变量通过纯Kotlin验证，公式尺寸与分类不变。
 
-最新 `npm run check` 退出码0：类型检查通过，Biome检查279个文件（保留2项原有warning），29个suite/424项测试通过，8个稳定fixture分析通过。此次检查包含生产后端设置迁移、知乎存量格式、知识点/选区/段评边界、就绪与阅读进度、公式规则、裸容器拆段以及reaction快照竞态。
+Android阶段最终 `npm run check` 退出码0：类型检查通过，Biome检查279个文件（保留2项原有warning），29个suite/424项测试通过，8个稳定fixture分析通过。此次检查包含生产后端设置迁移、知乎存量格式、知识点/选区/段评边界、就绪与阅读进度、公式规则、裸容器拆段以及reaction快照竞态。
 
 已确认真机范围为冷重启dev client后打开合成功能原型：页面标题出现，同一个TextView包含标题和第一/第二段连续正文，未出现“不支持”提示或加载骨架。该轮清空崩溃缓冲后的检查为FATAL EXCEPTION 0、native fatal signal 0；真实article的短公式行内问题获用户确认修复。安装最终着色APK后，用户明确确认暗色SVG公式修复。普通图片保持原色由回归与native kind guard验证，不冒充全部图源的真机验收。未量化白闪/抖动幅度，也未提交真实赞同、段评或新建reaction；业务服务端操作和所有实际正文的完整视觉仍需后续逐项验收。首次正文就绪不等于所有媒体已完成，未知intrinsic尺寸及表格自然高度仍可能带来后续布局变化。
 
-本轮继续不开展Release性能与iOS真机验收，iOS仍无新的原生adapter。
+上述Android阶段没有开展Release性能与iOS真机验收，当时尚无iOS原生adapter。新增iOS实现不沿用这些Android构建与真机结果作为平台验收。
+
+
+## 2026-10-01：初步 iOS 原生文字流
+
+按用户要求，Native V2开始补齐iOS系统后端：Expo本地模块注册Apple端的 `ZhihuRichTextModule`，JS延迟加载允许Android和iOS；不支持的平台、旧客户端缺模块或native view加载失败仍返回不可用，由正文宿主使用完整RNRH fallback。共享正文偏好不需要新增迁移，新安装仍默认经典排版；iOS与Android使用同一设置和开发案例入口。
+
+iOS直接接收现有Rich Text IR，使用 `NSAttributedString`、一个内部不滚动的 `UITextView` 和TextKit 1视觉行布局；不增加另一份HTML parser或公共AST。范围样式、标题/引用/列表、四种装饰、系统选区与附件语义复制沿用flow坐标。`UIFontMetrics`的系统比例统一应用到字体、行高、段距和附件，SVG ex/em使用已缩放字体。媒体、表格、脚注和业务身份/范围验证继续复用JS宿主。`flowJson`、`configJson`、`contentWidth`、`layoutKey`、`selectable`与选择/高度/action事件沿用既有契约；高度仍须回传当前layoutKey，正文首测与阅读进度门禁不会因平台开启而绕过。
+
+iOS SVG由podspec声明的 `SDWebImageSVGCoder@1.7.0` raster显示，支持根节点ex/em/viewBox与baseline，单边显式尺寸保留自然比例；普通bitmap由ImageIO限尺寸解码。匿名下载有4MiB流式上限与超时，缓存保留主题无关资源，公式使用正文前景色与近白底mask，普通图片不染色。更新以当前generation和取消状态守护，重新布局保留有效选区。装饰、附件、字体缩放、父滚动与系统拖柄的完整视觉/交互仍须独立平台验收。
+
+完整app构建还发现原有Expo Router在iOS15.1 target下调用当前SDK的iOS16 `UIAction.subtitle`。只读SDK与最小Swift编译核对后，新增持久patch-package补丁为该赋值加availability guard；保留最低15.1，不通过提高全局target绕过问题。原型同时增加安全caseId deeplink，以便CLI模拟器打开六个合成案例；正文不来自query，生产开发入口边界保持。
+
+JS模块可用性回归已通过1个suite/9项测试：Android与iOS的懒加载、桥props原样传递、缺模块fallback、Web/其他平台不请求native，以及view加载失败和Expo注册。`bash modules/zhihu-rich-text/tests/run-model-smoke.sh`直接编译iOS纯Foundation模型，17项UTF-16范围与复制断言通过；Swift语法、podspec，以及models/config/layoutManager的独立UIKit类型检查也已通过。
+
+iOS实现最终 `npm run check` 退出码0：31个suite/439项测试、Biome281个文件（保留2项原有warning）、8个稳定fixture通过，包含模块可用性和新增开发deeplink回归。rich-content专项补跑19个suite/325项、fixture分析8个案例通过。`patch-package --error-on-fail`成功应用现有screens与新增router两个补丁。
+
+完整iOS Simulator app的 `xcodebuild` 已 `BUILD SUCCEEDED`：使用iOS27 SDK，deployment target保持15.1，验证设备为专用iOS26.3模拟器。应用已安装启动，Native V2跨段案例的标题、正文、链接、引用线与列表可见，正文加载占位退出。
+
+实际附件用例发现并修复一处TextKit事务崩溃：`NSTextStorage.beginEditing()`期间调用 `NSLayoutManager.invalidateLayout` 会触发布局洞填充并产生SIGABRT。现在编辑事务只更新附件与storage属性，结束编辑后再失效布局/显示、恢复选区并重测。修复后重新prebuild、完整构建与31/439检查通过；附件专项XCUI运行25.8秒通过前台断言，小图、两处行内公式、短I和独立公式实际可见，页面保持运行。
+
+六个合成案例的首屏已逐项截图核对：连续段落、默认跨行虚线与样式、两种知识点来源、行内附件、图片/卡片/视频占位，以及中西混排显示正常。暗色通过专用模拟器的Hermes开发调试接口调用既有 `setThemeMode('dark')` 和Expo Router导航核对：两处行内公式、短I与独立公式为浅色，普通绿色小图保持原色；随后恢复跟随系统模式。截图只覆盖可见区域，未宣称表格/脚注等所有离屏内容及菜单交互已验收。
+
+此包以 `CODE_SIGNING_ALLOWED=NO` 构建，SecureStore写入会报告缺少Keychain entitlement；主题验证使用内存状态，签名安装后的持久化与系统外观实时跟随需另验。这属于当前模拟器构建环境的边界，未为测试修改产品持久化代码或生产入口。
+
+这份模拟器的emoji显示为缺字方框。独立UIKit/CoreText程序以标准系统字体运行相同字符串，同样报告注册的 `Fonts/Core/AppleColorEmoji.ttc` 不存在、回退LastResort；当前runtime另有CoreAddition字体文件，但未修复系统注册路径。源字符和UTF-16范围检查保持通过，emoji视觉需在完整runtime或真机复验。
+
+系统选区拖柄/长按与父滚动的完整手势组合、iOS真机和双端Release仍未据此验收。

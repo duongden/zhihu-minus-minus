@@ -10,12 +10,12 @@
 
 | 后端 | 验证方向 | 需要先确认的边界 |
 | --- | --- | --- |
-| Native V2 | 本地原生模块直接消费Rich Text IR；Android TextView/Spannable初步实现，iOS TextKit adapter待补 | 连续flow的布局/选择/装饰/附件、异步reflow、系统排版边界与媒体生命周期 |
+| Native V2 | 本地原生模块直接消费Rich Text IR；Android TextView/Spannable初步实现，iOS新增UIKit/TextKit adapter | 连续flow的布局/选择/装饰/附件、异步reflow、系统排版边界与媒体生命周期 |
 | Tiqian | Android local native module 接入 article renderer，由中立 document model 经 adapter 转换；验证 CJK 排版、Tiqian Math、inline object 和 article-level selection | RN 宿主的 measurement、scroll、gesture 和 lifecycle；API、Kotlin/AGP/Compose 与项目锁定工具链的兼容性；最低 Android 版本；iOS 能力差异与独立路径 |
 | RNRH | 当前行为、网络和挂载成本的对照，覆盖迁移期 fallback | Text/View 数量、跨段选择、公式和媒体行为 |
 | DOM/WebView | 复杂内容 fallback 或实验对照 | DOM 布局、bridge 成本、选择和宿主滚动边界 |
 
-本地Native V2尚未完成双端完整验收，非Android或缺模块客户端回退RNRH。Tiqian只保留为系统布局能力不足时的研究选项；Zhihu++的排版与选择能力不代表本项目已接入。若重新开展Tiqian PoC，工具链兼容性须以实际锁文件、依赖要求和构建结果确认。
+本地Native V2尚未完成双端完整验收，Android/iOS以外的平台或缺模块客户端回退RNRH。Tiqian只保留为系统布局能力不足时的研究选项；Zhihu++的排版与选择能力不代表本项目已接入。若重新开展Tiqian PoC，工具链兼容性须以实际锁文件、依赖要求和构建结果确认。
 
 ## 测试矩阵
 

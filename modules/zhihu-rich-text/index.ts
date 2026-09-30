@@ -45,7 +45,7 @@ export interface RichTextNativeViewProps extends ViewProps {
 let nativeView: ComponentType<RichTextNativeViewProps> | null | undefined;
 
 function getNativeView(): ComponentType<RichTextNativeViewProps> | null {
-  if (Platform.OS !== 'android') return null;
+  if (Platform.OS !== 'android' && Platform.OS !== 'ios') return null;
   if (nativeView !== undefined) return nativeView;
   try {
     nativeView = requireOptionalNativeModule('ZhihuRichText')
@@ -61,7 +61,7 @@ export function isRichTextNativeAvailable(): boolean {
   return getNativeView() !== null;
 }
 
-/** Android prototype; callers choose their fallback on unsupported clients. */
+/** Native flow view; callers choose their fallback on unsupported clients. */
 export function RichTextNativeView(props: RichTextNativeViewProps) {
   const NativeView = getNativeView();
   return NativeView ? createElement(NativeView, props) : null;
