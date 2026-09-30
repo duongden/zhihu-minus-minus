@@ -250,6 +250,7 @@
       "./plugins/withAppIcons",
       "./plugins/withAndroidAbiSplits",
       "./plugins/withIosFirebaseCocoaPods",
+      "./plugins/withIosSceneLifecycle",
       "expo-secure-store",
       [
         "expo-build-properties",

@@ -58,6 +58,8 @@ npx expo run:ios --configuration Debug --device
 
 需要真机 Release 验证时，在 Xcode 打开生成的 `ios/*.xcworkspace`，选择自己的 Team 后构建。Release IPA 是未签名的，不能替代签名流程。
 
+使用 Xcode 27 / iOS 27 SDK 时，UIKit 要求采用 Scene 生命周期，否则应用会在创建界面前退出。当前 SDK 55 由 [`withIosSceneLifecycle`](./plugins/withIosSceneLifecycle.js) 在 prebuild 时迁移窗口启动，并注入 [`ZhihuSceneDelegate.swift`](./plugins/ios/ZhihuSceneDelegate.swift)：以 `UIWindow(windowScene:)` 创建单个主窗口，将冷/热链接与前后台事件转给原有 Expo AppDelegate。生成目录无需手改；插件拒绝覆盖未知模板或已有自定义 Scene 配置，升级 Expo SDK 时须重新核对此适配。平台依据见 [Apple 迁移说明](https://developer.apple.com/documentation/uikit/transitioning-to-the-uikit-scene-based-life-cycle) 与 [Expo Scene 说明](https://github.com/expo/fyi/blob/main/ios-scene-lifecycle.md)。
+
 ### Web
 
 ```bash

@@ -168,3 +168,13 @@ iOS实现最终 `npm run check` 退出码0：31个suite/439项测试、Biome281�
 这份模拟器的emoji显示为缺字方框。独立UIKit/CoreText程序以标准系统字体运行相同字符串，同样报告注册的 `Fonts/Core/AppleColorEmoji.ttc` 不存在、回退LastResort；当前runtime另有CoreAddition字体文件，但未修复系统注册路径。源字符和UTF-16范围检查保持通过，emoji视觉需在完整runtime或真机复验。
 
 系统选区拖柄/长按与父滚动的完整手势组合、iOS真机和双端Release仍未据此验收。
+
+## 2026-10-01：iOS 真机安装与启动兼容
+
+用户连接 iPhone SE（第三代，iOS 27.0）后，使用个人 Team 的开发签名完成 `iphoneos` Debug 构建；签名验证通过、profile 包含目标设备，覆盖安装 0.6.3，不卸载原有 0.6.2 或读取登录态。此开发包仍需连接 Metro，不是独立 Release 包。
+
+首次启动在 UIKit 创建界面时发生 SIGTRAP，两份系统报告均定位到 `___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption_block_invoke`，尚未进入 Native V2。该现象与 [Apple 的 Scene 生命周期要求](https://developer.apple.com/documentation/uikit/transitioning-to-the-uikit-scene-based-life-cycle) 一致：使用 iOS 27 SDK 构建的应用须采用 Scene。当前 Expo SDK 55 尚无官方现成 Scene adapter，因此通过仓库配置插件补齐单主 Scene、真实 `UIWindow(windowScene:)`、冷启动链接参数，以及原 Expo AppDelegate 的链接和前后台事件转发；没有改 SDK 版本或使用私有 API 绕过检查。
+
+插件及 Swift 源码存于 `plugins/`，prebuild 自动注入；只迁移已知 SDK 55 模板，拒绝覆盖未知模板或自定义 Scene 配置。重复执行与冲突拒绝等 12 项回归通过，完整 `npm run check` 通过 32 个 suite / 451 项测试、283 个文件的只读 Biome（2 项既有 warning）与 8 个 fixture 分析。
+
+修复后再次完成 iOS prebuild、真机签名构建、成品签名与 Scene manifest 核验、覆盖安装及 CLI 启动。启动后的 app 进程保持运行，重新读取设备崩溃目录没有新增同类报告；这里只确认原生启动兼容，Metro 连接和 Native V2 各项真机交互仍单独验收。原始系统报告只留本机临时目录，不提交设备信息或原始日志。
