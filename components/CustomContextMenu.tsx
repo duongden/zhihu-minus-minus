@@ -1,5 +1,6 @@
-import { Ionicons } from '@expo/vector-icons';
+import { FontAwesome6, Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
+import type { ComponentProps } from 'react';
 import React, { useEffect, useState } from 'react';
 import {
   type LayoutRectangle,
@@ -43,6 +44,8 @@ export interface MenuOption {
   key: string;
   title: string;
   icon: string;
+  iconFamily?: 'ionicons' | 'font-awesome-6';
+  iconSolid?: boolean;
   isDestructive?: boolean;
   onPress: () => void;
 }
@@ -256,15 +259,26 @@ export function CustomContextMenu({
                   >
                     {option.title}
                   </Text>
-                  <Ionicons
-                    name={option.icon as any}
-                    size={20}
-                    color={
-                      option.isDestructive
-                        ? '#ef4444'
-                        : Colors[colorScheme].textSecondary
-                    }
-                  />
+                  {option.iconFamily === 'font-awesome-6' ? (
+                    <FontAwesome6
+                      name={option.icon}
+                      size={18}
+                      color={Colors[colorScheme].textSecondary}
+                      solid={option.iconSolid}
+                    />
+                  ) : (
+                    <Ionicons
+                      name={
+                        option.icon as ComponentProps<typeof Ionicons>['name']
+                      }
+                      size={20}
+                      color={
+                        option.isDestructive
+                          ? '#ef4444'
+                          : Colors[colorScheme].textSecondary
+                      }
+                    />
+                  )}
                 </BouncyButton>
                 {index < options.length - 1 && (
                   <View className="h-[0.5px] bg-[#e0e0e0] dark:bg-[#333] ml-4" />

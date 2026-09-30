@@ -13,16 +13,25 @@ import {
   Dimensions,
   type GestureResponderEvent,
   Image,
+  type ImageProps,
+  type ImageStyle,
   Linking,
   Pressable,
   View as RNView,
+  type StyleProp,
   StyleSheet,
+  type TextStyle,
   useWindowDimensions,
   type ViewStyle,
 } from 'react-native';
 import RenderHtml, {
   type CustomBlockRenderer,
+  type CustomTagRendererRecord,
+  type DomVisitorCallbacks,
   defaultSystemFonts,
+  type MixedStyleRecord,
+  type RenderersProps,
+  type TNode,
   useNormalizedUrl,
   useRendererProps,
 } from 'react-native-render-html';
@@ -45,10 +54,19 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { typography } from '@/constants/designTokens';
 import { useSettingsStore } from '@/store/useSettingsStore';
-import type { ZhihuSegmentInfo } from '@/types/zhihu';
+import type {
+  ZhihuSegmentInfo,
+  ZhihuSegmentMark,
+  ZhihuSegmentReaction,
+} from '@/types/zhihu';
 import { showToast } from '@/utils/toast';
 import { extractZhihuRedirectTarget, parseZhihuUrl } from '@/utils/url';
-import type { EnrichedNormalizationResult } from '../normalization/normalizeZhihuHtml';
+import { getZhihuErrorStatus } from '@/utils/zhihuError';
+import {
+  DAILY_AVATAR_SIZE,
+  isDailyAvatar,
+  type RichContentVariant,
+} from '../imagePolicy';
 import {
   createRichContentMetrics,
   RICH_CONTENT_BLOCK_FORMULA_HEIGHT,
@@ -58,24 +76,15 @@ import {
   RICH_CONTENT_PARAGRAPH_SPACING,
   RICH_CONTENT_UNKNOWN_IMAGE_HEIGHT,
 } from '../presentation';
+import type {
+  LinkCardProps,
+  RichContentRenderer,
+  ZhihuContentProps,
+} from '../types';
 import ZhihuDOMContent, { type TextSelectionInfo } from './ZhihuDOMContent';
 import { ZhihuEnrichedContent } from './ZhihuEnrichedContent';
 
-export type RichContentRenderer = 'rnrh' | 'webview' | 'enriched';
-
-export interface ZhihuContentProps {
-  content?: string;
-  contentArray?: any[];
-  segmentInfos?: ZhihuSegmentInfo[];
-  linkCardInfo?: Record<string, unknown>;
-  objectId: string;
-  type: 'answer' | 'article' | 'pin' | 'question';
-  onRefresh?: () => void;
-  onEnrichedNormalized?: (result: EnrichedNormalizationResult) => void;
-  renderer?: RichContentRenderer;
-  /** @deprecated Prefer `renderer="rnrh"` for explicit backend selection. */
-  useNative?: boolean;
-}
+export type { RichContentRenderer, ZhihuContentProps } from '../types';
 
 interface LinkCardDisplay {
   title?: unknown;
@@ -180,15 +189,7 @@ function isLinkCardElement(element: LinkCardElementLike): boolean {
   );
 }
 
-export const LinkCard: React.FC<{
-  url: string;
-  title?: string;
-  image?: string;
-  cardInfo?: unknown;
-  onPress: (url: string) => void;
-  surfaceColor: string;
-  colorScheme: 'light' | 'dark';
-}> = React.memo(
+export const LinkCard: React.FC<LinkCardProps> = React.memo(
   ({ url, title, image, cardInfo, onPress, surfaceColor, colorScheme }) => {
     const metadata = useMemo(() => parseLinkCardMetadata(cardInfo), [cardInfo]);
     const display = asRecord(metadata?.display) as LinkCardDisplay | null;
@@ -201,7 +202,6 @@ export const LinkCard: React.FC<{
     const isInternal = internalPath !== null;
     const primaryColor = useThemeColor({}, 'primary');
     const cardBorderColor = useThemeColor({}, 'contentBorderStrong');
-    const cardShadowColor = useThemeColor({}, 'shadow');
 
     const parsedId = useMemo(() => {
       if (!internalPath) return null;
@@ -228,8 +228,8 @@ export const LinkCard: React.FC<{
           if (parsedId.type === 'article') return await getArticle(parsedId.id);
           if (parsedId.type === 'pin') return await getPin(parsedId.id);
           return null;
-        } catch (err: any) {
-          if (err.response?.status === 404) {
+        } catch (err: unknown) {
+          if (getZhihuErrorStatus(err) === 404) {
             return null;
           }
           throw err;
@@ -267,7 +267,9 @@ export const LinkCard: React.FC<{
             ? `${fetchedData.answer_count} 回答`
             : null;
 
-    const getLinkTypeIcon = () => {
+    const getLinkTypeIcon = (): React.ComponentProps<
+      typeof Ionicons
+    >['name'] => {
       if (url.includes('/question/')) return 'help-circle';
       if (url.includes('/answer/')) return 'chatbubble-ellipses';
       if (url.includes('/pin/')) return 'navigate';
@@ -308,7 +310,7 @@ export const LinkCard: React.FC<{
             {!description && (
               <View className="flex-row items-center bg-transparent">
                 <Ionicons
-                  name={getLinkTypeIcon() as any}
+                  name={getLinkTypeIcon()}
                   size={14}
                   color={primaryColor}
                 />
@@ -335,9 +337,13 @@ export const LinkCard: React.FC<{
 
 interface TextSlice {
   text: string;
-  interaction?: any;
+  interaction?: SegmentInteraction;
   isLiked?: boolean;
 }
+
+type SegmentInteraction = ZhihuSegmentReaction & {
+  mark?: ZhihuSegmentMark;
+};
 
 function sliceParagraphText(
   fullText: string,
@@ -388,17 +394,45 @@ function sliceParagraphText(
   return slices.length > 0 ? slices : [{ text: fullText }];
 }
 
-function getTNodeText(node: any): string {
+function getTNodeText(node: TNode | null | undefined): string {
   if (!node) return '';
-  if (typeof node.data === 'string') return node.data;
-  if (node.children && Array.isArray(node.children)) {
-    return node.children.map(getTNodeText).join('');
-  }
-  if (node.init?.children && Array.isArray(node.init.children)) {
-    return node.init.children.map(getTNodeText).join('');
-  }
-  return '';
+  return node.type === 'text'
+    ? node.data
+    : node.children.map(getTNodeText).join('');
 }
+
+interface ParagraphRendererProps {
+  segmentMap: Map<string, ZhihuSegmentInfo>;
+  onPress: (
+    pid: string,
+    segment: ZhihuSegmentInfo,
+    interaction: SegmentInteraction,
+  ) => void;
+  fontSize?: number;
+  lineHeight?: number;
+}
+
+interface ImageRendererProps {
+  onPress: (src: string) => void;
+  onLongPress?: (src: string) => void;
+  width: number;
+  colorScheme: 'light' | 'dark';
+  variant: RichContentVariant;
+}
+
+interface LinkCardRendererProps {
+  onLinkCardPress: (url: string) => void;
+  surfaceColor: string;
+  colorScheme: 'light' | 'dark';
+  linkCardInfo?: Record<string, unknown>;
+}
+
+type ZhihuRenderersProps = Omit<Partial<RenderersProps>, 'a' | 'img'> & {
+  a: { onPress: (event: GestureResponderEvent, href: string) => void };
+  img: ImageRendererProps;
+  linkcard: LinkCardRendererProps;
+  p: ParagraphRendererProps;
+};
 
 const P_Renderer: CustomBlockRenderer = ({ TDefaultRenderer, ...props }) => {
   const { tnode } = props;
@@ -414,7 +448,7 @@ const P_Renderer: CustomBlockRenderer = ({ TDefaultRenderer, ...props }) => {
     onPress,
     fontSize = typography.fontSize.subtitle,
     lineHeight = typography.fontSize.subtitle * 1.5,
-  } = rendererProps as any;
+  } = rendererProps as unknown as ParagraphRendererProps;
   const isBlockquoteParagraph = tnode.parent?.tagName === 'blockquote';
   const paragraphTextColor = isBlockquoteParagraph
     ? textSecondaryColor
@@ -433,7 +467,7 @@ const P_Renderer: CustomBlockRenderer = ({ TDefaultRenderer, ...props }) => {
   const slices = sliceParagraphText(fullText, segment?.marks);
   const hasAnyInteraction = slices.some((s) => s.interaction);
 
-  if (!hasAnyInteraction) {
+  if (!hasAnyInteraction || !pid || !segment) {
     return (
       <TDefaultRenderer
         {...props}
@@ -448,7 +482,7 @@ const P_Renderer: CustomBlockRenderer = ({ TDefaultRenderer, ...props }) => {
   return (
     <Text
       style={[
-        props.style as any,
+        props.style as unknown as StyleProp<TextStyle>,
         {
           color: paragraphTextColor,
           fontSize: textFontSize,
@@ -459,12 +493,13 @@ const P_Renderer: CustomBlockRenderer = ({ TDefaultRenderer, ...props }) => {
       ]}
     >
       {slices.map((slice, idx) => {
-        if (slice.interaction) {
+        const interaction = slice.interaction;
+        if (interaction) {
           return (
             <Text
               // biome-ignore lint/suspicious/noArrayIndexKey: slices 是单个 segment 一次性切分出的结果,同一 segment 的切分稳定;slice.text 会重复,不能当 key。
               key={idx}
-              onPress={() => onPress(pid, segment, slice.interaction)}
+              onPress={() => onPress(pid, segment, interaction)}
               style={{
                 color: paragraphTextColor,
                 fontSize: textFontSize,
@@ -498,14 +533,24 @@ const P_Renderer: CustomBlockRenderer = ({ TDefaultRenderer, ...props }) => {
 
 const LazyImage: React.FC<{
   src: string;
-  style: any;
+  style: StyleProp<ViewStyle>;
   resizeMode: 'contain' | 'cover' | 'stretch' | 'center';
   resizeMethod?: 'auto' | 'resize' | 'scale';
   colorScheme: 'light' | 'dark';
-}> = ({ src, style, resizeMode, resizeMethod, colorScheme }) => {
+  borderRadius?: number;
+  onLoad?: ImageProps['onLoad'];
+}> = ({
+  src,
+  style,
+  resizeMode,
+  resizeMethod,
+  colorScheme,
+  borderRadius = 12,
+  onLoad,
+}) => {
   const [visible, setVisible] = useState(false);
   const containerRef = useRef<RNView>(null);
-  const timerRef = useRef<any>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const placeholderColor = useThemeColor({}, 'contentPlaceholder');
 
   useEffect(() => {
@@ -539,16 +584,24 @@ const LazyImage: React.FC<{
   return (
     <RNView
       ref={containerRef}
-      style={[style, { backgroundColor: placeholderColor }]}
-      className="rounded-xl justify-center items-center overflow-hidden"
+      style={[
+        style,
+        {
+          backgroundColor: placeholderColor,
+          borderRadius,
+          overflow: 'hidden',
+          justifyContent: 'center',
+          alignItems: 'center',
+        },
+      ]}
     >
       {visible ? (
         <Image
           source={{ uri: src }}
-          style={StyleSheet.absoluteFill}
+          style={[StyleSheet.absoluteFill, { borderRadius }]}
           resizeMode={resizeMode}
           resizeMethod={resizeMethod}
-          className="rounded-xl"
+          onLoad={onLoad}
         />
       ) : (
         <ActivityIndicator
@@ -564,6 +617,9 @@ const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
   const { src, width: attrWidth, height: attrHeight, eeimg } = tnode.attributes;
   const rendererProps = useRendererProps('img');
   const [svgError, setSvgError] = useState(false);
+  const [intrinsicAspectRatio, setIntrinsicAspectRatio] = useState<
+    number | null
+  >(null);
 
   if (!rendererProps) return null;
   const {
@@ -571,7 +627,8 @@ const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
     onLongPress,
     width: contentWidth,
     colorScheme,
-  } = rendererProps as any;
+    variant,
+  } = rendererProps as unknown as ImageRendererProps;
   const themeColors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
 
   const originalWidth = parseInt(attrWidth as string, 10) || 0;
@@ -609,9 +666,11 @@ const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
     displayWidth = isBlockFormula
       ? contentWidth
       : Math.min(contentWidth, Math.max(40, alt.length * 8));
+  } else if (intrinsicAspectRatio) {
+    displayHeight = contentWidth / intrinsicAspectRatio;
   }
 
-  const imageStyle: any = {
+  const imageStyle: ImageStyle = {
     width: displayWidth,
     height: displayHeight,
   };
@@ -623,6 +682,21 @@ const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
 
   // 确保 src 有协议
   const finalSrc = src.startsWith('//') ? `https:${src}` : src;
+
+  if (isDailyAvatar(tnode.attributes, variant)) {
+    return (
+      <Pressable onPress={() => onPress(finalSrc)} style={{ marginRight: 10 }}>
+        <LazyImage
+          src={finalSrc}
+          style={{ width: DAILY_AVATAR_SIZE, height: DAILY_AVATAR_SIZE }}
+          resizeMode="cover"
+          resizeMethod="resize"
+          colorScheme={colorScheme}
+          borderRadius={DAILY_AVATAR_SIZE / 2}
+        />
+      </Pressable>
+    );
+  }
 
   if (isFormula && !isBlockFormula) {
     return (
@@ -688,6 +762,13 @@ const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
             resizeMode="contain"
             resizeMethod="resize"
             colorScheme={colorScheme}
+            onLoad={(event) => {
+              if (originalWidth > 0 && originalHeight > 0) return;
+              const { width, height } = event.nativeEvent.source;
+              if (width > 0 && height > 0) {
+                setIntrinsicAspectRatio(width / height);
+              }
+            }}
           />
         )}
       </Pressable>
@@ -728,7 +809,7 @@ const LinkCardRenderer: CustomBlockRenderer = ({
     return <TDefaultRenderer tnode={tnode} {...props} />;
   }
   const { onLinkCardPress, surfaceColor, colorScheme, linkCardInfo } =
-    rendererProps as any;
+    rendererProps as unknown as LinkCardRendererProps;
 
   const url = rawUrl ? extractZhihuRedirectTarget(rawUrl) : rawUrl;
   const metadata = getLinkCardMetadata(linkCardInfo, rawUrl, url);
@@ -759,7 +840,7 @@ const LinkCardRenderer: CustomBlockRenderer = ({
   return <TDefaultRenderer tnode={tnode} {...props} />;
 };
 
-const renderers = {
+const renderers: CustomTagRendererRecord = {
   p: P_Renderer,
   img: IMG_Renderer,
   a: LinkCardRenderer,
@@ -780,6 +861,8 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
     onEnrichedNormalized,
     renderer,
     useNative,
+    selectable = true,
+    variant = 'default',
   }) => {
     const colorScheme = useColorScheme();
     const { width } = useWindowDimensions();
@@ -794,7 +877,6 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
     const textSecondaryColor = useThemeColor({}, 'textSecondary');
     const borderColor = useThemeColor({}, 'border');
     const contentBorderColor = useThemeColor({}, 'contentBorder');
-    const shadowColor = useThemeColor({}, 'shadow');
     const inverseTextColor = useThemeColor({}, 'textInverse');
     const surfaceColor = useThemeColor({}, 'surface');
     const router = useRouter();
@@ -805,7 +887,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
       is_like: boolean;
       like_count: number;
       comment_count: number;
-      seg_ids?: string[];
+      seg_ids?: string[] | string;
       startIndex?: number;
       endIndex?: number;
     } | null>(null);
@@ -872,7 +954,10 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
         if (!activeSegment) return;
         const { is_like, seg_ids, text, pid, startIndex, endIndex } =
           activeSegment;
-        const segId = Array.isArray(seg_ids) ? seg_ids[0] : (seg_ids as any);
+        const segId = Array.isArray(seg_ids) ? seg_ids[0] : seg_ids;
+        if (!segId) {
+          throw new Error('段落缺少有效的 seg_id');
+        }
 
         if (is_like) {
           return unreactAnswerSegment(objectId, segId);
@@ -900,6 +985,9 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
           showToast(activeSegment.is_like ? '已取消赞同' : '已赞同');
         }
       },
+      onError: () => {
+        showToast('操作失败，请重试');
+      },
     });
 
     const findActiveInteraction = useCallback(
@@ -921,7 +1009,11 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
     );
 
     const handlePress = useCallback(
-      (pid: string, segment: ZhihuSegmentInfo, interaction: any) => {
+      (
+        pid: string,
+        segment: ZhihuSegmentInfo,
+        interaction: SegmentInteraction,
+      ) => {
         const mark = interaction.mark;
         setActiveSegment({
           pid,
@@ -932,7 +1024,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
           seg_ids:
             interaction.seg_ids ||
             mark?.seg_info?.seg_ids ||
-            (mark as any)?.master_seg_info?.seg_ids,
+            mark?.master_seg_info?.seg_ids,
           startIndex: mark?.start_index || 0,
           endIndex: mark?.end_index || segment?.text.length || 0,
         });
@@ -941,9 +1033,9 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
       [],
     );
 
-    const domVisitors = useMemo(
+    const domVisitors = useMemo<DomVisitorCallbacks>(
       () => ({
-        onElement: (element: any) => {
+        onElement: (element) => {
           if (element.name === 'img') {
             const { attribs } = element;
             const originalToken = attribs['data-original-token']?.trim();
@@ -993,7 +1085,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
       [segmentMap, findActiveInteraction],
     );
 
-    const renderersProps = useMemo(
+    const renderersProps = useMemo<ZhihuRenderersProps>(
       () => ({
         p: {
           segmentMap,
@@ -1002,7 +1094,8 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
           lineHeight: metrics.body.lineHeight,
         },
         a: {
-          onPress: (_event: any, href: string) => handleInternalLink(href),
+          onPress: (_event: GestureResponderEvent, href: string) =>
+            handleInternalLink(href),
         },
         linkcard: {
           onLinkCardPress: handleInternalLink,
@@ -1020,6 +1113,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
           },
           width: width - 40,
           colorScheme,
+          variant,
         },
       }),
       [
@@ -1031,6 +1125,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
         surfaceColor,
         width,
         metrics,
+        variant,
       ],
     );
 
@@ -1049,8 +1144,37 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
           textDecorationStyle: 'dashed',
           textDecorationColor: lightPrimaryColor,
         },
+        ...(variant === 'daily'
+          ? {
+              meta: {
+                flexDirection: 'row' as const,
+                alignItems: 'center' as const,
+                flexWrap: 'wrap' as const,
+                minHeight: DAILY_AVATAR_SIZE,
+                marginBottom: 20,
+              },
+              author: {
+                color: textColor,
+                fontSize: 15 * fontSizeScale,
+                fontWeight: '600' as const,
+              },
+              bio: {
+                color: textSecondaryColor,
+                flexGrow: 1,
+                flexShrink: 1,
+                fontSize: 14 * fontSizeScale,
+              },
+              'question-title': { display: 'none' as const },
+            }
+          : {}),
       }),
-      [lightPrimaryColor],
+      [
+        fontSizeScale,
+        lightPrimaryColor,
+        textColor,
+        textSecondaryColor,
+        variant,
+      ],
     );
 
     const tagsStyles = useMemo(
@@ -1129,11 +1253,15 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
           paddingLeft: RICH_CONTENT_LIST_INDENT,
           color: textColor,
           marginVertical: 8,
+          fontSize: metrics.body.fontSize,
+          lineHeight: metrics.body.lineHeight,
         },
         ol: {
           paddingLeft: RICH_CONTENT_LIST_INDENT,
           color: textColor,
           marginVertical: 8,
+          fontSize: metrics.body.fontSize,
+          lineHeight: metrics.body.lineHeight,
         },
         li: {
           marginBottom: RICH_CONTENT_LIST_ITEM_SPACING,
@@ -1176,7 +1304,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
       ],
     );
 
-    const defaultTextProps = useMemo(() => ({ selectable: true }), []);
+    const defaultTextProps = useMemo(() => ({ selectable }), [selectable]);
 
     const renderPinContent = () => {
       if (!contentArray) return null;
@@ -1184,22 +1312,25 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
         if (item.type === 'text') {
           return (
             <RenderHtml
-              // biome-ignore lint/suspicious/noArrayIndexKey: contentArray 是想法正文的解析结果,按原文顺序混排文本/图片/链接卡片。PinContentItem 没有 id,内容本身也不保证唯一,index 是这里唯一稳定的标识。
+              // biome-ignore lint/suspicious/noArrayIndexKey: contentArray 是想法正文的解析结果,按原文顺序混排文本/图片/链接卡片。ZhihuContentSegment 没有 id,内容本身也不保证唯一,index 是这里唯一稳定的标识。
               key={index}
               contentWidth={width - 40}
               source={{ html: `<div>${item.content}</div>` }}
-              renderers={renderers as any}
-              tagsStyles={tagsStyles as any}
-              classesStyles={classesStyles as any}
+              renderers={renderers}
+              tagsStyles={tagsStyles as unknown as MixedStyleRecord}
+              classesStyles={classesStyles as unknown as MixedStyleRecord}
               domVisitors={domVisitors}
               systemFonts={SYSTEM_FONTS}
-              renderersProps={renderersProps as any}
+              renderersProps={
+                renderersProps as unknown as Partial<RenderersProps>
+              }
               ignoredDomTags={IGNORED_DOM_TAGS}
               defaultTextProps={defaultTextProps}
             />
           );
         }
-        if (item.type === 'image') {
+        if (item.type === 'image' && item.url) {
+          const imageUrl = item.url;
           return (
             <View
               // biome-ignore lint/suspicious/noArrayIndexKey: 同上,与相邻分支共用一次 contentArray.map。
@@ -1209,12 +1340,12 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
               <BouncyButton
                 className="rounded-xl"
                 onPress={() => {
-                  setViewerImage(item.url);
+                  setViewerImage(imageUrl);
                   setViewerVisible(true);
                 }}
               >
                 <Image
-                  source={{ uri: item.url }}
+                  source={{ uri: imageUrl }}
                   className="rounded-xl"
                   style={{ width: width - 40, height: 250 }}
                   resizeMode="cover"
@@ -1223,7 +1354,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
             </View>
           );
         }
-        if (item.type === 'link_card') {
+        if (item.type === 'link_card' && item.url) {
           return (
             <LinkCard
               // biome-ignore lint/suspicious/noArrayIndexKey: 同上,与相邻分支共用一次 contentArray.map。
@@ -1322,18 +1453,22 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
             onLinkPress={handleInternalLink}
             onImagePress={onImagePressCallback}
             onNormalized={onEnrichedNormalized}
+            selectable={selectable}
+            variant={variant}
           />
         ) : selectedRenderer === 'rnrh' || useNativeFallback ? (
           <View>
             <RenderHtml
               contentWidth={width - 40}
               source={nativeContentSource}
-              renderers={renderers as any}
-              tagsStyles={tagsStyles as any}
-              classesStyles={classesStyles as any}
+              renderers={renderers}
+              tagsStyles={tagsStyles as unknown as MixedStyleRecord}
+              classesStyles={classesStyles as unknown as MixedStyleRecord}
               domVisitors={domVisitors}
               systemFonts={SYSTEM_FONTS}
-              renderersProps={renderersProps as any}
+              renderersProps={
+                renderersProps as unknown as Partial<RenderersProps>
+              }
               ignoredDomTags={IGNORED_DOM_TAGS}
               defaultTextProps={defaultTextProps}
             />
@@ -1361,6 +1496,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
               onTextSelected={
                 type === 'answer' ? onTextSelectedCallback : undefined
               }
+              variant={variant}
               style={domStyle}
             />
           </View>

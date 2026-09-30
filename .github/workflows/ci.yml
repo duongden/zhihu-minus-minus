@@ -31,14 +31,5 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Type-check
-        run: npm run typecheck
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Test
-        run: npm test
-
-      - name: Analyze rich-content fixtures
-        run: npm run analyze:rich-content
+      - name: Run all checks
+        run: npm run check

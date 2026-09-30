@@ -1,4 +1,8 @@
-import type { ZhihuColumnDetail } from '../../types/zhihu';
+import type {
+  ZhihuColumnDetail,
+  ZhihuColumnItem,
+  ZhihuPaging,
+} from '../../types/zhihu';
 import apiClient from '../client';
 
 export const getColumn = async (
@@ -6,7 +10,7 @@ export const getColumn = async (
 ): Promise<ZhihuColumnDetail> => {
   const include =
     'intro,followers,articles_count,items_count,author,is_following';
-  const res = await apiClient.get(`/columns/${id}`, {
+  const res = await apiClient.get<ZhihuColumnDetail>(`/columns/${id}`, {
     params: { include },
   });
   return res.data;
@@ -16,8 +20,11 @@ export const getColumnItems = async (
   id: string | number,
   limit = 20,
   offset = 0,
-): Promise<{ paging: { is_end: boolean; next: string }; data: any[] }> => {
-  const res = await apiClient.get(`/columns/${id}/items`, {
+): Promise<{ paging: ZhihuPaging; data: ZhihuColumnItem[] }> => {
+  const res = await apiClient.get<{
+    paging: ZhihuPaging;
+    data: ZhihuColumnItem[];
+  }>(`/columns/${id}/items`, {
     params: {
       limit,
       offset,
@@ -30,20 +37,28 @@ export const getColumnItems = async (
 export const getArticleColumnCard = async (
   articleId: string | number,
 ): Promise<ZhihuColumnDetail> => {
-  const res = await apiClient.get(`/column/articles/${articleId}/card`);
+  const res = await apiClient.get<ZhihuColumnDetail>(
+    `/column/articles/${articleId}/card`,
+  );
   return res.data;
 };
 
 export const followColumn = async (
   columnId: string | number,
 ): Promise<{ member_count?: number; is_following?: boolean }> => {
-  const res = await apiClient.post(`/columns/${columnId}/followers`);
+  const res = await apiClient.post<{
+    member_count?: number;
+    is_following?: boolean;
+  }>(`/columns/${columnId}/followers`);
   return res.data;
 };
 
 export const unfollowColumn = async (
   columnId: string | number,
 ): Promise<{ member_count?: number; is_following?: boolean }> => {
-  const res = await apiClient.delete(`/columns/${columnId}/followers`);
+  const res = await apiClient.delete<{
+    member_count?: number;
+    is_following?: boolean;
+  }>(`/columns/${columnId}/followers`);
   return res.data;
 };

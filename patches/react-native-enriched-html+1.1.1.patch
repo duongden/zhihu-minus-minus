@@ -68,7 +68,7 @@ index 6198ead..770b0ae 100644
 +        val bytes = URL(url).openStream().use { it.readBytes() }
 @@ -54 +63 @@ class AsyncDrawable(
 -        Log.e("AsyncDrawable", "Failed to load: $url", e)
-+        Log.e("AsyncDrawable", "Failed to load remote image", e)
++        Log.e("AsyncDrawable", "Failed to load remote image (${e.javaClass.simpleName})")
 @@ -64,0 +74,2 @@ class AsyncDrawable(
 +    prepareSvgDrawable(bytes)?.let { return it }
 +
@@ -93,7 +93,7 @@ index 6198ead..770b0ae 100644
 +      svg.renderToCanvas(canvas, RectF(0f, 0f, targetWidth.toFloat(), targetHeight.toFloat()))
 +      bitmap.toDrawable(Resources.getSystem())
 +    } catch (e: Exception) {
-+      Log.w("AsyncDrawable", "SVG decoder failed", e)
++      Log.w("AsyncDrawable", "SVG decoder failed (${e.javaClass.simpleName})")
 +      null
 +    }
 +  }

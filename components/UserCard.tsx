@@ -17,8 +17,17 @@ import { showToast } from '@/utils/toast';
 import { StableAvatar } from './StableAvatar';
 import { Text, useThemeColor, View } from './Themed';
 
+export type UserCardMember = Omit<
+  ZhihuMemberListItem,
+  'id' | 'name' | 'headline'
+> & {
+  id: string;
+  name: React.ReactNode;
+  headline?: React.ReactNode;
+};
+
 interface UserCardProps {
-  user: ZhihuMemberListItem;
+  user: UserCardMember;
   invalidateQueryKeys?: readonly QueryKey[];
 }
 

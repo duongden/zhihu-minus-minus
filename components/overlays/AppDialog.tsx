@@ -241,12 +241,15 @@ const styles = StyleSheet.create({
   actions: {
     width: '100%',
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 12,
     marginTop: 22,
   },
   action: {
     minHeight: 48,
-    flex: 1,
+    flexBasis: '45%',
+    flexGrow: 1,
+    minWidth: 120,
     borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',

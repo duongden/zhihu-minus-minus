@@ -4,8 +4,7 @@ import { View as RNView, StyleSheet } from 'react-native';
 import { Text, useThemeColor } from '@/components/Themed';
 
 /**
- * 共享的设置页 UI 原语。两个设置页（外观与定制 / 过滤与推荐）共用，
- * 避免各自的 Section/SettingItem 漂移。
+ * 共享的设置页 UI 原语，避免各设置页的 Section/SettingItem 漂移。
  */
 export function Section({
   title,
@@ -128,8 +127,7 @@ const styles = StyleSheet.create({
 });
 
 /**
- * 多个设置页共用的 chip / 步进器布局原语（外观页已有等价的本地 styles，
- * 这里抽出来是为了让「过滤与推荐」页不必再复制一份）。
+ * 多个设置页共用的 chip / 步进器布局原语。
  */
 export const settingsChipStyles = StyleSheet.create({
   row: {

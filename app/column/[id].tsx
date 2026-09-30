@@ -20,6 +20,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import type { ZhihuColumnItem } from '@/types/zhihu';
 import { formatDate } from '@/utils/date';
 
 export default function ColumnDetail() {
@@ -55,14 +56,14 @@ export default function ColumnDetail() {
     }
   }, [enableBrowseHistory, column?.id]);
 
-  const followMutation = useOptimisticToggle({
+  const followMutation = useOptimisticToggle<NonNullable<typeof column>>({
     queryKey: ['column-detail', id],
     isActive: column?.is_following,
     mutationFn: async () => {
       if (column?.is_following) return unfollowColumn(id);
       return followColumn(id);
     },
-    onUpdateCache: (old: any) => ({
+    onUpdateCache: (old) => ({
       ...old,
       is_following: !old?.is_following,
       followers: old?.is_following
@@ -187,7 +188,7 @@ export default function ColumnDetail() {
     );
   };
 
-  const renderItem = ({ item }: { item: any }) => {
+  const renderItem = ({ item }: { item: ZhihuColumnItem }) => {
     return (
       <BouncyButton
         className="p-4"

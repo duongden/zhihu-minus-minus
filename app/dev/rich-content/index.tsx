@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { type Href, Stack, useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { FlatList, View as RNView, StyleSheet, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -50,7 +50,7 @@ export default function RichContentFixturesScreen() {
     router.push({
       pathname: '/dev/rich-content/[caseId]',
       params: { caseId: fixture.id },
-    } as Href);
+    });
   };
 
   return (

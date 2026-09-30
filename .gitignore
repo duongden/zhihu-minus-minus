@@ -33,6 +33,10 @@ yarn-error.*
 # local env files
 .env*.local
 
+# Firebase client configuration (public project identifiers, but environment-specific)
+/google-services.json
+/GoogleService-Info.plist
+
 # typescript
 *.tsbuildinfo
 
@@ -40,3 +44,5 @@ yarn-error.*
 /ios
 /android
 /build
+/modules/*/android/.gradle/
+/modules/*/android/build/

@@ -1,0 +1,13 @@
+{
+  "body": "<div class=\"main-wrap content-wrap\"><div class=\"headline\"><div class=\"img-place-holder\"></div></div><div class=\"content-inner\"><div class=\"question\"><h2 class=\"question-title\"></h2><div class=\"answer\"><div class=\"meta\"><img class=\"avatar\" src=\"https://example.com/avatar.jpg\"><span class=\"author\">示例作者，</span><span class=\"bio\">示例简介</span><a href=\"https://example.com/source\" class=\"originUrl\" hidden>查看原文</a></div><div class=\"content\"><p>这是经过脱敏的日报正文。</p><figure><img class=\"content-image\" src=\"https://example.com/content.jpg\" alt=\"\"><figcaption>示例图片</figcaption></figure></div></div></div></div></div>",
+  "image_source": "示例来源",
+  "title": "脱敏日报示例",
+  "image": "https://example.com/cover.jpg",
+  "share_url": "https://example.com/story/1",
+  "js": [],
+  "ga_prefix": "000000",
+  "images": ["https://example.com/cover.jpg"],
+  "type": 0,
+  "id": 1,
+  "css": []
+}

@@ -70,21 +70,39 @@ function updateContentRecord(
         changed = setIfChanged(next, 'voteCount', update.voteCount) || changed;
       }
     } else {
-      const relationship = isObjectRecord(value.relationship)
-        ? { ...value.relationship }
-        : {};
-      changed = setIfChanged(relationship, 'voting', update.voted) || changed;
-      changed = setIfChanged(next, 'relationship', relationship) || changed;
-
       const reaction = isObjectRecord(value.reaction)
         ? { ...value.reaction }
         : {};
       const relation = isObjectRecord(reaction.relation)
         ? { ...reaction.relation }
         : {};
-      changed =
-        setIfChanged(relation, 'vote', update.voted === 1 ? 'UP' : 'NEUTRAL') ||
-        changed;
+
+      if (update.type === 'pins') {
+        const virtuals = isObjectRecord(value.virtuals)
+          ? { ...value.virtuals }
+          : {};
+        changed =
+          setIfChanged(virtuals, 'is_liked', update.voted === 1) || changed;
+        changed = setIfChanged(next, 'virtuals', virtuals) || changed;
+        changed =
+          setIfChanged(relation, 'liked', update.voted === 1) || changed;
+      } else {
+        const relationship = isObjectRecord(value.relationship)
+          ? { ...value.relationship }
+          : {};
+        changed = setIfChanged(relationship, 'voting', update.voted) || changed;
+        changed = setIfChanged(next, 'relationship', relationship) || changed;
+        changed =
+          setIfChanged(
+            relation,
+            'vote',
+            update.voted === 1
+              ? 'UP'
+              : update.voted === -1
+                ? 'DOWN'
+                : 'NEUTRAL',
+          ) || changed;
+      }
       changed = setIfChanged(reaction, 'relation', relation) || changed;
       changed = setIfChanged(next, 'reaction', reaction) || changed;
 
@@ -102,7 +120,7 @@ function updateContentRecord(
           changed =
             setIfChanged(next, 'reaction_count', update.voteCount) || changed;
         }
-        if ('voting' in value) {
+        if (update.type !== 'pins' && 'voting' in value) {
           changed = setIfChanged(next, 'voting', update.voted) || changed;
         }
       }
@@ -112,11 +130,11 @@ function updateContentRecord(
         isObjectRecord(reaction.statistics)
       ) {
         const statistics = { ...reaction.statistics };
-        if ('like_count' in statistics) {
+        if (update.type !== 'pins' && 'like_count' in statistics) {
           changed =
             setIfChanged(statistics, 'like_count', update.voteCount) || changed;
         }
-        if ('up_vote_count' in statistics) {
+        if ('up_vote_count' in statistics || update.type === 'pins') {
           changed =
             setIfChanged(statistics, 'up_vote_count', update.voteCount) ||
             changed;
@@ -214,6 +232,13 @@ export function seedRichContentFromFeedItem(
     isAuthenticated,
   );
   const content = item.content;
+  const interactionState =
+    contentType === 'pins'
+      ? {
+          virtuals: { is_liked: item.voted === 1 },
+          reaction: { relation: { liked: item.voted === 1 } },
+        }
+      : { relationship: { voting: item.voted } };
   const common = {
     id: item.id,
     type: getSingularType(contentType),
@@ -232,7 +257,7 @@ export function seedRichContentFromFeedItem(
     like_count: item.voteCount,
     reaction_count: item.voteCount,
     favlists_count: item.favlistsCount,
-    relationship: { voting: item.voted },
+    ...interactionState,
   } satisfies ObjectRecord;
 
   const seed =

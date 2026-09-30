@@ -78,7 +78,7 @@ const HotCardComponent = ({ item }: { item: HotItem }) => {
                 type: 'questions',
               }),
             },
-          } as any);
+          });
         } else {
           router.push(`/question/${item.questionId}`);
         }

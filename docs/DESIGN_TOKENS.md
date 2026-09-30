@@ -34,6 +34,6 @@ NativeWind 目前仍使用构建时的默认颜色，直接读取 `colors` / `Co
 
 当前 NativeWind 4.2.2 在选择 `system` 时向 `Appearance.setColorScheme` 传入 `null`，而 React Native 0.83.2 原生接口要求使用 `unspecified`。主题同步入口在原生端通过 `TurboModuleRegistry` 调用 `Appearance` 模块，传入 `light`、`dark` 或 `unspecified`；实际颜色通过原生外观事件同步给 React Native 与 NativeWind。这也避开了 RN 0.83.2 的 JS setter 把 `unspecified` 缓存成实际颜色的问题，无需修改依赖或维护补丁。Web 端仍使用 NativeWind 的公开主题 API。
 
-修改主题同步或升级相关依赖后运行 `npm run test:theme`。测试加载未修改的 Appearance 和 NativeWind 原生运行时代码，模拟 Android 的非空参数约束和异步外观事件，覆盖冷启动、手动模式、恢复跟随系统和回到前台。
+修改主题同步或升级相关依赖后运行 `npm test -- tests/themeMode.test.js --runInBand`。测试加载未修改的 Appearance 和 NativeWind 原生运行时代码，模拟 Android 的非空参数约束和异步外观事件，覆盖冷启动、手动模式、恢复跟随系统和回到前台。
 
 文字与背景的用户调整方案见 [`docs/THEME_CUSTOMIZATION.md`](./THEME_CUSTOMIZATION.md)，其中区分了主题预设、低门槛调节和高级自定义三层能力。

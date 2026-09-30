@@ -1,10 +1,20 @@
-经过进一步调研，当前不准备立即完整重写 RNRH，也暂不把 WebView / FlashList / 自研 Native Rich Text 作为唯一既定路线。
+# Renderer V2 实验 01：Enriched HTML
 
-## 实施状态（2026-09-14）
+本记录保留 EnrichedText 接入和 native patch 的阶段历史。当前架构以 [Renderer V2 计划](./renderer-v2-plan.md) 的 `ZhihuDocument` → Text Flow Island / Rich Text IR → backend adapter 为准；Enriched 仍是候选 PoC，不是生产替换结论。
+
+## 当前边界（2026-09-30 同步）
+
+已有 JS/Fabric 接入、开发三后端案例页、共享交互/排版外壳和 SVG/lineHeight patch。`normalizeZhihuHtmlForEnriched` 直接输出 Enriched 专属受限 HTML dialect；其中的标签/URL scheme 过滤、诊断和媒体降级，不等于完整 HTML 清洗、HTML → `ZhihuDocument` 或 Rich Text IR 编译。
+
+原生 selection range 事件、自定义跨行 decoration、source map、精确 intrinsic metrics / baseline offset、独立媒体/block adapter 和 attachment 长按/无障碍映射仍未完成。已有 `selectable` 的连续选择行为也须按真机矩阵验收。下文没有明确列为已实现的 API、IR、独立 block 和扩展口均为方案示例，不能从类型或图示推断已接入。
+
+2026-09-14 的构建记录保留如下。2026-09-30 本轮 main 同步已通过 `npm ci`、Android / iOS prebuild 和 `npm run check`（17 个 test suites、240 项测试、8 个稳定 fixtures）；本轮没有执行新的 native 构建或真机 Release 验证。依赖安装、生成工程和质量检查通过不能代替双端原生验收，目前没有 Release 性能数据。`react-native-enriched-html` 固定为 `1.1.1` 以匹配仓库 patch，不能将历史编译结果推广为任意上游版本可用。
+
+## 接入与 patch 历史（2026-09-14）
 
 第一批 JS / Fabric 接入已经完成，但尚未宣称实验通过：
 
-* 安装 `react-native-enriched-html@1.1.1`，该版本支持项目当前的 React Native 0.83 / Fabric；
+* 安装 `react-native-enriched-html@1.1.1`，在当时的 React Native 0.83 / Fabric 基座上做初步接入；
 * 增加 `normalizeZhihuHtmlForEnriched`，将知乎 HTML 收窄为库支持的 canonical dialect；
 * 只保留允许的 URL scheme，移除 script/form 等节点，并对 unsupported node 产生可观测诊断；
 * `eeimg=1` 保持 inline `<img>`，`eeimg=2` 和普通 block image 显式记录诊断；
@@ -18,7 +28,7 @@
 * 缺失 `width` / `height` 的公式沿用现有 RNRH 后端的尺寸 fallback：行内高度 22、按 `alt` 估宽，块公式使用正文宽度和高度 60；
 * 正文字号和行高、h1-h6、引用、代码和列表中 Enriched 可配置的部分，已经参考现有 `ZhihuContent` 统一视觉层级；列表使用较紧凑的缩进，标记颜色继承正文色；
 * 代码背景使用现有 renderer 的 `border` token，并绕开 Enriched 对不透明背景自动降 alpha 后在浅色主题几乎不可见的问题；normalization 同时移除了 block 之间仅用于格式化源码的空白，避免它们变成额外文本行；
-* Android app debug 构建与 iOS `ReactNativeEnrichedHtml` Simulator target 均已编译通过。
+* 当时 Android app debug 构建与 iOS `ReactNativeEnrichedHtml` Simulator target 均已编译通过；这不是完整 iOS app、双端真机或合并后基座的验证。
 
 第三批将实验后端接回了与 RNRH 相同的展示与交互边界：
 
@@ -69,7 +79,7 @@ iOS: NSAttributedString + UITextView/TextKit
 * 支持连续文本选择；
 * 支持 inline image；
 * HTML 最终不是拆成大量独立 RN `<Text>`；
-* Fabric / RN 0.83 可用。
+* 已有 Fabric / RN 0.83 基座的历史编译记录，合并后需重新确认。
 
 因此下一阶段先围绕几个明确问题做小型 PoC，再决定是否需要继续自研。
 
@@ -313,7 +323,7 @@ CustomAttachmentSpan
 
 不 fork parser 去支持整个知乎 HTML。
 
-增加一层独立 normalization：
+当前实现是后端专属 dialect lowering；下面的完整清洗、Document 分组及独立 block 链路是后续方案，需要与已有中立模型对接：
 
 ```text
 知乎 HTML
@@ -349,7 +359,7 @@ unsupported
 
 这样 `react-native-enriched-html` 只负责它擅长的 **text flow**。
 
-复杂 block 仍由现有 React Native renderer 处理。
+复杂 block 计划由独立 renderer / fallback 处理。当前 PoC 的 block formula/image 仍序列化到 dialect 中，video/table 等按诊断降级，并未返回这些中立 block 或完成媒体生命周期管理。
 
 整体结构可以是：
 
@@ -467,7 +477,7 @@ HTML marker
 onSelectionChange({ start, end })
 ```
 
-直接暴露已有 native selection。
+这是待扩展接口示意，当前只读 EnrichedText 未接入该事件。正式事件还需要 flow 身份、文本版本及 UTF-16 半开范围，经 source map 转回原节点/段落；不能把后端 dialect 的 offset 直接当作业务段内 range。
 
 ### D. Attachment metrics
 

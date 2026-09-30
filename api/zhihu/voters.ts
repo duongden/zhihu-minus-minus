@@ -1,4 +1,22 @@
 import apiClient from '../client';
+import {
+  buildVotePayload,
+  type NormalizedVoteResult,
+  normalizeVoteMutationResponse,
+  type VoteContentType,
+  type ZhihuVoteType,
+} from './votePayload';
+
+export type {
+  NormalizedVoteResult,
+  VoteContentType,
+  ZhihuVoteType,
+} from './votePayload';
+export {
+  getContentVoteCount,
+  getContentVoteState,
+  getVoteSuccessMessage,
+} from './votePayload';
 
 export interface ZhihuApiErrorDetail {
   code: number;
@@ -13,6 +31,8 @@ export interface ZhihuErrorResponse {
 
 export interface ZhihuVoteResponse {
   success?: boolean;
+  voting?: number;
+  voteup_count?: number;
   [key: string]: unknown;
 }
 
@@ -57,9 +77,9 @@ export const getPinVoters = async (
 
 export const voteContent = async (
   id: string | number,
-  type: 'answers' | 'articles' | 'questions' | 'pins' | 'comments',
-  voteType: 'up' | 'neutral' | 'down' | 'like' | 'unlike',
-): Promise<ZhihuVoteResponse> => {
+  type: VoteContentType,
+  voteType: ZhihuVoteType,
+): Promise<NormalizedVoteResult> => {
   if (type === 'pins') {
     if (voteType === 'like' || voteType === 'up') {
       const res = await apiClient.post<ZhihuVoteResponse>(
@@ -68,32 +88,31 @@ export const voteContent = async (
           not_sync_moments: true,
         },
       );
-      return res.data;
+      return normalizeVoteMutationResponse(type, voteType, res.data);
     } else {
       const res = await apiClient.delete<ZhihuVoteResponse>(
         `/pins/${id}/voters/up`,
       );
-      return res.data;
+      return normalizeVoteMutationResponse(type, voteType, res.data);
     }
   } else if (type === 'comments') {
     if (voteType === 'up' || voteType === 'like') {
       const res = await apiClient.post<ZhihuVoteResponse>(
         `/comments/${encodeURIComponent(String(id))}/like`,
       );
-      return res.data;
+      return normalizeVoteMutationResponse(type, voteType, res.data);
     } else {
       const res = await apiClient.delete<ZhihuVoteResponse>(
         `/comments/${encodeURIComponent(String(id))}/like`,
       );
-      return res.data;
+      return normalizeVoteMutationResponse(type, voteType, res.data);
     }
   } else {
+    const payload = buildVotePayload(type, voteType);
     const res = await apiClient.post<ZhihuVoteResponse>(
       `/${type}/${id}/voters`,
-      {
-        type: voteType,
-      },
+      payload,
     );
-    return res.data;
+    return normalizeVoteMutationResponse(type, voteType, res.data);
   }
 };

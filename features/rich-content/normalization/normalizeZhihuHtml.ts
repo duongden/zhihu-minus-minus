@@ -1,10 +1,15 @@
 import { type Element, isTag, isText, type Node } from 'domhandler';
 import { parseDocument } from 'htmlparser2';
 import {
+  DAILY_AVATAR_SIZE,
+  isDailyAvatar,
+  type RichContentVariant,
+} from '../imagePolicy';
+import {
   RICH_CONTENT_BLOCK_FORMULA_HEIGHT,
   RICH_CONTENT_INLINE_FORMULA_HEIGHT,
   RICH_CONTENT_UNKNOWN_IMAGE_HEIGHT,
-} from '../presentation.ts';
+} from '../presentation';
 
 export type EnrichedFallbackKind =
   | 'block-image'
@@ -27,6 +32,7 @@ export interface EnrichedNormalizationResult {
 
 export interface EnrichedNormalizationOptions {
   maxImageWidth?: number;
+  variant?: RichContentVariant;
 }
 
 interface SerializeContext {
@@ -38,10 +44,21 @@ interface NormalizationState {
   inlineImageCount: number;
   blockImageCount: number;
   maxImageWidth: number;
+  variant: RichContentVariant;
 }
 
 const ORIGINAL_IMAGE_TOKEN_PATTERN = /v2-[a-f\d]{32}/i;
 const ENRICHED_IMAGE_LINK_PREFIX = 'zhihu-enriched-image:';
+const MAX_LINK_REDIRECTS = 4;
+const IMAGE_PROTOCOLS = new Set(['http:', 'https:']);
+const LINK_PROTOCOLS = new Set([
+  'http:',
+  'https:',
+  'mailto:',
+  'tel:',
+  'zhihu:',
+  'zhihu--:',
+]);
 
 const BLOCK_TAGS = new Set([
   'p',
@@ -114,25 +131,45 @@ function normalizeUrl(
   value: string | undefined,
   kind: 'href' | 'image',
 ): string | null {
-  const candidate = value?.trim();
-  if (!candidate) return null;
+  let candidate = value?.trim();
+  const allowedProtocols = kind === 'image' ? IMAGE_PROTOCOLS : LINK_PROTOCOLS;
+  const visited = new Set<string>();
 
-  const absolute = candidate.startsWith('//')
-    ? `https:${candidate}`
-    : candidate.startsWith('/')
-      ? `https://www.zhihu.com${candidate}`
-      : candidate;
+  for (let redirects = 0; redirects <= MAX_LINK_REDIRECTS; redirects += 1) {
+    if (!candidate) return null;
+    const absolute = candidate.startsWith('//')
+      ? `https:${candidate}`
+      : candidate.startsWith('/')
+        ? `https://www.zhihu.com${candidate}`
+        : candidate;
 
-  try {
-    const url = new URL(absolute);
-    const allowedProtocols =
-      kind === 'image'
-        ? new Set(['http:', 'https:'])
-        : new Set(['http:', 'https:', 'mailto:', 'tel:', 'zhihu:']);
-    return allowedProtocols.has(url.protocol) ? url.toString() : null;
-  } catch {
-    return null;
+    let url: URL;
+    try {
+      url = new URL(absolute);
+    } catch {
+      return null;
+    }
+    if (!allowedProtocols.has(url.protocol)) return null;
+
+    const normalized = url.toString();
+    if (visited.has(normalized)) return null;
+    visited.add(normalized);
+
+    const target =
+      kind === 'href' &&
+      IMAGE_PROTOCOLS.has(url.protocol) &&
+      url.hostname.toLowerCase() === 'link.zhihu.com'
+        ? url.searchParams.get('target')
+        : null;
+    if (!target) return normalized;
+
+    // Resolve every wrapper here so the shared link handler cannot decode an
+    // unchecked nested target after normalization has accepted the outer URL.
+    if (redirects === MAX_LINK_REDIRECTS) return null;
+    candidate = target.trim();
   }
+
+  return null;
 }
 
 function parseDimension(value: string | undefined): number | null {
@@ -254,6 +291,7 @@ function serializeImage(
   }
 
   const eeimg = element.attribs.eeimg;
+  const isAvatar = isDailyAvatar(element.attribs, state.variant);
   const isFormula =
     eeimg === '1' ||
     eeimg === '2' ||
@@ -264,15 +302,14 @@ function serializeImage(
     eeimg === '2' ||
     (!eeimg &&
       (formulaText.includes('\\begin') || formulaText.includes('\\\\')));
-  const isBlock = isFormula
-    ? isBlockFormula
-    : context.parentTag !== 'p' && context.parentTag !== 'a';
-  const { width, height } = getImageDimensions(
-    element,
-    isFormula,
-    isBlock,
-    state.maxImageWidth,
-  );
+  const isBlock =
+    !isAvatar &&
+    (isFormula
+      ? isBlockFormula
+      : context.parentTag !== 'p' && context.parentTag !== 'a');
+  const { width, height } = isAvatar
+    ? { width: DAILY_AVATAR_SIZE, height: DAILY_AVATAR_SIZE }
+    : getImageDimensions(element, isFormula, isBlock, state.maxImageWidth);
   const image = `<img src="${escapeAttribute(source)}" width="${width}" height="${height}">`;
 
   if (isBlock) {
@@ -400,6 +437,7 @@ export function normalizeZhihuHtmlForEnriched(
     inlineImageCount: 0,
     blockImageCount: 0,
     maxImageWidth: Math.max(1, Math.floor(options.maxImageWidth ?? 320)),
+    variant: options.variant ?? 'default',
   };
   const document = parseDocument(source, {
     decodeEntities: true,

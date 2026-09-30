@@ -9,6 +9,16 @@ export interface PublishedContentResult {
   [key: string]: unknown;
 }
 
+export interface PublishedContentApiResponse {
+  data?: {
+    result?: string | PublishedContentResult;
+  };
+  error?: {
+    message?: string;
+  };
+  message?: string;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? (value as Record<string, unknown>)

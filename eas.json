@@ -6,17 +6,14 @@
         "gradleCommand": ":app:bundleRelease"
       },
       "env": {
-        "NODE_ENV": "production",
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+        "NODE_ENV": "production"
       }
     },
     "preview": {
       "android": {
         "buildType": "apk",
-        "gradleCommand": ":app:assembleRelease -PreactNativeArchitectures=arm64-v8a"
-      },
-      "env": {
-        "SENTRY_DISABLE_AUTO_UPLOAD": "true"
+        "gradleCommand": ":app:assembleRelease",
+        "applicationArchivePath": "android/app/build/outputs/apk/release/*.apk"
       }
     }
   }

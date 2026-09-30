@@ -9,12 +9,11 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import {
   type EnrichedNormalizationResult,
+  type RichContentRenderer,
   ZhihuContent,
 } from '@/features/rich-content';
 import { getRichContentDevFixture } from '@/features/rich-content/dev/fixtures';
 import { useSettingsStore } from '@/store/useSettingsStore';
-
-type RendererKind = 'rnrh' | 'webview' | 'enriched';
 
 export default function RichContentFixtureDetailScreen() {
   const params = useLocalSearchParams<{ caseId?: string | string[] }>();
@@ -31,7 +30,7 @@ export default function RichContentFixtureDetailScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const [mountIndex, setMountIndex] = useState(0);
   const [interactionsEnabled, setInteractionsEnabled] = useState(false);
-  const [renderer, setRenderer] = useState<RendererKind>(() =>
+  const [renderer, setRenderer] = useState<RichContentRenderer>(() =>
     useWebView ? 'webview' : 'rnrh',
   );
   const [normalizationResult, setNormalizationResult] =
@@ -51,7 +50,7 @@ export default function RichContentFixtureDetailScreen() {
   }, [caseId]);
 
   const selectRenderer = useCallback(
-    (nextRenderer: RendererKind) => {
+    (nextRenderer: RichContentRenderer) => {
       setRenderer(nextRenderer);
       if (nextRenderer !== 'enriched') {
         updateSettings({ useWebView: nextRenderer === 'webview' });
@@ -249,6 +248,8 @@ export default function RichContentFixtureDetailScreen() {
             objectId={fixture.objectId}
             type={fixture.rendererType}
             renderer={renderer}
+            selectable={interactionsEnabled}
+            variant={fixture.variant}
             onEnrichedNormalized={setNormalizationResult}
           />
         </RNView>

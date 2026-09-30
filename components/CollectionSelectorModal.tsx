@@ -19,16 +19,9 @@ import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useCollectionStore } from '@/store/useCollectionStore';
+import type { ZhihuCollectionStatusItem } from '@/types/zhihu';
 import { updateContentInteractionCaches } from '@/utils/contentCache';
 import { showToast } from '@/utils/toast';
-
-interface CollectionStatusItem {
-  id: string | number;
-  title: string;
-  description?: string;
-  is_public: boolean;
-  is_favorited: boolean;
-}
 
 function getErrorMessage(error: unknown, fallback: string): string {
   if (!axios.isAxiosError<{ error?: { message?: string } }>(error)) {
@@ -79,7 +72,7 @@ export function CollectionSelectorModal() {
     enabled: selectorVisible && !!selectorContentId && !!selectorContentType,
   });
 
-  const collections = (statusData?.data || []) as CollectionStatusItem[];
+  const collections: ZhihuCollectionStatusItem[] = statusData?.data || [];
 
   const toggleMutation = useMutation({
     mutationFn: async ({
@@ -106,9 +99,7 @@ export function CollectionSelectorModal() {
         const wasCollected =
           useCollectionStore.getState().collectedStatusMap[id] || false;
         const hasCollections =
-          updated.data?.data?.some(
-            (item: CollectionStatusItem) => item.is_favorited,
-          ) || false;
+          updated.data?.data?.some((item) => item.is_favorited) || false;
 
         if (wasCollected !== hasCollections) {
           useCollectionStore

@@ -17,7 +17,7 @@ import React, {
 } from 'react';
 import {
   ActivityIndicator,
-  RefreshControl,
+  Platform,
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
@@ -32,7 +32,6 @@ import Animated, {
   useAnimatedStyle,
   useEvent,
   useSharedValue,
-  withRepeat,
   withSequence,
   withTiming,
 } from 'react-native-reanimated';
@@ -43,6 +42,8 @@ import { WebView } from 'react-native-webview';
 import {
   FEED_URLS,
   type FeedItem,
+  getContentVoteCount,
+  getContentVoteState,
   getFeed,
   type RawFeedItem,
   type RawFeedTarget,
@@ -51,6 +52,7 @@ import { BouncyButton } from '@/components/BouncyButton';
 import { DailyList } from '@/components/DailyList';
 import { FeedCard } from '@/components/FeedCard';
 import { HotCard, type HotItem } from '@/components/HotCard';
+import { PullToRefresh } from '@/components/PullToRefresh';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { RecentMoments } from '@/components/RecentMoments';
 import { Text, useThemeColor, View } from '@/components/Themed';
@@ -84,7 +86,8 @@ import {
   getInMemoryFeedKey,
 } from '@/utils/feedIdentity';
 import { resolveLocalAccountKey } from '@/utils/localAccount';
-import { refreshInfiniteQuery } from '@/utils/query';
+import { refreshInfiniteQuery, shouldRetryQuery } from '@/utils/query';
+import { getZhihuErrorMessage } from '@/utils/zhihuError';
 import ProfileScreen from './profile';
 import PublishScreen from './publish';
 
@@ -136,6 +139,7 @@ interface FeedListHandle extends TabListHandle {
 // 折叠模式下过滤项仍占一行，不需要补页。
 const MIN_RENDERABLE_ITEMS = 8;
 const MAX_AUTO_FETCH_ROUNDS = 3;
+const MIN_REFRESH_INDICATOR_MS = 500;
 
 export default function HomeScreen() {
   const { width: windowWidth } = useWindowDimensions();
@@ -146,15 +150,20 @@ export default function HomeScreen() {
   const colorScheme = useColorScheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ tab?: string }>();
-  const { visibleTabs, defaultTab, localCityName } = useSettingsStore();
+  const { visibleTabs, defaultTab, localCityName, useNativeIOSBottomTabs } =
+    useSettingsStore();
+  const nativeIOSBottomTabs = Platform.OS === 'ios' && useNativeIOSBottomTabs;
 
   // 动态过滤 Tabs
   const currentTabs = useMemo(() => {
-    return TABS.filter((tab) => {
+    const configuredTabs = TABS.filter((tab) => {
       if (tab === 'profile') return true;
       return visibleTabs.includes(tab);
     });
-  }, [visibleTabs]);
+    return nativeIOSBottomTabs
+      ? configuredTabs.filter((tab) => !['publish', 'profile'].includes(tab))
+      : configuredTabs;
+  }, [nativeIOSBottomTabs, visibleTabs]);
 
   const homeTabs = useMemo(() => {
     return currentTabs.filter((t) => !['publish', 'profile'].includes(t));
@@ -242,9 +251,6 @@ export default function HomeScreen() {
   }, [params.tab, currentTabs, currentPage]);
 
   const [scrolledTabs, setScrolledTabs] = useState<Record<number, boolean>>({});
-  const [refreshingTabs, setRefreshingTabs] = useState<Record<number, boolean>>(
-    {},
-  );
   const listRefs = useRef<Array<TabListHandle | null>>([]);
 
   const showChrome = useCallback(() => {
@@ -257,15 +263,9 @@ export default function HomeScreen() {
       if (isRefreshing && pageIndex === currentPage) {
         showChrome();
       }
-      setRefreshingTabs((prev) => {
-        if (prev[pageIndex] === isRefreshing) return prev;
-        return { ...prev, [pageIndex]: isRefreshing };
-      });
     },
     [currentPage, showChrome],
   );
-
-  const isCurrentRefreshing = refreshingTabs[currentPage] || false;
 
   const handleScrolledChange = useCallback(
     (pageIndex: number, scrolled: boolean) => {
@@ -419,7 +419,72 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 1. 顶部 Tab 导航 (Home 专属) */}
+      {/* 1. 内容 Pager 放在顶部导航之前 */}
+      <AnimatedPagerView
+        key={`pager-${currentTabs.join('-')}`} // 强制重新渲染
+        ref={pagerRef}
+        style={styles.pager}
+        initialPage={initialPageIndex}
+        onPageScroll={pageScrollHandler}
+        onPageSelected={(e) => {
+          showChrome();
+          setCurrentPage(e.nativeEvent.position);
+        }}
+      >
+        {currentTabs.map((tab, idx) => {
+          const isVisited = visitedPages.has(idx);
+          return (
+            <View key={tab} style={{ flex: 1, backgroundColor: 'transparent' }}>
+              {!isVisited ? null : tab === 'daily' ? (
+                <DailyList
+                  ref={(element) => {
+                    listRefs.current[idx] = element;
+                  }}
+                  insets={insets}
+                  chrome={{
+                    enabled: isFocused && currentPage === idx,
+                    topOffset: topNavOffset,
+                    bottomOffset: bottomNavOffset,
+                    topHideDistance: insets.top + TOP_NAV_HEIGHT,
+                    bottomHideDistance: insets.bottom + BOTTOM_NAV_HEIGHT,
+                    onScrolledChange: (scrolled) =>
+                      handleScrolledChange(idx, scrolled),
+                  }}
+                  onRefreshStateChange={(isRefreshing) =>
+                    handleRefreshStateChange(idx, isRefreshing)
+                  }
+                />
+              ) : tab === 'publish' ? (
+                <PublishScreen />
+              ) : tab === 'profile' ? (
+                <ProfileScreen isActive={isFocused && currentPage === idx} />
+              ) : (
+                <FeedList
+                  ref={(element) => {
+                    listRefs.current[idx] = element;
+                  }}
+                  tab={tab as FeedTabType}
+                  isActive={isFocused && currentPage === idx}
+                  insets={insets}
+                  guestCookieReady={guestCookieReady}
+                  topNavOffset={topNavOffset}
+                  bottomNavOffset={bottomNavOffset}
+                  topHideDistance={insets.top + TOP_NAV_HEIGHT}
+                  bottomHideDistance={insets.bottom + BOTTOM_NAV_HEIGHT}
+                  onScrolledChange={(scrolled) =>
+                    handleScrolledChange(idx, scrolled)
+                  }
+                  onRefreshStateChange={(isRefreshing) =>
+                    handleRefreshStateChange(idx, isRefreshing)
+                  }
+                />
+              )}
+            </View>
+          );
+        })}
+      </AnimatedPagerView>
+
+      {/* 2. 顶部 Tab 导航 (Home 专属) */}
       <Animated.View
         style={[
           styles.topNavContainer,
@@ -495,179 +560,121 @@ export default function HomeScreen() {
               <Ionicons name="search" size={22} color={textColor} />
             </BouncyButton>
           </View>
-          {isCurrentRefreshing && <TopLoadingBar color={tintColor} />}
         </BlurView>
       </Animated.View>
 
-      <AnimatedPagerView
-        key={`pager-${currentTabs.join('-')}`} // 强制重新渲染
-        ref={pagerRef}
-        style={styles.pager}
-        initialPage={initialPageIndex}
-        onPageScroll={pageScrollHandler}
-        onPageSelected={(e) => {
-          showChrome();
-          setCurrentPage(e.nativeEvent.position);
-        }}
-      >
-        {currentTabs.map((tab, idx) => {
-          const isVisited = visitedPages.has(idx);
-          return (
-            <View key={tab} style={{ flex: 1, backgroundColor: 'transparent' }}>
-              {!isVisited ? null : tab === 'daily' ? (
-                <DailyList
-                  ref={(element) => {
-                    listRefs.current[idx] = element;
-                  }}
-                  insets={insets}
-                  chrome={{
-                    enabled: isFocused && currentPage === idx,
-                    topOffset: topNavOffset,
-                    bottomOffset: bottomNavOffset,
-                    topHideDistance: insets.top + TOP_NAV_HEIGHT,
-                    bottomHideDistance: insets.bottom + BOTTOM_NAV_HEIGHT,
-                    onScrolledChange: (scrolled) =>
-                      handleScrolledChange(idx, scrolled),
-                  }}
-                  onRefreshStateChange={(isRefreshing) =>
-                    handleRefreshStateChange(idx, isRefreshing)
+      {!nativeIOSBottomTabs && (
+        /* 3. 底部悬浮导航栏 (Custom TabBar) */
+        <Animated.View
+          style={[
+            styles.bottomBarContainer,
+            colorScheme === 'light' && styles.lightTranslucentShadow,
+            { bottom: insets.bottom, width: containerWidth },
+            bottomNavAnimStyle,
+          ]}
+        >
+          <BlurView
+            intensity={130}
+            tint={colorScheme === 'dark' ? 'dark' : 'light'}
+            style={[
+              styles.bottomBlur,
+              {
+                backgroundColor:
+                  colorScheme === 'dark'
+                    ? 'rgba(0,0,0,0.7)'
+                    : 'rgba(255,255,255,0.85)',
+              },
+            ]}
+          >
+            <View style={styles.bottomNavItems}>
+              {/* 联动指示器 */}
+              <Animated.View
+                style={[
+                  styles.bottomIndicator,
+                  {
+                    backgroundColor: indicatorBgColor,
+                    width: bottomCapsuleWidth,
+                  },
+                  bottomIndicatorStyle,
+                ]}
+              />
+
+              {currentTabs.some((t) => !['publish', 'profile'].includes(t)) && (
+                <BottomTabIcon
+                  // 判断逻辑：当前在首页区域且当前子 Tab 有滚动
+                  isScrollTop={
+                    currentPage <
+                      currentTabs.filter(
+                        (t) => !['publish', 'profile'].includes(t),
+                      ).length && scrolledTabs[currentPage]
                   }
+                  icon={
+                    currentPage <
+                    currentTabs.filter(
+                      (t) => !['publish', 'profile'].includes(t),
+                    ).length
+                      ? 'home'
+                      : 'home-outline'
+                  }
+                  active={
+                    currentPage <
+                    currentTabs.filter(
+                      (t) => !['publish', 'profile'].includes(t),
+                    ).length
+                  }
+                  onPress={handleHomeTabPress}
+                  color={
+                    currentPage <
+                    currentTabs.filter(
+                      (t) => !['publish', 'profile'].includes(t),
+                    ).length
+                      ? tintColor
+                      : Colors[colorScheme].textSecondary
+                  }
+                  width={bottomCapsuleWidth}
                 />
-              ) : tab === 'publish' ? (
-                <PublishScreen />
-              ) : tab === 'profile' ? (
-                <ProfileScreen isActive={isFocused && currentPage === idx} />
-              ) : (
-                <FeedList
-                  ref={(element) => {
-                    listRefs.current[idx] = element;
-                  }}
-                  tab={tab as FeedTabType}
-                  isActive={isFocused && currentPage === idx}
-                  insets={insets}
-                  guestCookieReady={guestCookieReady}
-                  topNavOffset={topNavOffset}
-                  bottomNavOffset={bottomNavOffset}
-                  topHideDistance={insets.top + TOP_NAV_HEIGHT}
-                  bottomHideDistance={insets.bottom + BOTTOM_NAV_HEIGHT}
-                  onScrolledChange={(scrolled) =>
-                    handleScrolledChange(idx, scrolled)
+              )}
+
+              {currentTabs.includes('publish') && (
+                <BottomTabIcon
+                  icon={
+                    currentTabs[currentPage] === 'publish'
+                      ? 'add-circle'
+                      : 'add'
                   }
-                  onRefreshStateChange={(isRefreshing) =>
-                    handleRefreshStateChange(idx, isRefreshing)
+                  active={currentTabs[currentPage] === 'publish'}
+                  onPress={() => handleTabPress(currentTabs.indexOf('publish'))}
+                  color={
+                    currentTabs[currentPage] === 'publish'
+                      ? tintColor
+                      : Colors[colorScheme].textSecondary
                   }
+                  size={currentTabs[currentPage] === 'publish' ? 28 : 24}
+                  width={bottomCapsuleWidth}
+                />
+              )}
+
+              {currentTabs.includes('profile') && (
+                <BottomTabIcon
+                  icon={
+                    currentTabs[currentPage] === 'profile'
+                      ? 'person'
+                      : 'person-outline'
+                  }
+                  active={currentTabs[currentPage] === 'profile'}
+                  onPress={() => handleTabPress(currentTabs.indexOf('profile'))}
+                  color={
+                    currentTabs[currentPage] === 'profile'
+                      ? tintColor
+                      : Colors[colorScheme].textSecondary
+                  }
+                  width={bottomCapsuleWidth}
                 />
               )}
             </View>
-          );
-        })}
-      </AnimatedPagerView>
-
-      {/* 3. 底部悬浮导航栏 (Custom TabBar) */}
-      <Animated.View
-        style={[
-          styles.bottomBarContainer,
-          colorScheme === 'light' && styles.lightTranslucentShadow,
-          { bottom: insets.bottom, width: containerWidth },
-          bottomNavAnimStyle,
-        ]}
-      >
-        <BlurView
-          intensity={130}
-          tint={colorScheme === 'dark' ? 'dark' : 'light'}
-          style={[
-            styles.bottomBlur,
-            {
-              backgroundColor:
-                colorScheme === 'dark'
-                  ? 'rgba(0,0,0,0.7)'
-                  : 'rgba(255,255,255,0.85)',
-            },
-          ]}
-        >
-          <View style={styles.bottomNavItems}>
-            {/* 联动指示器 */}
-            <Animated.View
-              style={[
-                styles.bottomIndicator,
-                {
-                  backgroundColor: indicatorBgColor,
-                  width: bottomCapsuleWidth,
-                },
-                bottomIndicatorStyle,
-              ]}
-            />
-
-            {currentTabs.some((t) => !['publish', 'profile'].includes(t)) && (
-              <BottomTabIcon
-                // 判断逻辑：当前在首页区域且当前子 Tab 有滚动
-                isScrollTop={
-                  currentPage <
-                    currentTabs.filter(
-                      (t) => !['publish', 'profile'].includes(t),
-                    ).length && scrolledTabs[currentPage]
-                }
-                icon={
-                  currentPage <
-                  currentTabs.filter((t) => !['publish', 'profile'].includes(t))
-                    .length
-                    ? 'home'
-                    : 'home-outline'
-                }
-                active={
-                  currentPage <
-                  currentTabs.filter((t) => !['publish', 'profile'].includes(t))
-                    .length
-                }
-                onPress={handleHomeTabPress}
-                color={
-                  currentPage <
-                  currentTabs.filter((t) => !['publish', 'profile'].includes(t))
-                    .length
-                    ? tintColor
-                    : Colors[colorScheme].textSecondary
-                }
-                width={bottomCapsuleWidth}
-              />
-            )}
-
-            {currentTabs.includes('publish') && (
-              <BottomTabIcon
-                icon={
-                  currentTabs[currentPage] === 'publish' ? 'add-circle' : 'add'
-                }
-                active={currentTabs[currentPage] === 'publish'}
-                onPress={() => handleTabPress(currentTabs.indexOf('publish'))}
-                color={
-                  currentTabs[currentPage] === 'publish'
-                    ? tintColor
-                    : Colors[colorScheme].textSecondary
-                }
-                size={currentTabs[currentPage] === 'publish' ? 28 : 24}
-                width={bottomCapsuleWidth}
-              />
-            )}
-
-            {currentTabs.includes('profile') && (
-              <BottomTabIcon
-                icon={
-                  currentTabs[currentPage] === 'profile'
-                    ? 'person'
-                    : 'person-outline'
-                }
-                active={currentTabs[currentPage] === 'profile'}
-                onPress={() => handleTabPress(currentTabs.indexOf('profile'))}
-                color={
-                  currentTabs[currentPage] === 'profile'
-                    ? tintColor
-                    : Colors[colorScheme].textSecondary
-                }
-                width={bottomCapsuleWidth}
-              />
-            )}
-          </View>
-        </BlurView>
-      </Animated.View>
+          </BlurView>
+        </Animated.View>
+      )}
       {!cookies && !guestCookieReady && (
         <View
           style={{
@@ -848,9 +855,11 @@ const FeedList = React.forwardRef<
       filterKeepFollowing,
       filterKeepUpvotedByFollowee,
     } = useSettingsStore();
-    const _colorScheme = useColorScheme();
     const tintColor = useThemeColor({}, 'primary');
+    const backgroundColor = useThemeColor({}, 'background');
+    const indicatorTrackColor = useThemeColor({}, 'border');
     const [isRefreshing, setIsRefreshing] = useState(false);
+    const refreshInFlightRef = useRef(false);
 
     const localAccountKey = useMemo(
       () => resolveLocalAccountKey(me, Boolean(cookies)),
@@ -1048,6 +1057,7 @@ const FeedList = React.forwardRef<
         ['zhihu-feed', queryAccountKey, tab, recommendationRequestKey] as const,
       [queryAccountKey, recommendationRequestKey, tab],
     );
+    const isGuestRecommend = tab === 'recommend' && !cookies;
     const {
       data,
       fetchNextPage,
@@ -1055,6 +1065,7 @@ const FeedList = React.forwardRef<
       isFetchingNextPage,
       isLoading,
       isError,
+      error: feedError,
       isRefetching,
       refetch,
     } = useInfiniteQuery({
@@ -1107,6 +1118,11 @@ const FeedList = React.forwardRef<
       },
       initialPageParam: FEED_URLS[tab],
       getNextPageParam: (lastPage) => lastPage.nextUrl,
+      // Guest recommendations already try both the App endpoint and the Web
+      // compatibility endpoint. Retrying the whole pair here can otherwise
+      // keep an empty screen loading for up to a minute (2 endpoints x 3 runs).
+      retry: isGuestRecommend ? false : shouldRetryQuery,
+      retryOnMount: !isGuestRecommend,
       initialData: initialFeedCache ?? undefined,
       staleTime: launchCacheContext && initialFeedCache ? 5 * 60 * 1000 : 0,
       enabled:
@@ -1116,6 +1132,10 @@ const FeedList = React.forwardRef<
     });
 
     const handleRefresh = useCallback(async () => {
+      if (refreshInFlightRef.current) return;
+
+      refreshInFlightRef.current = true;
+      const startedAt = Date.now();
       setIsRefreshing(true);
       onRefreshStateChange?.(true);
       // 刷新即重置折叠展开状态（计划要求展开不持久化）
@@ -1145,8 +1165,13 @@ const FeedList = React.forwardRef<
         );
       } catch (_e) {
       } finally {
+        const remaining = MIN_REFRESH_INDICATOR_MS - (Date.now() - startedAt);
+        if (remaining > 0) {
+          await new Promise<void>((resolve) => setTimeout(resolve, remaining));
+        }
         setIsRefreshing(false);
         onRefreshStateChange?.(false);
+        refreshInFlightRef.current = false;
       }
     }, [
       exposureContext,
@@ -1223,6 +1248,7 @@ const FeedList = React.forwardRef<
     );
 
     const flashListRef = useRef<FlashListRef<FeedListItem>>(null);
+
     const scrollHandler = useCollapsibleChromeScroll({
       enabled: isActive && AUTO_HIDE_NAV_TABS.includes(tab),
       topOffset: topNavOffset,
@@ -1270,118 +1296,118 @@ const FeedList = React.forwardRef<
     }));
 
     return (
-      <AnimatedFlashList
-        ref={flashListRef}
-        showsVerticalScrollIndicator={false}
-        data={flattenedData}
-        extraData={listExtraData}
-        keyExtractor={(item, index) => {
-          if (isCollapsedGroup(item)) return `collapsed-${item.groupKey}`;
-          const key = getInMemoryFeedKey(item);
-          return `feed-${key || index}`;
-        }}
-        onEndReached={() => {
-          // 只要有下一页就继续追加。隐藏模式被过滤项不占行，列表自然偏短，
-          // 这里依靠 hasNextPage 持续续页即可；列表过短且已到底时由 footer
-          // 给出一句诚实的提示，避免用户以为加载卡住。
-          if (hasNextPage && !isFetchingNextPage) fetchNextPage();
-        }}
-        onEndReachedThreshold={0.5}
-        onViewableItemsChanged={onViewableItemsChanged}
-        viewabilityConfig={viewabilityConfig}
+      <PullToRefresh
+        enabled={isActive}
+        indicatorTop={insets.top + TOP_NAV_HEIGHT + 10}
         onRefresh={handleRefresh}
-        refreshing={isRefreshing || isRefetching}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing || isRefetching}
-            onRefresh={handleRefresh}
-            tintColor="transparent"
-            colors={['transparent']}
-            progressBackgroundColor="transparent"
-            progressViewOffset={insets.top + 10}
-            style={{ opacity: 0 }}
-          />
-        }
-        onScroll={scrollHandler}
-        scrollEventThrottle={16}
-        contentContainerStyle={{
-          paddingTop: insets.top + 70,
-          paddingBottom: 120,
-        }}
-        renderItem={({ item }: { item: FeedListItem }) => {
-          if (isCollapsedGroup(item)) {
-            const expanded = expandedCollapsedKeys.has(item.groupKey);
-            const showReason = filterMode === 'collapse' && filterShowReason;
-            return (
-              <BouncyButton
-                onPress={() => toggleCollapsed(item.groupKey)}
-                className="mx-2 my-1 flex-row items-center justify-between rounded-xl px-4 py-3"
-                style={{ backgroundColor: `${tintColor}14` }}
-              >
-                <Text type="secondary">
-                  {expanded
-                    ? `已展开 ${item.items.length} 条`
-                    : `已折叠 ${item.items.length} 条`}
-                  {showReason && !expanded && item.reasons.length > 0
-                    ? ` · ${item.reasons.join('、')}`
-                    : ''}
-                </Text>
-                <Ionicons
-                  name={expanded ? 'chevron-up' : 'chevron-down'}
-                  size={16}
-                  color={tintColor}
-                />
-              </BouncyButton>
+        refreshing={isRefreshing}
+        backgroundColor={backgroundColor}
+        indicatorColor={tintColor}
+        indicatorTrackColor={indicatorTrackColor}
+      >
+        <AnimatedFlashList
+          ref={flashListRef}
+          showsVerticalScrollIndicator={false}
+          bounces
+          alwaysBounceVertical
+          overScrollMode="never"
+          data={flattenedData}
+          extraData={listExtraData}
+          keyExtractor={(item, index) => {
+            if (isCollapsedGroup(item)) return `collapsed-${item.groupKey}`;
+            const key = getInMemoryFeedKey(item);
+            return `feed-${key || index}`;
+          }}
+          onEndReached={() => {
+            // 只要有下一页就继续追加。隐藏模式被过滤项不占行，列表自然偏短，
+            // 这里依靠 hasNextPage 持续续页即可；列表过短且已到底时由 footer
+            // 给出一句诚实的提示，避免用户以为加载卡住。
+            if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+          }}
+          onEndReachedThreshold={0.5}
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+          contentContainerStyle={{
+            paddingTop: insets.top + 70,
+            paddingBottom: 120,
+          }}
+          renderItem={({ item }: { item: FeedListItem }) => {
+            if (isCollapsedGroup(item)) {
+              const expanded = expandedCollapsedKeys.has(item.groupKey);
+              const showReason = filterMode === 'collapse' && filterShowReason;
+              return (
+                <BouncyButton
+                  onPress={() => toggleCollapsed(item.groupKey)}
+                  className="mx-2 my-1 flex-row items-center justify-between rounded-xl px-4 py-3"
+                  style={{ backgroundColor: `${tintColor}14` }}
+                >
+                  <Text type="secondary">
+                    {expanded
+                      ? `已展开 ${item.items.length} 条`
+                      : `已折叠 ${item.items.length} 条`}
+                    {showReason && !expanded && item.reasons.length > 0
+                      ? ` · ${item.reasons.join('、')}`
+                      : ''}
+                  </Text>
+                  <Ionicons
+                    name={expanded ? 'chevron-up' : 'chevron-down'}
+                    size={16}
+                    color={tintColor}
+                  />
+                </BouncyButton>
+              );
+            }
+            return tab === 'hot' ? (
+              // tab 在该 FeedList 实例生命周期内不变，是可靠的运行时判别：
+              // hot tab 的 data 只含 HotItem，其余 tab 只含 FeedItem（折叠行已在上层排除）。
+              <HotCard item={item as HotItem} />
+            ) : (
+              <FeedCard item={item as FeedItem} tab={tab} />
             );
+          }}
+          ListHeaderComponent={
+            cookies && tab === 'following' ? <RecentMoments /> : null
           }
-          return tab === 'hot' ? (
-            // tab 在该 FeedList 实例生命周期内不变，是可靠的运行时判别：
-            // hot tab 的 data 只含 HotItem，其余 tab 只含 FeedItem（折叠行已在上层排除）。
-            <HotCard item={item as HotItem} />
-          ) : (
-            <FeedCard item={item as FeedItem} tab={tab} />
-          );
-        }}
-        ListHeaderComponent={
-          cookies && tab === 'following' ? <RecentMoments /> : null
-        }
-        ListFooterComponent={
-          isFetchingNextPage ? (
-            <ActivityIndicator style={{ margin: 20 }} />
-          ) : filterEnabled &&
-            !isRefreshing &&
-            !isRefetching &&
-            !isLoading &&
-            flattenedData.length > 0 &&
-            flattenedData.length <= MIN_RENDERABLE_ITEMS &&
-            (!hasNextPage || autoFetchExhausted) ? (
-            <Text
-              type="secondary"
-              style={{ textAlign: 'center', margin: 20, fontSize: 12 }}
-            >
-              {hasNextPage
-                ? '过滤后内容偏少，下拉可继续加载'
-                : '过滤后内容偏少，已无更多可加载'}
-            </Text>
-          ) : null
-        }
-        ListEmptyComponent={
-          isLoading || isRefreshing || isRefetching ? (
-            <View className="flex-1 items-center justify-center mt-[100px] bg-transparent">
-              <ActivityIndicator size="large" color={tintColor} />
-            </View>
-          ) : isError ? (
-            <QueryErrorView
-              message="Feed 加载失败"
-              onRetry={() => void refetch()}
-            />
-          ) : (
-            <View className="flex-1 items-center justify-center mt-[100px] bg-transparent">
-              <Text type="secondary">暂无内容 喵~</Text>
-            </View>
-          )
-        }
-      />
+          ListFooterComponent={
+            isFetchingNextPage ? (
+              <ActivityIndicator style={{ margin: 20 }} />
+            ) : filterEnabled &&
+              !isRefreshing &&
+              !isRefetching &&
+              !isLoading &&
+              flattenedData.length > 0 &&
+              flattenedData.length <= MIN_RENDERABLE_ITEMS &&
+              (!hasNextPage || autoFetchExhausted) ? (
+              <Text
+                type="secondary"
+                style={{ textAlign: 'center', margin: 20, fontSize: 12 }}
+              >
+                {hasNextPage
+                  ? '过滤后内容偏少，下拉可继续加载'
+                  : '过滤后内容偏少，已无更多可加载'}
+              </Text>
+            ) : null
+          }
+          ListEmptyComponent={
+            isRefreshing ? null : isLoading || isRefetching ? (
+              <View className="flex-1 items-center justify-center mt-[100px] bg-transparent">
+                <ActivityIndicator size="large" color={tintColor} />
+              </View>
+            ) : isError ? (
+              <QueryErrorView
+                message={`Feed 加载失败：${getZhihuErrorMessage(feedError)}`}
+                onRetry={() => void refetch()}
+              />
+            ) : (
+              <View className="flex-1 items-center justify-center mt-[100px] bg-transparent">
+                <Text type="secondary">暂无内容 喵~</Text>
+              </View>
+            )
+          }
+        />
+      </PullToRefresh>
     );
   },
 );
@@ -1431,11 +1457,11 @@ function parseFollowingData(item: RawFeedItem): FeedItem | null {
       (target.content_img && target.content_img.length > 0
         ? target.content_img[0]
         : null),
-    voteCount: target.voteup_count || target.like_count || 0,
+    voteCount: getContentVoteCount(appType, target) ?? 0,
     commentCount: target.comment_count || 0,
     favlistsCount:
       target.favorite_count || target.reaction?.statistics?.favorites || 0,
-    voted: target.relationship?.voting || 0,
+    voted: getContentVoteState(appType, target) ?? 0,
     type: appType,
     answerType: normalizeAnswerType(target),
     contentNeedTruncated: target.content_need_truncated,
@@ -1520,14 +1546,14 @@ function parseRecommendData(item: RawFeedItem): FeedItem | null {
       (target.content_img && target.content_img.length > 0
         ? target.content_img[0]
         : null),
-    voteCount: target.voteup_count || target.like_count || 0,
+    voteCount: getContentVoteCount(appType, target) ?? 0,
     commentCount: target.comment_count || 0,
     favlistsCount:
       target.favlists_count ||
       target.favorite_count ||
       target.reaction?.statistics?.favorites ||
       0,
-    voted: target.relationship?.voting || 0,
+    voted: getContentVoteState(appType, target) ?? 0,
     type: appType,
     topics: target.topics?.map((topic) => ({
       id: topic.id,
@@ -1670,41 +1696,3 @@ const styles = StyleSheet.create({
     left: 10,
   },
 });
-
-function TopLoadingBar({ color }: { color: string }) {
-  const anim = useSharedValue(0);
-
-  useEffect(() => {
-    anim.value = withRepeat(withTiming(1, { duration: 1000 }), -1, false);
-  }, [anim]);
-
-  const animatedStyle = useAnimatedStyle(() => {
-    const translateX = interpolate(anim.value, [0, 1], [-150, 300]);
-    return {
-      transform: [{ translateX }],
-    };
-  });
-
-  return (
-    <View
-      style={{
-        height: 2.5,
-        width: '100%',
-        backgroundColor: 'rgba(0,0,0,0.06)',
-        overflow: 'hidden',
-      }}
-    >
-      <Animated.View
-        style={[
-          {
-            width: 120,
-            height: 2.5,
-            backgroundColor: color,
-            borderRadius: 1.25,
-          },
-          animatedStyle,
-        ]}
-      />
-    </View>
-  );
-}

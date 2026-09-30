@@ -1,13 +1,27 @@
 import { useAuthStore } from '@/store/useAuthStore';
+import type {
+  ZhihuCollectionDetailResponse,
+  ZhihuCollectionItemsResponse,
+  ZhihuCollectionMutationResponse,
+  ZhihuCollectionStatusResponse,
+  ZhihuCollectionSummary,
+  ZhihuPaging,
+} from '@/types/zhihu';
 import apiClient from '../client';
 
 const COLLECTION_INCLUDE =
   'data[*].updated_time,answer_count,follower_count,creator,description,is_following,comment_count,created_time;data[*].creator.kvip_info;data[*].creator.vip_info';
 
-export const getMyCollections = async (limit = 20, offset = 0) => {
+export const getMyCollections = async (
+  limit = 20,
+  offset = 0,
+): Promise<{ data: ZhihuCollectionSummary[]; paging: ZhihuPaging }> => {
   const me = useAuthStore.getState().me;
   const userId = me?.url_token || 'me';
-  const res = await apiClient.get(
+  const res = await apiClient.get<{
+    data: ZhihuCollectionSummary[];
+    paging: ZhihuPaging;
+  }>(
     `/people/${userId}/collections?limit=${limit}&offset=${offset}&include=${COLLECTION_INCLUDE}`,
   );
   return res.data;
@@ -17,15 +31,22 @@ export const getUserCollections = async (
   userId: string,
   limit = 20,
   offset = 0,
-) => {
-  const res = await apiClient.get(
+): Promise<{ data: ZhihuCollectionSummary[]; paging: ZhihuPaging }> => {
+  const res = await apiClient.get<{
+    data: ZhihuCollectionSummary[];
+    paging: ZhihuPaging;
+  }>(
     `/people/${userId}/collections?limit=${limit}&offset=${offset}&include=${COLLECTION_INCLUDE}`,
   );
   return res.data;
 };
 
-export const getCollection = async (id: string | number) => {
-  const res = await apiClient.get(`/collections/${id}`);
+export const getCollection = async (
+  id: string | number,
+): Promise<ZhihuCollectionDetailResponse> => {
+  const res = await apiClient.get<ZhihuCollectionDetailResponse>(
+    `/collections/${id}`,
+  );
   return res.data;
 };
 
@@ -33,9 +54,9 @@ export const getCollectionDetail = async (
   id: string | number,
   limit = 20,
   offset = 0,
-) => {
+): Promise<ZhihuCollectionItemsResponse> => {
   // 使用 /items 接口
-  const res = await apiClient.get(
+  const res = await apiClient.get<ZhihuCollectionItemsResponse>(
     `/collections/${id}/items?limit=${limit}&offset=${offset}`,
   );
   return res.data;
@@ -45,21 +66,31 @@ export const createCollection = async (data: {
   title: string;
   description: string;
   is_public: boolean;
-}) => {
-  const res = await apiClient.post('/collections', data);
+}): Promise<ZhihuCollectionMutationResponse> => {
+  const res = await apiClient.post<ZhihuCollectionMutationResponse>(
+    '/collections',
+    data,
+  );
   return res.data;
 };
 
 export const updateCollection = async (
   id: string | number,
   data: { title: string; description: string; is_public: boolean },
-) => {
-  const res = await apiClient.put(`/collections/${id}`, data);
+): Promise<ZhihuCollectionMutationResponse> => {
+  const res = await apiClient.put<ZhihuCollectionMutationResponse>(
+    `/collections/${id}`,
+    data,
+  );
   return res.data;
 };
 
-export const deleteCollection = async (id: string | number) => {
-  const res = await apiClient.delete(`/collections/${id}`);
+export const deleteCollection = async (
+  id: string | number,
+): Promise<ZhihuCollectionMutationResponse> => {
+  const res = await apiClient.delete<ZhihuCollectionMutationResponse>(
+    `/collections/${id}`,
+  );
   return res.data;
 };
 
@@ -71,10 +102,11 @@ export const getAnswerCollectionStatus = async (
   answerId: string | number,
   limit = 5,
   offset = 0,
-) => {
-  const res = await apiClient.get(`/collections/contents/answer/${answerId}`, {
-    params: { limit, offset },
-  });
+): Promise<ZhihuCollectionStatusResponse> => {
+  const res = await apiClient.get<ZhihuCollectionStatusResponse>(
+    `/collections/contents/answer/${answerId}`,
+    { params: { limit, offset } },
+  );
   return res.data;
 };
 
@@ -85,8 +117,8 @@ export const getAnswerCollectionStatus = async (
 export const addToCollection = async (
   collectionId: string | number,
   answerId: string | number,
-) => {
-  const res = await apiClient.post(
+): Promise<ZhihuCollectionMutationResponse> => {
+  const res = await apiClient.post<ZhihuCollectionMutationResponse>(
     `/collections/${collectionId}/contents`,
     null,
     {
@@ -106,8 +138,8 @@ export const addToCollection = async (
 export const removeFromCollection = async (
   collectionId: string | number,
   answerId: string | number,
-) => {
-  const res = await apiClient.delete(
+): Promise<ZhihuCollectionMutationResponse> => {
+  const res = await apiClient.delete<ZhihuCollectionMutationResponse>(
     `/collections/${collectionId}/contents/${answerId}`,
     {
       params: {
@@ -122,8 +154,12 @@ export const removeFromCollection = async (
  * 快速收藏到默认收藏夹
  * POST /collections/contents/answer/{answer_id}
  */
-export const fastCollectAnswer = async (answerId: string | number) => {
-  const res = await apiClient.post(`/collections/contents/answer/${answerId}`);
+export const fastCollectAnswer = async (
+  answerId: string | number,
+): Promise<ZhihuCollectionMutationResponse> => {
+  const res = await apiClient.post<ZhihuCollectionMutationResponse>(
+    `/collections/contents/answer/${answerId}`,
+  );
   return res.data;
 };
 
@@ -135,8 +171,8 @@ export const getArticleCollectionStatus = async (
   articleId: string | number,
   limit = 5,
   offset = 0,
-) => {
-  const res = await apiClient.get(
+): Promise<ZhihuCollectionStatusResponse> => {
+  const res = await apiClient.get<ZhihuCollectionStatusResponse>(
     `/collections/contents/article/${articleId}`,
     {
       params: { limit, offset },
@@ -152,8 +188,8 @@ export const getArticleCollectionStatus = async (
 export const addArticleToCollection = async (
   collectionId: string | number,
   articleId: string | number,
-) => {
-  const res = await apiClient.post(
+): Promise<ZhihuCollectionMutationResponse> => {
+  const res = await apiClient.post<ZhihuCollectionMutationResponse>(
     `/collections/${collectionId}/contents`,
     null,
     {
@@ -173,8 +209,8 @@ export const addArticleToCollection = async (
 export const removeArticleFromCollection = async (
   collectionId: string | number,
   articleId: string | number,
-) => {
-  const res = await apiClient.delete(
+): Promise<ZhihuCollectionMutationResponse> => {
+  const res = await apiClient.delete<ZhihuCollectionMutationResponse>(
     `/collections/${collectionId}/contents/${articleId}`,
     {
       params: {
@@ -189,8 +225,10 @@ export const removeArticleFromCollection = async (
  * 快速收藏文章到默认收藏夹
  * POST /collections/contents/article/{article_id}
  */
-export const fastCollectArticle = async (articleId: string | number) => {
-  const res = await apiClient.post(
+export const fastCollectArticle = async (
+  articleId: string | number,
+): Promise<ZhihuCollectionMutationResponse> => {
+  const res = await apiClient.post<ZhihuCollectionMutationResponse>(
     `/collections/contents/article/${articleId}`,
   );
   return res.data;

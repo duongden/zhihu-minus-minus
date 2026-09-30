@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { useQueryClient } from '@tanstack/react-query';
 import React, { useState } from 'react';
 import { ActivityIndicator } from 'react-native';
 import Animated, {
@@ -8,13 +8,19 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
-import { voteContent } from '@/api/zhihu/voters';
+import {
+  getVoteSuccessMessage,
+  type VoteContentType,
+  voteContent,
+} from '@/api/zhihu/voters';
 import { colors } from '@/constants/designTokens';
+import { updateContentInteractionCaches } from '@/utils/contentCache';
 import { showToast } from '@/utils/toast';
 import { getZhihuErrorMessage } from '@/utils/zhihuError';
 import { BouncyButton } from './BouncyButton';
 import { useThemeColor } from './Themed';
 import { useColorScheme } from './useColorScheme';
+import { VoteTriangle } from './VoteTriangle';
 
 export const DownvoteButton = ({
   id,
@@ -24,11 +30,12 @@ export const DownvoteButton = ({
 }: {
   id: string | number;
   voted?: number;
-  type?: 'answers' | 'articles' | 'questions' | 'pins' | 'comments';
+  type?: VoteContentType;
   variant?: 'default' | 'minimal';
 }) => {
   const [voted, setVoted] = useState(initialVoted);
   const [loading, setLoading] = useState(false);
+  const queryClient = useQueryClient();
   const scale = useSharedValue(1);
   const colorScheme = useColorScheme();
   const tintColor = useThemeColor({}, 'primary');
@@ -56,10 +63,18 @@ export const DownvoteButton = ({
     setLoading(true);
     try {
       const voteType = nextVoted === -1 ? 'down' : 'neutral';
-      await voteContent(id, type, voteType);
-      setVoted(nextVoted);
+      const result = await voteContent(id, type, voteType);
+      setVoted(result.voted);
+      if (type !== 'comments') {
+        updateContentInteractionCaches(queryClient, {
+          type,
+          id,
+          voted: result.voted,
+          voteCount: result.voteCount,
+        });
+      }
+      showToast(getVoteSuccessMessage(type, voted, result.voted));
     } catch (err) {
-      console.error('投票失败');
       showToast(getZhihuErrorMessage(err));
     } finally {
       setLoading(false);
@@ -96,9 +111,8 @@ export const DownvoteButton = ({
         />
       ) : (
         <Animated.View style={animatedStyle}>
-          <Ionicons
-            name={isDownvoted ? 'caret-down' : 'caret-down-outline'}
-            size={variant === 'minimal' ? 28 : 20}
+          <VoteTriangle
+            active={isDownvoted}
             color={
               variant === 'minimal'
                 ? isDownvoted
@@ -108,6 +122,8 @@ export const DownvoteButton = ({
                   ? colors[colorScheme].textInverse
                   : tintColor
             }
+            direction="down"
+            size={variant === 'minimal' ? 24 : 20}
           />
         </Animated.View>
       )}

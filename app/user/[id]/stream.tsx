@@ -7,6 +7,8 @@ import { ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   type FeedItem,
+  getContentVoteCount,
+  getContentVoteState,
   getMemberWithFallback,
   getRecentMemberActivities,
   type ZhihuMember,
@@ -83,13 +85,10 @@ function toFeedItem(
       contentImage?.url ||
       contentImage?.data_draft_cover ||
       null,
-    voteCount:
-      type === 'pins'
-        ? target.reaction_count || target.voteup_count || 0
-        : target.voteup_count || 0,
+    voteCount: type === 'videos' ? 0 : (getContentVoteCount(type, target) ?? 0),
     commentCount: target.comment_count || 0,
     favlistsCount: target.favlists_count || 0,
-    voted: target.relationship?.voting || 0,
+    voted: type === 'videos' ? 0 : (getContentVoteState(type, target) ?? 0),
     type,
   };
 }

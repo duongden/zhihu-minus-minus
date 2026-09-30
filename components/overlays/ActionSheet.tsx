@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { FontAwesome6, Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet } from 'react-native';
 import { BouncyButton } from '@/components/BouncyButton';
@@ -12,6 +12,8 @@ export interface ActionSheetOption {
   key: string;
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
+  iconFamily?: 'ionicons' | 'font-awesome-6';
+  iconSolid?: boolean;
   onPress: () => unknown;
   destructive?: boolean;
   color?: string;
@@ -106,7 +108,20 @@ export function ActionSheet({
                       { backgroundColor: iconBackground },
                     ]}
                   >
-                    <Ionicons name={option.icon} size={21} color={iconColor} />
+                    {option.iconFamily === 'font-awesome-6' ? (
+                      <FontAwesome6
+                        name={option.icon}
+                        size={19}
+                        color={iconColor}
+                        solid={option.iconSolid}
+                      />
+                    ) : (
+                      <Ionicons
+                        name={option.icon}
+                        size={21}
+                        color={iconColor}
+                      />
+                    )}
                   </View>
                   <View style={styles.optionCopy}>
                     <Text

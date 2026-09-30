@@ -8,9 +8,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { recordReadHistory } from '@/api/zhihu/history';
 import { followMember, unfollowMember } from '@/api/zhihu/member';
 import { getPin, votePinPoll } from '@/api/zhihu/pin';
+import { getContentVoteCount, getContentVoteState } from '@/api/zhihu/voters';
 import { BouncyButton } from '@/components/BouncyButton';
 import { LikeButton } from '@/components/LikeButton';
 import { QueryErrorView } from '@/components/QueryErrorView';
+import { ReadingProgressNotice } from '@/components/ReadingProgressNotice';
 import { ShareMenu } from '@/components/ShareMenu';
 import { StableAvatar } from '@/components/StableAvatar';
 import { Text, ThemedIcon, useThemeColor, View } from '@/components/Themed';
@@ -19,9 +21,11 @@ import { VoterListModal } from '@/components/VoterListModal';
 import Colors from '@/constants/Colors';
 import { RICH_CONTENT_STALE_TIME, ZhihuContent } from '@/features/rich-content';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
+import { useReadingProgress } from '@/hooks/useReadingProgress';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import type { ZhihuPin, ZhihuPinPoll } from '@/types/zhihu';
 import { formatDateTime } from '@/utils/date';
+import { getZhihuErrorStatus } from '@/utils/zhihuError';
 
 export default function PinDetailScreen() {
   const colorScheme = useColorScheme();
@@ -41,6 +45,7 @@ export default function PinDetailScreen() {
   const [pollVotingOptionId, setPollVotingOptionId] = React.useState<
     string | null
   >(null);
+  const scrollViewRef = React.useRef<ScrollView>(null);
 
   const {
     data: pin,
@@ -51,11 +56,20 @@ export default function PinDetailScreen() {
     queryKey: ['pin-detail', id],
     queryFn: () => getPin(id as string),
     staleTime: RICH_CONTENT_STALE_TIME,
-    retry: (failureCount, err: any) =>
-      err?.response?.status === 404 ? false : failureCount < 2,
+    retry: (failureCount, err) =>
+      getZhihuErrorStatus(err) === 404 ? false : failureCount < 2,
+  });
+
+  const readingProgress = useReadingProgress({
+    contentKey: `pin:${String(id ?? '')}`,
+    enabled: Boolean(id),
+    ready: Boolean(pin),
+    scrollRef: scrollViewRef,
   });
 
   const poll = pin?.bottom_poll?.voting as ZhihuPinPoll | undefined;
+  const pinVoteCount = getContentVoteCount('pins', pin) ?? 0;
+  const pinVoteState = getContentVoteState('pins', pin) ?? 0;
   const pollMutation = useMutation({
     mutationFn: ({ pollId, optionId }: { pollId: string; optionId: string }) =>
       votePinPoll(pollId, [optionId]),
@@ -183,8 +197,16 @@ export default function PinDetailScreen() {
       />
 
       <ScrollView
+        ref={scrollViewRef}
         className="flex-1"
         scrollEventThrottle={16}
+        onScroll={(event) =>
+          readingProgress.onScroll(event.nativeEvent.contentOffset.y)
+        }
+        onLayout={readingProgress.onLayout}
+        onContentSizeChange={readingProgress.onContentSizeChange}
+        onScrollEndDrag={readingProgress.commitProgress}
+        onMomentumScrollEnd={readingProgress.commitProgress}
         contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
       >
         {/* 作者信息栏 */}
@@ -199,13 +221,15 @@ export default function PinDetailScreen() {
             />
             <View className="ml-3 flex-1 bg-transparent">
               <Text className="text-base font-bold">{pin?.author?.name}</Text>
-              <Text
-                type="secondary"
-                className="text-[13px] mt-0.5"
-                numberOfLines={1}
-              >
-                {pin?.author?.headline}
-              </Text>
+              {pin?.author?.headline ? (
+                <Text
+                  type="secondary"
+                  className="text-[13px] mt-0.5"
+                  numberOfLines={1}
+                >
+                  {pin.author.headline}
+                </Text>
+              ) : null}
             </View>
           </BouncyButton>
           <BouncyButton
@@ -261,6 +285,12 @@ export default function PinDetailScreen() {
         </View>
       </ScrollView>
 
+      <ReadingProgressNotice
+        visible={readingProgress.restoredOffset !== null}
+        onBackToTop={readingProgress.scrollToTop}
+        onDismiss={readingProgress.dismissRestoreNotice}
+      />
+
       {/* 底部交互栏 */}
       <View
         className="absolute left-5 right-5 z-[1000]"
@@ -292,8 +322,8 @@ export default function PinDetailScreen() {
             <View className="flex-row items-center bg-transparent">
               <LikeButton
                 id={pin?.id}
-                count={pin?.like_count || 0}
-                voted={pin?.relationship?.voting}
+                count={pinVoteCount}
+                voted={pinVoteState}
                 type="pins"
                 variant="minimal"
               />
@@ -337,7 +367,7 @@ export default function PinDetailScreen() {
         onClose={() => setVotersVisible(false)}
         contentType="pin"
         contentId={String(id)}
-        count={pin?.like_count}
+        count={pinVoteCount}
       />
     </View>
   );

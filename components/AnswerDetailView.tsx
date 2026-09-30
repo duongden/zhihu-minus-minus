@@ -23,6 +23,7 @@ import { BouncyButton } from '@/components/BouncyButton';
 import { DownvoteButton } from '@/components/DownvoteButton';
 import { LikeButton } from '@/components/LikeButton';
 import { ActionSheet } from '@/components/overlays/ActionSheet';
+import { ReadingProgressNotice } from '@/components/ReadingProgressNotice';
 import { ShareMenu } from '@/components/ShareMenu';
 import { StableAvatar } from '@/components/StableAvatar';
 import { Text, ThemedIcon, useThemeColor, View } from '@/components/Themed';
@@ -32,9 +33,11 @@ import Colors from '@/constants/Colors';
 import { RICH_CONTENT_STALE_TIME, ZhihuContent } from '@/features/rich-content';
 import { useCollectionAction } from '@/hooks/useCollectionAction';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
+import { useReadingProgress } from '@/hooks/useReadingProgress';
 import { useScrollHeaderAnim } from '@/hooks/useScrollAnimation';
 import { useCollectionStore } from '@/store/useCollectionStore';
 import { formatDate } from '@/utils/date';
+import { getZhihuErrorMessage, getZhihuErrorStatus } from '@/utils/zhihuError';
 
 const _slowTransition = SharedTransition.duration(600);
 
@@ -62,25 +65,6 @@ export const AnswerDetailView = ({
   const _textColor = Colors[colorScheme].text;
 
   const scrollViewRef = useRef<NativeScrollView>(null);
-  const { headerVisible, handleScroll } = useScrollHeaderAnim(
-    300,
-    onScroll,
-    100,
-    scrollY,
-  );
-
-  const headerAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: headerVisible.value,
-    transform: [
-      {
-        translateY: interpolate(
-          headerVisible.value,
-          [0, 1],
-          [-insets.top - 50, 0],
-        ),
-      },
-    ],
-  }));
 
   const [isLiked, setIsLiked] = React.useState(false);
   const [menuVisible, setMenuVisible] = React.useState(false);
@@ -105,9 +89,42 @@ export const AnswerDetailView = ({
     queryFn: () => getAnswer(id),
     enabled: isFocused,
     staleTime: RICH_CONTENT_STALE_TIME,
-    retry: (failureCount, err: any) =>
-      err?.response?.status === 404 ? false : failureCount < 2,
+    retry: (failureCount, err) =>
+      getZhihuErrorStatus(err) === 404 ? false : failureCount < 2,
   });
+
+  const readingProgress = useReadingProgress({
+    contentKey: `answer:${id}`,
+    enabled: isFocused,
+    ready: Boolean(answer),
+    scrollRef: scrollViewRef,
+  });
+  const handleTrackedScroll = React.useCallback(
+    (offset: number) => {
+      onScroll?.(offset);
+      readingProgress.onScroll(offset);
+    },
+    [onScroll, readingProgress.onScroll],
+  );
+  const { headerVisible, handleScroll } = useScrollHeaderAnim(
+    300,
+    handleTrackedScroll,
+    100,
+    scrollY,
+  );
+
+  const headerAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: headerVisible.value,
+    transform: [
+      {
+        translateY: interpolate(
+          headerVisible.value,
+          [0, 1],
+          [-insets.top - 50, 0],
+        ),
+      },
+    ],
+  }));
 
   const followMutation = useOptimisticToggle<AnswerDetail>({
     queryKey: ['answer-detail', id],
@@ -135,11 +152,8 @@ export const AnswerDetailView = ({
       Alert.alert('删除成功', '你的回答已删除喵！');
       router.back();
     },
-    onError: (err: any) =>
-      Alert.alert(
-        '删除失败',
-        err.response?.data?.error?.message || '无法删除回答',
-      ),
+    onError: (err: unknown) =>
+      Alert.alert('删除失败', getZhihuErrorMessage(err) || '无法删除回答'),
   });
 
   const handleDelete = () => {
@@ -165,7 +179,7 @@ export const AnswerDetailView = ({
   );
 
   const statusCollected = collectionStatus?.data?.some(
-    (item: any) => item.is_favorited,
+    (item) => item.is_favorited,
   );
 
   const storeCollected = useCollectionStore(
@@ -195,7 +209,7 @@ export const AnswerDetailView = ({
       (isFetchedAfterMount || storeCollectedRef.current === undefined)
     ) {
       const activeCollected =
-        collectionStatus?.data?.some((item: any) => item.is_favorited) || false;
+        collectionStatus?.data?.some((item) => item.is_favorited) || false;
       setCollectedStatus(id, activeCollected);
     }
   }, [collectionStatus, id, isFetchedAfterMount, setCollectedStatus]);
@@ -286,6 +300,10 @@ export const AnswerDetailView = ({
         }}
         scrollEventThrottle={16}
         onScroll={handleScroll}
+        onLayout={readingProgress.onLayout}
+        onContentSizeChange={readingProgress.onContentSizeChange}
+        onScrollEndDrag={readingProgress.commitProgress}
+        onMomentumScrollEnd={readingProgress.commitProgress}
         contentContainerStyle={{
           paddingTop: insets.top + 76,
           paddingBottom: 100 + insets.bottom,
@@ -304,13 +322,15 @@ export const AnswerDetailView = ({
               <Text className="text-[16px] font-bold" numberOfLines={1}>
                 {answer?.author?.name}
               </Text>
-              <Text
-                type="secondary"
-                className="text-[13px] mt-0.5"
-                numberOfLines={1}
-              >
-                {answer?.author?.headline}
-              </Text>
+              {answer?.author?.headline ? (
+                <Text
+                  type="secondary"
+                  className="text-[13px] mt-0.5"
+                  numberOfLines={1}
+                >
+                  {answer.author.headline}
+                </Text>
+              ) : null}
             </View>
           </BouncyButton>
           <BouncyButton
@@ -347,7 +367,7 @@ export const AnswerDetailView = ({
               正在斟酌文字...喵
             </Text>
           </View>
-        ) : (isError || (error as any)?.response?.status === 404) && !answer ? (
+        ) : (isError || getZhihuErrorStatus(error) === 404) && !answer ? (
           <View className="h-[300px] justify-center items-center px-6 bg-transparent">
             <Ionicons name="compass-outline" size={48} color={secondaryColor} />
             <Text className="text-base font-bold mt-4 mb-2 text-foreground dark:text-foreground-dark">
@@ -412,6 +432,12 @@ export const AnswerDetailView = ({
           </View>
         )}
       </Reanimated.ScrollView>
+
+      <ReadingProgressNotice
+        visible={readingProgress.restoredOffset !== null}
+        onBackToTop={readingProgress.scrollToTop}
+        onDismiss={readingProgress.dismissRestoreNotice}
+      />
 
       {/* Footer Actions */}
       <View
@@ -533,7 +559,9 @@ export const AnswerDetailView = ({
           },
           {
             key: 'collection',
-            icon: activeCollected ? 'star' : 'star-outline',
+            icon: 'star',
+            iconFamily: 'font-awesome-6',
+            iconSolid: activeCollected,
             label: activeCollected ? '取消收藏' : '移至收藏',
             color: activeCollected ? warningColor : undefined,
             disabled: collectionPending,

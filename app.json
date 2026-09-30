@@ -2,7 +2,7 @@
   "expo": {
     "name": "知乎--",
     "slug": "ZhihuMinusMinus",
-    "version": "0.6.0",
+    "version": "0.6.3",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "zhihu--",
@@ -27,6 +27,7 @@
       }
     },
     "android": {
+      "versionCode": 603,
       "splash": {
         "backgroundColor": "#ffffff",
         "image": "./assets/images/android-icon-monochrome.png",
@@ -246,6 +247,9 @@
     },
     "plugins": [
       "expo-router",
+      "./plugins/withAppIcons",
+      "./plugins/withAndroidAbiSplits",
+      "./plugins/withIosFirebaseCocoaPods",
       "expo-secure-store",
       [
         "expo-build-properties",
@@ -254,6 +258,11 @@
             "enableShrinkResourcesInReleaseBuilds": true,
             "enableMinifyInReleaseBuilds": true,
             "useLegacyPackaging": true
+          },
+          "ios": {
+            "deploymentTarget": "15.1",
+            "useFrameworks": "static",
+            "forceStaticLinking": ["RNFBApp", "RNFBAnalytics"]
           }
         }
       ],
@@ -270,7 +279,24 @@
         "@sentry/react-native",
         {
           "organization": "huamumu",
-          "project": "zhihuminusminus"
+          "project": "zhihuminusminus",
+          "url": "https://de.sentry.io/"
+        }
+      ],
+      [
+        "@react-native-firebase/app",
+        {
+          "ios": {
+            "disableSPM": true
+          }
+        }
+      ],
+      [
+        "@react-native-firebase/analytics",
+        {
+          "ios": {
+            "withoutAdIdSupport": true
+          }
         }
       ]
     ],
@@ -279,8 +305,19 @@
     },
     "extra": {
       "router": {},
-      "sentryDsn": "https://93a6099dd49b040d9c516485eb3c72f6@o4511051860672512.ingest.de.sentry.io/4511051866112080",
       "releaseNotes": {
+        "v0.6.3": [
+          "iOS 页面布局修复: 修复首页等页面顶部留白，以及回答详情页底部操作栏被遮挡的问题。"
+        ],
+        "v0.6.2": [
+          "Android 架构兼容: Release 同时提供 arm64-v8a、armeabi-v7a、x86 与 x86_64 单 ABI 安装包。",
+          "一键更新更稳定: 根据设备支持的 CPU 架构精确选择 APK，无法确认兼容包时不再盲目下载。"
+        ],
+        "v0.6.1": [
+          "原生导航升级: 默认启用 iOS 原生底部标签栏，让主要页面切换更贴合系统体验。",
+          "下拉刷新优化: 接入原生刷新交互并稳定跨平台触觉反馈，移除 Android 拖动过程中的连续震动。",
+          "阅读体验修复: 避免滚动回答时误触文本选择，并修正富文本列表标记的对齐表现。"
+        ],
         "v0.6.0": [
           "创作发布中心: 支持写回答、写文章、发想法和提问题，正文编辑器支持标题、粗体、引用、列表、链接及图片上传预览。",
           "评论互动增强: 支持评论与回复中上传图片、复制评论和删除自己的评论，并统一处理评论投票错误。",
@@ -317,8 +354,8 @@
           "基础稳定性优化: 修复了若干 UI 细节与已知的小概率崩溃问题。"
         ]
       },
-      "status": "🚀 v0.6.0 - 创作发布与信息流体验升级",
-      "lastUpdated": "2026-09-11",
+      "status": "🚀 v0.6.3 - iOS 页面布局修复",
+      "lastUpdated": "2026-09-24",
       "eas": {
         "projectId": "faa0f061-50e6-4ec4-bb6f-accda0dbd24f"
       }

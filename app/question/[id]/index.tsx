@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { FontAwesome6, Ionicons } from '@expo/vector-icons';
 import {
   FlashList,
   type FlashListRef,
@@ -78,6 +78,7 @@ import {
 } from '@/hooks/useGestureScrollView';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
 import { useScrollHeaderAnim } from '@/hooks/useScrollAnimation';
+import { useScrollAwareTextSelection } from '@/hooks/useScrollAwareTextSelection';
 import { useViewableItems } from '@/hooks/useViewableItems';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useCollectionStore } from '@/store/useCollectionStore';
@@ -168,6 +169,8 @@ const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
     );
     const expandedProgress = useSharedValue(isExpanded ? 1 : 0);
     const borderProgress = useSharedValue(0);
+    const { isTextSelectable, touchCaptureHandlers } =
+      useScrollAwareTextSelection(item.id.toString());
 
     React.useLayoutEffect(() => {
       const itemChanged = animationItemIdRef.current !== item.id;
@@ -379,6 +382,7 @@ const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
     return (
       <GestureDetector gesture={panGesture}>
         <View
+          {...touchCaptureHandlers}
           style={{
             backgroundColor: Colors[colorScheme].backgroundSecondary,
             borderRadius: 12,
@@ -419,13 +423,15 @@ const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
                 <Text className="text-[15px] font-bold">
                   {item.author?.name}
                 </Text>
-                <Text
-                  type="secondary"
-                  className="text-xs mt-0.5"
-                  numberOfLines={1}
-                >
-                  {item.author?.headline}
-                </Text>
+                {item.author?.headline ? (
+                  <Text
+                    type="secondary"
+                    className="text-xs mt-0.5"
+                    numberOfLines={1}
+                  >
+                    {item.author.headline}
+                  </Text>
+                ) : null}
               </View>
             </BouncyButton>
             {!item.relationship?.is_author && (
@@ -470,6 +476,7 @@ const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
                   segmentInfos={item.segment_infos}
                   linkCardInfo={item.link_card_info}
                   useNative={true}
+                  selectable={isTextSelectable}
                 />
                 {MetaInfo}
               </View>
@@ -557,6 +564,7 @@ const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
                       content={item.content}
                       segmentInfos={item.segment_infos}
                       linkCardInfo={item.link_card_info}
+                      selectable={isTextSelectable}
                     />
                     {MetaInfo}
                     <BouncyButton
@@ -675,8 +683,9 @@ const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
               className="flex-row items-center  bg-transparent py-1.5 px-3 rounded-full"
               onPress={() => toggleCollect(item.id, 'answer', isCollected)}
             >
-              <Ionicons
-                name={isCollected ? 'star' : 'star-outline'}
+              <FontAwesome6
+                name="star"
+                solid={isCollected}
                 size={16}
                 color={
                   isCollected ? warningColor : Colors[colorScheme].iconMuted
@@ -1495,8 +1504,9 @@ export default function QuestionDetail() {
                     )
                   }
                 >
-                  <Ionicons
-                    name={isFloatingCollected ? 'star' : 'star-outline'}
+                  <FontAwesome6
+                    name="star"
+                    solid={isFloatingCollected}
                     size={20}
                     color={
                       isFloatingCollected

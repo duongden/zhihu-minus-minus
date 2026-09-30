@@ -39,7 +39,7 @@ interface PinContentData {
 
 export const getPin = async (id: string | number) => {
   const include =
-    'author,author.is_following,content,content_html,created,like_count,comment_count,relationship.voting,topics';
+    'author,author.is_following,content,content_html,created,like_count,reaction_count,reaction,virtuals,comment_count,relationship.voting,topics';
   const res = await client.get(`/pins/${id}?include=${include}`);
   return res.data;
 };

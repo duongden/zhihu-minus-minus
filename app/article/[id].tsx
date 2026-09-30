@@ -3,7 +3,15 @@ import { useQuery } from '@tanstack/react-query';
 import { BlurView } from 'expo-blur';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Image, StyleSheet } from 'react-native';
+import {
+  ActivityIndicator,
+  Animated,
+  Image,
+  type NativeScrollEvent,
+  type ScrollView as NativeScrollView,
+  type NativeSyntheticEvent,
+  StyleSheet,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getArticle, getDailyDetail } from '@/api/zhihu';
 import { getArticleCollectionStatus } from '@/api/zhihu/collection';
@@ -19,6 +27,7 @@ import { DownvoteButton } from '@/components/DownvoteButton';
 import { LikeButton } from '@/components/LikeButton';
 import { ActionSheet } from '@/components/overlays/ActionSheet';
 import { QueryErrorView } from '@/components/QueryErrorView';
+import { ReadingProgressNotice } from '@/components/ReadingProgressNotice';
 import { ShareMenu } from '@/components/ShareMenu';
 import { StableAvatar } from '@/components/StableAvatar';
 import { Text, ThemedIcon, useThemeColor, View } from '@/components/Themed';
@@ -27,10 +36,12 @@ import Colors from '@/constants/Colors';
 import { RICH_CONTENT_STALE_TIME, ZhihuContent } from '@/features/rich-content';
 import { useCollectionAction } from '@/hooks/useCollectionAction';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
+import { useReadingProgress } from '@/hooks/useReadingProgress';
 import { useCollectionStore } from '@/store/useCollectionStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import type { ZhihuArticle } from '@/types/zhihu';
 import { formatDate } from '@/utils/date';
+import { getZhihuErrorStatus } from '@/utils/zhihuError';
 
 export default function ArticleDetail() {
   const colorScheme = useColorScheme();
@@ -49,6 +60,7 @@ export default function ArticleDetail() {
   const [isLiked, setIsLiked] = useState(false); // Local liked menu state (optional)
 
   const scrollY = useRef(new Animated.Value(0)).current;
+  const scrollViewRef = useRef<NativeScrollView>(null);
 
   // 1. 获取日报详情
   const {
@@ -60,8 +72,8 @@ export default function ArticleDetail() {
     queryKey: ['daily-article', id],
     queryFn: () => getDailyDetail(id as string),
     enabled: source === 'daily',
-    retry: (failureCount, err: any) =>
-      err?.response?.status === 404 ? false : failureCount < 2,
+    retry: (failureCount, err) =>
+      getZhihuErrorStatus(err) === 404 ? false : failureCount < 2,
   });
 
   // 2. 获取知乎普通文章详情
@@ -75,8 +87,8 @@ export default function ArticleDetail() {
     queryFn: () => getArticle(id as string),
     enabled: source !== 'daily',
     staleTime: RICH_CONTENT_STALE_TIME,
-    retry: (failureCount, err: any) =>
-      err?.response?.status === 404 ? false : failureCount < 2,
+    retry: (failureCount, err) =>
+      getZhihuErrorStatus(err) === 404 ? false : failureCount < 2,
   });
 
   const isLoading = isDaily ? dailyLoading : zhihuLoading;
@@ -84,6 +96,12 @@ export default function ArticleDetail() {
   const isError = isDaily ? dailyError : zhihuError;
   const refetchContent = isDaily ? refetchDaily : refetchZhihu;
   const authorAvatarUrl = !isDaily ? data?.author?.avatar_url : undefined;
+  const readingProgress = useReadingProgress({
+    contentKey: `${isDaily ? 'daily' : 'article'}:${String(id ?? '')}`,
+    enabled: Boolean(id),
+    ready: Boolean(data),
+    scrollRef: scrollViewRef,
+  });
 
   const enableBrowseHistory = useSettingsStore((s) => s.enableBrowseHistory);
 
@@ -109,7 +127,7 @@ export default function ArticleDetail() {
   );
 
   const statusCollected = collectionStatus?.data?.some(
-    (item: any) => item.is_favorited,
+    (item) => item.is_favorited,
   );
   const storeCollected = useCollectionStore(
     (state) => state.collectedStatusMap[String(id)],
@@ -129,7 +147,7 @@ export default function ArticleDetail() {
       (isFetchedAfterMount || storeCollectedRef.current === undefined)
     ) {
       const activeCollected =
-        collectionStatus?.data?.some((item: any) => item.is_favorited) || false;
+        collectionStatus?.data?.some((item) => item.is_favorited) || false;
       setCollectedStatus(id as string, activeCollected);
     }
   }, [collectionStatus, id, isFetchedAfterMount, setCollectedStatus]);
@@ -166,7 +184,9 @@ export default function ArticleDetail() {
   const tintColor = useThemeColor({}, 'primary');
   const primaryTransparent = useThemeColor({}, 'primaryTransparent');
 
-  const columnFollowMutation = useOptimisticToggle({
+  const columnFollowMutation = useOptimisticToggle<
+    NonNullable<typeof columnCard>
+  >({
     queryKey: ['article-column-card', id],
     isActive: columnCard?.is_following,
     mutationFn: async () => {
@@ -174,7 +194,7 @@ export default function ArticleDetail() {
       if (columnCard.is_following) return unfollowColumn(columnCard.id);
       return followColumn(columnCard.id);
     },
-    onUpdateCache: (old: any) => ({
+    onUpdateCache: (old) => ({
       ...old,
       is_following: !old?.is_following,
     }),
@@ -309,6 +329,7 @@ export default function ArticleDetail() {
       </View>
 
       <Animated.ScrollView
+        ref={scrollViewRef}
         className="flex-1"
         style={{
           backgroundColor: isDark
@@ -318,8 +339,16 @@ export default function ArticleDetail() {
         scrollEventThrottle={16}
         onScroll={Animated.event(
           [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-          { useNativeDriver: true },
+          {
+            useNativeDriver: true,
+            listener: (event: NativeSyntheticEvent<NativeScrollEvent>) =>
+              readingProgress.onScroll(event.nativeEvent.contentOffset.y),
+          },
         )}
+        onLayout={readingProgress.onLayout}
+        onContentSizeChange={readingProgress.onContentSizeChange}
+        onScrollEndDrag={readingProgress.commitProgress}
+        onMomentumScrollEnd={readingProgress.commitProgress}
         contentContainerStyle={{
           paddingTop: isDaily ? 0 : insets.top + 60,
           paddingBottom: isDaily ? 100 + insets.bottom : 120 + insets.bottom,
@@ -363,13 +392,15 @@ export default function ArticleDetail() {
                   <Text className="text-base font-bold">
                     {data.author?.name}
                   </Text>
-                  <Text
-                    type="secondary"
-                    className="text-[13px] text-tertiary dark:text-tertiary-dark mt-0.5"
-                    numberOfLines={1}
-                  >
-                    {data.author?.headline}
-                  </Text>
+                  {data.author?.headline ? (
+                    <Text
+                      type="secondary"
+                      className="text-[13px] text-tertiary dark:text-tertiary-dark mt-0.5"
+                      numberOfLines={1}
+                    >
+                      {data.author.headline}
+                    </Text>
+                  ) : null}
                 </View>
               </BouncyButton>
               <BouncyButton
@@ -407,6 +438,7 @@ export default function ArticleDetail() {
             content={isDaily ? data.body : data.content}
             objectId={id as string}
             type="article"
+            variant={isDaily ? 'daily' : 'default'}
           />
         </View>
 
@@ -483,6 +515,13 @@ export default function ArticleDetail() {
           </View>
         )}
       </Animated.ScrollView>
+
+      <ReadingProgressNotice
+        visible={readingProgress.restoredOffset !== null}
+        onBackToTop={readingProgress.scrollToTop}
+        onDismiss={readingProgress.dismissRestoreNotice}
+        bottomOffset={isDaily ? 20 : 88}
+      />
 
       {/* Floating Footer Actions for Standard Articles */}
       {!isDaily && (
@@ -595,7 +634,9 @@ export default function ArticleDetail() {
           },
           {
             key: 'collection',
-            icon: activeCollected ? 'star' : 'star-outline',
+            icon: 'star',
+            iconFamily: 'font-awesome-6',
+            iconSolid: activeCollected,
             label: activeCollected ? '取消收藏' : '移至收藏',
             color: activeCollected ? warningColor : undefined,
             disabled: collectionPending,

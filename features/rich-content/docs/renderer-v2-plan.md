@@ -1,546 +1,163 @@
-## 逐步替换 RNRH; React Native 文本能力考查;
+# Renderer V2：原生富文本能力与逐步迁移
 
-逐步替换 `react-native-render-html`（RNRH），但不再预设“单 WebView + Block FlashList 虚拟化”作为最终架构。
+## 当前决策与来源
 
-当前更明确的问题并不主要来自 HTML parser，而来自 **React Native 文本能力的暴露边界**：
+本计划于 2026-09-30 对照 [Issue #40 正文](https://github.com/huamurui/zhihu-minus-minus/issues/40) 和 [候选路线补充](https://github.com/huamurui/zhihu-minus-minus/issues/40#issuecomment-5595047992) 更新。Issue 正文是当前目标，早期评论中“单 WebView 原型、随后 Block FlashList”的路线作为历史记录保留。
 
-1. Android 下文本装饰能力有限，无法可靠实现知识点等场景需要的自定义颜色、粗细、偏移和线型。
-2. HTML block 被渲染为多个独立 RN `Text` / native text surface 后，系统选择无法自然跨段落连续进行。
-3. RNRH 最终仍然落到 RN `Text` / `View`，因此单纯换一个同类 HTML renderer 很难突破上述限制。
-4. “超长正文必须虚拟化”目前尚未被数据证明。对于几十万字级纯文本，真正的性能瓶颈可能更多来自布局重算、图片解码、媒体 View 和大量 React/Fabric 节点，而不是文本 buffer 本身。
+继续逐步替换 `react-native-render-html`（RNRH），核心改为原生 attributed text 能力：连续文本流、可组合的 range 样式、自定义装饰线、行内 attachment，以及可回传到 JS 的选择范围。WebView 可用于对照、fallback 或实验；文本虚拟化由 Release 数据决定。优先验证媒体加载和回收，不把逐段 cell 作为必选架构。
 
-因此 Renderer V2 的目标改为：
+目标链路：
 
 ```text
-知乎 HTML
+知乎 HTML / 想法分段
   -> 清洗、规范化、资源分类
-  -> ZhihuDocument / RichText IR
-  -> Renderer V2
+  -> ZhihuDocument（语义 Block + InlineRun）
+  -> Text Flow Island 分组 + Rich Text IR 编译
+  -> backend adapter
        ├─ Native Rich Text
-       │    ├─ Android: Spannable + TextView/Layout
-       │    └─ iOS: NSAttributedString + UITextView/TextKit
+       │    ├─ Android：Spannable + TextView/Layout
+       │    └─ iOS：NSAttributedString + UITextView/TextKit
        ├─ 独立媒体 / 复杂 block
-       │    ├─ Image
-       │    ├─ Video
-       │    ├─ Table
-       │    └─ Custom React Component
-       └─ 可选 fallback / 实验 backend
-            ├─ RNRH
-            └─ WebView / 其他方案
+       │    └─ 图片、视频、表格、卡片、自定义组件
+       └─ 可选 fallback / 实验
+            └─ RNRH、WebView 或其他 backend
 ```
 
-RNRH 在迁移期保留为旧实现、回归参照和 fallback。
-
----
+具体 backend 尚未选定。当前优先验证 `react-native-enriched-html` 与 Tiqian 两条候选路线；本分支已有 Enriched 初步接入与开发对照入口，但完整能力和真机验收未完成，Tiqian 尚未接入。
 
-## 核心方向：Attributed Text 而不是更多 RN `<Text>`
+## 当前实现与能力缺口
 
-React Native 内部本身就会把嵌套 `<Text>` 压平为平台 attributed-text 表示：
+业务页面的 `ZhihuContent` 仍沿用 RNRH / WebView 设置，另有自动增高、关闭内部滚动的 `ZhihuDOMContent` 实验路径。组件的 `useNative` / native fallback 分支实际调用 `RenderHtml`，不能据此认定已接入新的原生 attributed-text backend。开发案例页可显式选择 `enriched`，不改变生产默认 renderer。
 
-```text
-Android -> SpannableString
-iOS     -> NSAttributedString
-```
+目前已经完成：
 
-但这些能力没有以完整、可扩展的公共 API 暴露出来。
+- runtime、脱敏 API JSON fixtures、分析工具、测试和文档集中维护。
+- 完整免费回答正文复用、长按预览复用、Pager 相邻预取及未聚焦正文延迟挂载。
+- [Android Debug 网络与挂载基线](./android-device-baseline-2026-08-30.md)。
+- [`ZhihuDocument` 类型草案](../document.ts)，包括表格、脚注、行内图片/公式与知识点结构。
+- [`documentTraversal.ts`](../documentTraversal.ts) 的文档遍历和正文图片收集，以及 [`segmentHighlight.ts`](../segmentHighlight.ts) 的属性局部规范化。
+- [`bridge.ts`](../bridge.ts) 对现有六类 WebView 消息的字段验证。
+- EnrichedText JS/Fabric 接入、三后端开发案例页、共享链接/图片预览外壳与排版指标，以及 SVG 解码和 `lineHeight` 的 native patch。
+- Enriched 专属 dialect 降级及危险 URL/标签、图片来源与尺寸 fallback 的回归用例；fixture 工具支持 `question_feed_card` 与 `segment_infos` 范围/元数据校验。
 
-Renderer V2 希望直接定义一层可跨平台映射的 Rich Text IR，例如：
+完整 HTML → Document 转换、HTML 清洗、Rich Text IR、Text Flow Island 编译、基于中立模型的原生 adapter 和 V2 事件协议仍待实现。`normalizeZhihuHtmlForEnriched` 输出后端专属 HTML dialect，不是上述中立转换或 source map；当前块图/公式和媒体仍在该 dialect 内表达或降级，并未完成独立 block adapter。现有 WebView 的高度/图片/链接/知识点/选择消息验证，也不代表原生选择、滚动、ready/error 协议已完成。
 
-```ts
-type RichTextDocument = {
-  text: string
-  spans: TextSpan[]
-  paragraphs: ParagraphSpan[]
-  decorations: Decoration[]
-  attachments: InlineAttachment[]
-}
-```
+[Enriched 实验记录](./renderer-v2-experiment-01-enriched-html.md) 保留 2026-09-14 的 Android Debug app 和 iOS Simulator library target 编译结果。历史构建记录不能替代合并后依赖/patch 的 prebuild、构建与真机检查；selection range 事件、自定义 decoration、精确 attachment baseline、source map 和双端 Release 对照仍未完成。[Tiqian 手册](./renderer-v2-experiment-02-tiqian.md) 则保留为待核验草案，其示例 API/Document V0 不是当前公共模型。
 
-大致对应：
+### 自定义文字装饰
 
-```ts
-type TextSpan = {
-  range: [number, number]
-  style: TextStyle
-}
+当前知识点样式最终受 RN `Text` 暴露的能力限制。V2 需要以 source range 定义颜色、粗细、baseline 下方偏移和 solid/dashed/dotted/wavy 线型，并与链接、粗体、背景等样式独立组合。
 
-type ParagraphSpan = {
-  range: [number, number]
-  style: ParagraphStyle
-}
+native backend 的 PoC 应验证能否利用 Android Layout / iOS TextKit 的视觉行几何绘制跨行装饰；精确命中、字号变化与重新布局也必须覆盖。不能仅凭库支持普通 underline 就视为满足要求。
 
-type Decoration = {
-  range: [number, number]
-  type: 'underline' | 'strikethrough' | 'custom'
-  color?: string
-  thickness?: number
-  offset?: number
-  style?: 'solid' | 'dashed' | 'dotted' | 'wavy'
-}
-```
+### 连续选择与 Text Flow Island
 
-Native backend 负责把它转换为平台自己的 attributed-text / span 模型，而不是重新实现 shaping、断行、Bidi 和字体 fallback。
+多个独立 `Text` / TextView 或可回收 cell 会形成不同的 selection context。连续、能够由 attributed-text 模型表达的段落应编译到同一个文本面，例如以换行连接标题、段落、简单列表与引用，并用范围样式表达语义。
 
-目标边界是：
+Text Flow Island 是一段共享文本 buffer、范围坐标和选择上下文的连续正文。图片、视频、表格、复杂卡片或独立 box layout 可以形成边界；普通 `p`、`span`、粗斜体、链接、行内代码、换行、标题、简单列表/引用和行内 attachment 优先留在 flow 内。
 
-```text
-我们负责：
-HTML / CSS 语义
-range style
-paragraph style
-custom decoration
-selection exposure
-inline attachment
+首阶段验收同一 flow 内跨段选择。跨独立 flow 或媒体边界的文章级选择、复制与无障碍顺序需要单独验证并记录能力边界；不能默认逐段虚拟化后仍有连续选择。
 
-平台负责：
-font shaping
-line breaking
-Bidi
-glyph placement
-native selection handles
-copy / accessibility
-```
+### 真正的行内 attachment
 
-暂不自行实现 Tiqian 一类完整排版引擎。
+`eeimg=1` 优先保持行内公式语义；`eeimg=2` 保持块级公式。小图片、emoji/icon 等行内对象也应参与同一个文本布局，不能用横向 `View` 拼接模拟。
 
----
+Rich Text IR 可用 `U+FFFC` replacement character 表达 attachment，并保留尺寸、baseline offset、alignment、资源和原始节点身份。PoC 应验证 Android replacement span 或 iOS text attachment 路径的实际测量、换行和交互能力。
 
-## 为什么这比继续直接使用 RNRH 更有价值
+公式需要独立的视觉 baseline，不能只按图片矩形居中。还需覆盖字号/行高变化、ascent/descent、异步 intrinsic size 的 placeholder/reflow、前后选择 offset、点击/长按和 accessibility。公式语义升级的参考见 [Markdown 记录](./markdown-reference.md#公式)，不得因为旧 renderer 只能渲染 block 就把行内公式强制提升。
 
-RNRH 的主要链路是：
+## ZhihuDocument 与 Rich Text IR 的边界
 
-```text
-HTML
- -> DOM / TTree
- -> React Native Text / View
- -> RN 内部 attributed text
-```
+`ZhihuDocument` 保留知乎语义、原始节点 ID、`paragraphId`、局部知识点范围、资源、脚注和 fallback。它的 Block 数组既可编译成连续文本流，也可驱动独立媒体；存在 Block AST 本身不意味着必须使用 FlashList。
 
-对于普通富文本这已经足够。
+Rich Text IR 是下一层待实现的布局输入，至少需要：
 
-但目前能明确感知到两个 capability gap。
+| 结构 | 责任 |
+| --- | --- |
+| Text buffer | 每个 flow 的连续字符串和明确的文本版本 |
+| Text spans | 在范围上应用字体、粗斜体、颜色、背景、链接等样式 |
+| Paragraph spans | 段落范围、间距、缩进、对齐、列表/引用语义 |
+| Decorations | 独立的范围装饰：颜色、粗细、offset、线型 |
+| Inline attachments | 占位范围、资源/公式、尺寸、baseline、alignment、节点 ID |
+| Source map | flow 全局范围与原始节点、段落 ID、段内偏移的对应 |
 
-### 1. 高度自定义的文字装饰
+范围统一使用 UTF-16 半开区间 `[start, end)`。现有知识点/选择结构是段内 offset，不能直接当作 flow 全局 offset。编译时加入的换行、列表标记、attachment 占位必须纳入 source map；复制 attachment 时使用何种替代文本也需要明确规则。
 
-目标至少包括：
+原生选择事件需返回 flow 身份、对应文本版本及稳定范围，再由 source map 转回业务段落位置。文本更新、字号或宽度变化时，应避免旧选择范围指向新内容；emoji、组合字符、Bidi、换行和 attachment 前后位置均需 fixture 覆盖。
 
-* 自定义颜色；
-* 自定义粗细；
-* baseline / glyph 下方偏移；
-* solid / dashed / dotted / wavy 等线型；
-* 按 source range 应用；
-* 跨视觉行连续绘制；
-* 与链接、粗体、背景色等 span 独立组合。
+本项目负责 HTML/CSS 语义、range/paragraph 样式、装饰、attachment 和交互映射。基础 shaping、断行、Bidi、字体 fallback 和选择宿主由所选 backend 承担；不另行实现完整排版引擎。
 
-Android 端不能依赖 RN 当前的 `textDecoration*` 能力完成这些需求。
+## 两条候选路线
 
-Renderer V2 应允许 native backend：
+以下定位与风险来自 [Issue 路线补充](https://github.com/huamurui/zhihu-minus-minus/issues/40#issuecomment-5595047992)，属于待验证方案。
 
-```text
-source range
-  -> Android Layout / iOS TextKit
-  -> 计算每条 visual line 上对应的 geometry
-  -> native canvas / text layout decoration
-```
+| 候选 | PoC 接入方式 | 重点待验证项 |
+| --- | --- | --- |
+| `react-native-enriched-html` | 用其原生 attributed-text surface 表达 text flow，知乎特殊节点先规范化，复杂内容保留独立 block/fallback | HTML/CSS 覆盖、跨段选择事件、公式密集内容、attachment/baseline metrics、自定义 decoration，以及必要 patch 的维护成本 |
+| Tiqian | Android 正文经本地原生模块接入；中立模型由 adapter 转成其 article/paragraph 输入，RN 负责页面状态和导航 | RN 宿主的测量/滚动/手势/生命周期、CJK 与公式排版、文章级选择、工具链和最低系统要求、iOS 对应路径 |
 
-因此装饰不必被限制为平台默认 underline。
+`react-native-enriched-html` 是较轻量的双端候选，不能直接视为 RNRH 的完整替代。Tiqian 可参考 Zhihu++ 的正文实践，但已有 Kotlin 应用的能力不能直接证明 RN/Expo 宿主集成成立。
 
-### 2. 跨段落选择
+本仓库当前为 Expo SDK 55 / RN 0.83。Issue 提醒 Tiqian 工具链与后续 RN/Expo 基座的关系，正式接入前应对照本仓锁文件和所选上游版本要求逐项核验 Kotlin、AGP、Compose、JDK 与最低系统版本。该讨论不构成本仓已兼容或需要立即升级 SDK 的结论。
 
-目前若正文被拆成：
+若评估 WebView，保留每个详情页至多一个、必要资源离线打包和清洗/导航边界的约束；多段/多公式 WebView，以及持续高度测量的自动增高结构，不能作为已验收的 V2 backend。
 
-```text
-TextView A -> 第一段
-TextView B -> 第二段
-TextView C -> 第三段
-```
+## 性能策略：先测文本，优先管理媒体
 
-每个 TextView 都有独立 selection context，无法自然从 A 选择到 B/C。
+先补 10 万、30 万、50 万字的纯文本 fixture，以及大量 inline spans / paragraph styles 的变体。与图片、视频、公式附件和复杂 block 分开测试，区分 buffer、编译、layout/reflow、React/Fabric 节点与解码资源成本。`pig.json` 的长图混合案例不能代替纯文本上限。
 
-对于连续文字流，更合理的模型是：
+Release 数据应覆盖首屏、measure/layout、字号和宽度变化后的 reflow、长距离滚动、native/Java heap 或 iOS 对应内存、attributed-text/layout cache 和 selection 响应，详见 [基准计划](./benchmark-plan.md)。
 
-```text
-一个 native text surface
+媒体优先研究 viewport 附近预加载、进入时挂载/解码、远离后释放位图或视频资源，保留可恢复尺寸占位。inline attachment 的尺寸和选择映射也须稳定，不能为回收小附件而先拆开连续文本流。
 
-"第一段文字\n第二段文字\n第三段文字"
-```
+只有数据证明文本布局或内存超出目标，才进一步研究 flow segmentation、lazy paragraph layout、分段 surface、Block 虚拟化或其他 backend。实验需同时量化性能收益和 selection/复制/无障碍的代价。
 
-不同段落、粗体、链接和颜色都通过 range style 表达。
+## 迁移阶段
 
-这样系统 selection 始终工作在一个连续的 source offset 空间内：
+### Phase A：基线与中立模型
 
-```text
-0 -------------------------------- N
-```
-
-从而自然支持跨 `\n` 的段落选择。
-
-
-### 3. 行内图片、公式与 Inline Attachment
-
-知乎正文中并非所有图片都具有 block 语义。
-
-典型例子是：
-
-* `eeimg=1` 行内公式；
-* 与文字共同构成一句话的小图片；
-* emoji / icon / badge 类元素；
-* 未来可能出现的其他 inline embedded content。
-
-这些节点需要真正参与文本排版，而不只是通过一个横向 `View` 把 `Text` 和 `Image` 摆在一起。
-
-目标语义类似：
-
-```text
-"前面的文字 \uFFFC 后面的文字"
-             ↑
-       InlineAttachment
-```
-
-Attachment 应具有明确的文本排版属性：
-
-```ts
-interface InlineAttachment {
-  range: [number, number]
-
-  kind: 'image' | 'formula' | 'custom'
-
-  size: {
-    width: number
-    height: number
-  }
-
-  baselineOffset?: number
-
-  alignment?:
-    | 'baseline'
-    | 'middle'
-    | 'textTop'
-    | 'textBottom'
-
-  source: unknown
-}
-```
-
-Native backend 应让 attachment 作为 glyph-like / replacement object 参与同一个 attributed-text layout：
-
-```text
-Android
-Spannable
- -> ReplacementSpan / custom inline span
- -> Android Layout
-
-iOS
-NSAttributedString
- -> text attachment
- -> TextKit
-```
-
-需要验证：
-
-* attachment 与前后文字处于同一 inline formatting context；
-* 根据剩余行宽正常换行；
-* 不会因为 `eeimg=1` 自动拆成独立 block；
-* width / height 能参与当前行测量；
-* 能根据公式或图片的视觉基线调整 ascent / descent / baseline offset；
-* 不同字号和 line-height 下仍能正确对齐；
-* attachment 前后的 source offset 与 selection 保持连续；
-* 点击、长按和 accessibility 能映射回原始节点；
-* 异步获得 intrinsic size 时有稳定 placeholder / reflow 策略。
-
-其中公式尤其不能简单视为普通图片居中处理。数学公式通常需要有独立的 baseline 信息，使：
-
-```text
-       x² + √y
-文字 ----------- 文字
-       baseline
-```
-
-而不是仅按 attachment bounding box 做垂直居中。
-
-因此 Renderer V2 应区分：
-
-```text
-Image / Formula
-├─ InlineAttachment
-│    -> text flow 的一部分
-│
-└─ BlockMedia
-     -> 独立 View
-     -> 可进行 viewport-based loading / unloading
-```
-
-`eeimg=1` 应优先编译为 `InlineAttachment`，`eeimg=2` 应保持 block media / block formula 语义。
-
-这也意味着媒体虚拟化应主要针对 block 图片、视频等高成本资源；小型 inline attachment 可以随 text flow 常驻，不需要为了回收它们而拆分整个段落或破坏连续 selection。
-
-
-
-
----
-
-## Text Flow Island
-
-不要求整篇 HTML 强行塞进一个 TextView。
-
-Renderer V2 可以将连续、能够被 attributed-text 模型表达的内容合并为一个 **Text Flow Island**：
-
-```text
-Article
-│
-├─ NativeTextFlow
-│    ├─ h1
-│    ├─ p
-│    ├─ p
-│    └─ blockquote
-│
-├─ Image
-│
-├─ NativeTextFlow
-│    ├─ p
-│    ├─ p
-│    └─ list
-│
-├─ CustomComponent
-│
-└─ NativeTextFlow
-     └─ p
-```
-
-以下内容优先进入 native text flow：
-
-* `p`
-* `span`
-* `strong`
-* `em`
-* `a`
-* `code`
-* `br`
-* `h1` ~ `h6`
-* 简单 blockquote
-* 简单列表
-* 行内公式 / 行内 attachment
-
-以下内容可以成为独立 block：
-
-* 图片；
-* 视频；
-* table；
-* 复杂卡片；
-* 真正需要独立 box layout 的自定义组件；
-* 暂时无法稳定映射到 attributed text 的节点。
-
-这样既能获得跨段落 selection，也不必把整个 HTML box model 强塞进 TextView。
-
----
-
-## 关于虚拟化：Measure First
-
-不再预设：
-
-```text
-ZhihuDocument.blocks
- -> FlashList
- -> 每段独立 cell
-```
-
-作为 Renderer V2 必选架构。
-
-原因是它与连续 native selection 存在天然冲突：
-
-```text
-paragraph A -> cell / text surface A
-paragraph B -> cell / text surface B
-paragraph C -> cell / text surface C
-```
-
-cell 被拆分甚至滚出 viewport 后卸载，会破坏连续的 document-level selection。
-
-因此虚拟化改为性能验证后的可选优化。
-
-### 首先测什么
-
-补一份现实上限的纯文本 fixture，例如：
-
-* 10 万字；
-* 30 万字；
-* 50 万字；
-* 大量 inline span；
-* 大量 paragraph style。
-
-记录 Android / iOS Release：
-
-* initial render；
-* measure / layout；
-* 字号变化后的 reflow；
-* 宽度变化后的 reflow；
-* 长距离滚动 FPS；
-* native / Java heap；
-* attributed text / layout cache 大小；
-* selection 响应。
-
-如果纯文本本身没有明显问题，则不为理论上的极端长度引入 block virtualization。
-
----
-
-## 媒体资源优先虚拟化
-
-相比纯文本，图片和视频更可能成为真实内存压力。
-
-一张 1080×2000 RGBA 图片解码后理论上即可达到约：
-
-```text
-1080 * 2000 * 4 ~= 8 MB
-```
-
-因此几十张图片的 decoded bitmap 很容易超过纯文本和其 layout 数据的内存量级。
-
-优先考虑：
-
-```text
-远离 viewport
- -> 不加载 / 释放 decoded bitmap
-
-接近 viewport
- -> preload
-
-进入 viewport
- -> mount / decode
-```
-
-也就是说可以保留整篇 text layout，同时只对昂贵媒体 attachment 做生命周期管理。
-
-如果后续数据证明真正存在超长文本 layout / memory 问题，再研究：
-
-* text-flow segmentation；
-* lazy paragraph layout；
-* 分段 native text surface；
-* block virtualization；
-* Skia / Tiqian 等其他 backend。
-
-不要提前为没有出现的问题付出 selection 和架构复杂度。
-
----
-
-## 已完成的基线工作
-
-* [x] 将 runtime、fixtures、工具、测试和文档集中到 `features/rich-content/`
-* [x] 登记 `lala.md`、`pig.md` 等真实案例
-* [x] 修复折叠卡片提前挂载完整正文
-* [x] 稳定 RNRH 配置引用
-* [x] 推荐流已有完整正文时不再重复请求回答详情
-* [x] 长按预览复用列表正文，缺失时仍保留详情请求
-* [x] Pager 在空闲期只预取左右相邻回答
-* [x] 未聚焦页面不提前挂载完整富文本
-* [x] 完成首轮 Android Debug 真机网络、View 数和帧数据基线
-
-这些优化继续保留，与 Renderer V2 backend 设计无冲突。
-
----
-
-## 下一阶段
-
-### A. Rich Text IR
-
-* [ ] 定义 `ZhihuDocument` / `RichTextDocument`
-* [ ] 明确 source offset 与 normalized text offset 的映射
-* [ ] 定义 text span / paragraph span / decoration / attachment
-* [ ] HTML normalization 后输出稳定 IR
-* [ ] fixture 从标签计数推进到 IR 语义断言
-* [ ] 保证 unsupported node 有可观测 fallback
-
-### B. Android Native Text PoC
-
-* [ ] Fabric native component
-* [ ] `SpannableStringBuilder` backend
-* [ ] 单 buffer 多 range style
-* [ ] paragraph style
-* [ ] link / click range
-* [ ] 跨 `\n` 原生 selection
-* [ ] selection range event
-* [ ] 自定义 underline color / thickness / offset
-* [ ] dashed / dotted / wavy decoration PoC
-* [ ] decoration 跨视觉行正确绘制
-* [ ] 行内公式 / attachment PoC
-
-### C. iOS Native Text PoC
-
-* [ ] `NSMutableAttributedString`
-* [ ] `UITextView` / TextKit backend
-* [ ] 与 Android 对齐的 range style
-* [ ] paragraph style
-* [ ] link
-* [ ] selection
-* [ ] selection range event
-* [ ] custom decoration
-* [ ] inline attachment
-
-### D. HTML Renderer 接入
-
-* [ ] HTML -> normalized document
-* [ ] CSS cascade / inheritance
-* [ ] 连续文本节点合并为 Text Flow Island
-* [ ] image / video / table / custom block 独立渲染
-* [ ] `eeimg=1` 保持真正 inline
-* [ ] `eeimg=2` 保持 block
-* [ ] 暗色模式
-* [ ] 字号缩放
-* [ ] 链接点击 / 长按
-* [ ] 图片点击 / 长按
-* [ ] 与现有 RNRH fixture 对比
-
-### E. Performance / Virtualization
-
-* [ ] 补 10/30/50 万字纯文本 fixture
-* [ ] 测 initial layout / reflow / scroll / memory
-* [ ] 单独统计媒体资源峰值内存
-* [ ] 优先实现图片 / 视频 viewport lifecycle
-* [ ] 验证长文章是否真的需要 text virtualization
-* [ ] 只有数据证明存在瓶颈时，再决定是否实现 segmentation / FlashList
-
-### F. 可选实验
-
-* [ ] 对比 RN 原生 `<Text>`
-* [ ] 对比 native attributed-text backend
-* [ ] 对比 WebView
-* [ ] 必要时评估 Skia Paragraph
-* [ ] 未来有出版级中文排版需求时再评估 Tiqian backend
-
----
-
-## 暂不做
-
-当前阶段明确不做：
-
-* 自己实现 shaping；
-* 自己实现 glyph positioning；
-* 自己实现 Unicode line breaking；
-* 自己实现字体 fallback；
-* 自己实现完整 selection handles；
-* 为纯理论上的百万字文章提前设计复杂虚拟化；
-* 默认把整篇文章放进 WebView；
-* 每段 / 每公式创建一个 WebView；
-* 为了 HTML renderer 直接引入完整中文排版引擎。
-
----
-
-## Definition of Done
-
-Renderer V2 第一阶段完成时应满足：
-
-* `eeimg=1` 行内公式不再被自动拆为独立 block；
-* `eeimg=2` 保持块级语义；
-* Android / iOS 都能以 native attributed text 渲染连续富文本；
-* 同一 text flow 内可以跨段落连续选择；
-* JS 能收到稳定的 selection range；
-* Android 不再受 RN 默认 `textDecoration*` 限制，可以控制装饰线颜色、粗细和 offset；
-* 至少一种自定义 decoration 能跨多视觉行正确绘制；
-* 链接、粗体、斜体、颜色、背景、段落样式能够组合；
-* 图片、视频和复杂 block 可以从 text flow 中独立出来；
-* HTML 清洗、危险 URL、导航和 fallback 有自动化测试；
-* Release 构建有真实长文本与混合媒体性能数据；
-* 是否进行文本虚拟化由 benchmark 决定，而不是提前作为架构要求。
-
-最终目标不是重新实现浏览器，也不是重新实现 TextKit / Android Layout。
-
-目标是补上 React Native 当前没有完整暴露的 attributed-text 能力，并在这之上提供一个适合知乎 HTML 的、可维护的 Renderer V2。
+- [x] 集中 runtime、fixtures、工具和文档。
+- [x] 登记 API JSON 案例与结构/元数据断言。
+- [x] 完成 Android Debug 网络与挂载基线。
+- [x] 定义 `ZhihuDocument` 类型草案、遍历、图片收集及知识点属性验证。
+- [x] 验证现有六类 WebView 消息字段。
+- [ ] 补纯文本上限、复杂 inline、表格/脚注、恶意 HTML 和深层嵌套案例。
+- [ ] 实现完整 HTML normalization / 清洗与语义 fixture 断言。
+- [ ] 建立跨 Android/iOS 的 RNRH 视觉与交互对照矩阵。
+
+### Phase B：Rich Text IR 与候选 PoC
+
+- [x] Enriched 初步 JS/Fabric 接入、后端专属 dialect、SVG/lineHeight patch 与三后端开发对照入口。
+- [ ] 定义 text/paragraph spans、decorations、attachments 和 source map。
+- [ ] 实现 Text Flow Island 分组与连续 UTF-16 buffer 编译。
+- [ ] 在合并后工具链重新构建并完成 `react-native-enriched-html` 双端真机 PoC 验收。
+- [ ] 核验 Tiqian 工具链并验证 Android 宿主/adapter PoC，记录 iOS 路径。
+- [ ] 验证同一 flow 跨段选择、原生事件映射、自定义装饰及 attachment baseline/reflow。
+- [ ] 与详情 header/Pager/底栏验证测量、滚动、手势和生命周期。
+
+### Phase C：Release 对照与 backend 决策
+
+- [ ] 对候选、当前 RNRH 和必要 fallback 运行相同 fixture 矩阵。
+- [ ] 记录双端 Release 长文本、span 密集和混合媒体数据。
+- [ ] 基于覆盖、性能、维护成本与平台差异选定默认 backend。
+- [ ] 用 feature flag 分批接入回答/文章，保留可观测 fallback。
+- [ ] 验证媒体 viewport 生命周期；数据有必要时再开展文本分段/虚拟化实验。
+
+### Phase D：默认接管与移除旧链路
+
+- [ ] 两端视觉、选择、字号、暗色、链接、媒体、知识点和无障碍验收通过。
+- [ ] Release 数据与 fallback 覆盖满足验收，平台差异有明确处理。
+- [ ] 默认启用已验证的 V2 backend。
+- [ ] 达到替换条件后删除 RNRH renderer、兼容转发与依赖。
+
+## 第一阶段验收
+
+- `eeimg=1` 默认保持 text flow 内行内语义，已确认的 display 语义按 fixture 例外处理；`eeimg=2` 保持块级语义。附件排版、baseline、换行和异步尺寸变化正确。
+- Android/iOS 原生正文在同一 flow 内支持跨段选择，并向 JS 暴露可映射的稳定范围。
+- 装饰支持颜色、粗细、offset 与至少一种自定义线型，能够跨视觉行绘制并与其他 span 组合。
+- 普通段落、标题、链接、粗斜体、颜色、背景和段落样式可组合，复杂媒体/block 有明确边界。
+- 未支持节点保留可见 fallback 与诊断；HTML 清洗、危险 URL、事件边界和导航有自动化测试。
+- 相同设备/内容的 Release 首屏、reflow、滚动、内存和选择数据可重复比较。
+- 媒体生命周期与文本选择能够协作，文本虚拟化是否需要由 benchmark 决定。
+
+Debug 数据、桌面 Node 微基准、第三方示例或仅定义类型，均不能代替本仓原生 backend 的真机验收。

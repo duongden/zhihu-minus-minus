@@ -1,19 +1,68 @@
 import type {
+  ZhihuActionResponse,
   ZhihuAuthor,
   ZhihuPaging,
   ZhihuQuestion,
   ZhihuSegmentInfo,
 } from '@/types/zhihu';
 import apiClient from '../client';
+import type {
+  CommentAuthor,
+  CommentItem,
+  CommentMember,
+  CommentPaging,
+} from './comment';
 import {
   createPublishingTraceId,
   getPublishingTextLength,
+  type PublishedContentApiResponse,
   type PublishedContentResult,
   parsePublishedContentResult,
 } from './publishing';
+import type { ZhihuVoteResponse } from './voters';
 
 export interface AnswerQuestion extends Omit<ZhihuQuestion, 'relationship'> {
   relationship?: ZhihuQuestion['relationship'] | null;
+}
+
+interface AnswerReactionRelation {
+  current_user_is_navigator?: boolean;
+  faved?: boolean;
+  following?: boolean;
+  is_author?: boolean;
+  is_navigator_vote?: boolean;
+  liked?: boolean;
+  subcribed?: boolean;
+  vote?: string;
+  vote_next_step?: string;
+}
+
+interface AnswerReactionStatistics {
+  applaud_count?: number;
+  bullet_count?: number;
+  comment_count?: number;
+  down_vote_count?: number;
+  favorites?: number;
+  interest_play_count?: number;
+  like_count?: number;
+  plaincontent_like_count?: number;
+  plaincontent_vote_up_count?: number;
+  play_count?: number;
+  pv_count?: number;
+  question_answer_count?: number;
+  question_follower_count?: number;
+  republishers?: string[];
+  share_count?: number;
+  subscribe_count?: number;
+  up_vote_count?: number;
+}
+
+interface AnswerBizExt {
+  share_guide?: {
+    has_positive_bubble?: boolean;
+    has_time_bubble?: boolean;
+    hit_share_guide_cluster?: boolean;
+  };
 }
 
 export interface AnswerDetail {
@@ -34,11 +83,12 @@ export interface AnswerDetail {
   thanks_count?: number;
   visited_count?: number;
   reaction?: {
-    relation?: {
-      vote?: 'UP' | 'DOWN' | 'NEUTRAL';
-      faved?: boolean;
-      liked?: boolean;
-    };
+    image_reactions?: Record<
+      string,
+      { is_liked?: boolean; like_count?: number }
+    >;
+    relation?: AnswerReactionRelation;
+    statistics?: AnswerReactionStatistics;
   };
   relationship?: {
     upvoted_followees?: ZhihuAuthor[];
@@ -62,9 +112,13 @@ export interface AnswerDetail {
   url?: string;
   thumbnail?: string;
   content_img?: string[];
-  biz_ext?: unknown;
+  biz_ext?: AnswerBizExt;
   ip_info?: string;
-  paid_info?: unknown;
+  paid_info?: {
+    type?: string;
+    content?: string;
+    has_purchased?: boolean;
+  } | null;
   link_card_info?: Record<string, string>;
 }
 
@@ -184,7 +238,7 @@ export const getAnswer = async (
 ): Promise<AnswerDetail> => {
   const defaultInclude =
     'content,editable_content,paid_info,can_comment,excerpt,thanks_count,voteup_count,comment_count,visited_count,reaction,ip_info,question.topics,author.is_following,reaction.relation.voting,segment_infos,favlists_count';
-  const res = await apiClient.get(
+  const res = await apiClient.get<AnswerDetail>(
     `/answers/${id}?include=${include || defaultInclude}`,
   );
   return res.data;
@@ -194,7 +248,9 @@ export const voteAnswer = async (
   id: string | number,
   type: 'up' | 'neutral' | 'down',
 ) => {
-  const res = await apiClient.post(`/answers/${id}/voters`, { type });
+  const res = await apiClient.post<ZhihuVoteResponse>(`/answers/${id}/voters`, {
+    type,
+  });
   return res.data;
 };
 
@@ -295,7 +351,10 @@ export async function publishAnswer(
       thanksInvitation: { thank_inviter_status: 'close', thank_inviter: '' },
     },
   };
-  const res = await apiClient.post('/content/publish', payload);
+  const res = await apiClient.post<PublishedContentApiResponse>(
+    '/content/publish',
+    payload,
+  );
   return parsePublishedContentResult(res.data);
 }
 
@@ -317,7 +376,9 @@ export const updateAnswer = async (
   createAnswer(questionId, html, { ...options, answerId });
 
 export const deleteAnswer = async (id: string | number) => {
-  const res = await apiClient.delete(`/answers/${id}`);
+  const res = await apiClient.delete<{ success?: boolean; message?: string }>(
+    `/answers/${id}`,
+  );
   return res.data;
 };
 
@@ -337,7 +398,7 @@ export const reactAnswerSegment = async (
       end: { paragraph_id: paragraphId, offset: endOffset },
     },
   };
-  const res = await apiClient.post(
+  const res = await apiClient.post<ZhihuActionResponse>(
     `/reaction/answers/${answerId}/segment_reaction`,
     payload,
   );
@@ -359,7 +420,7 @@ export const createSegmentReaction = async (
       end: { paragraph_id: endParagraphId, offset: endOffset },
     },
   };
-  const res = await apiClient.post(
+  const res = await apiClient.post<ZhihuActionResponse>(
     `/reaction/answers/${answerId}/segment_reaction`,
     payload,
   );
@@ -371,7 +432,7 @@ export const unreactAnswerSegment = async (
   segId: string,
 ) => {
   // 根据抓包，这里 body 是 seg_ids 且为字符串
-  const res = await apiClient.delete(
+  const res = await apiClient.delete<ZhihuActionResponse>(
     `/reaction/answers/${answerId}/segment_reaction`,
     {
       data: { seg_ids: segId },
@@ -380,23 +441,61 @@ export const unreactAnswerSegment = async (
   return res.data;
 };
 
-interface SegmentCommentAuthor {
-  member?: SegmentCommentAuthor;
-  [key: string]: unknown;
-}
+type SegmentCommentAuthor = CommentAuthor | Partial<CommentMember>;
 
-interface SegmentComment {
+interface SegmentComment
+  extends Omit<
+    Partial<CommentItem>,
+    'author' | 'child_comments' | 'child_comment_count' | 'type'
+  > {
   author?: SegmentCommentAuthor;
-  relationship?: { voting: number };
-  liked?: boolean;
-  vote_count?: number;
-  like_count?: number;
-  [key: string]: unknown;
+  child_comment_count?: number;
+  child_comments?: SegmentComment[];
+  type?: 'comment';
 }
 
-interface SegmentCommentsResponse {
+interface SegmentCommentsApiResponse {
   data?: SegmentComment[];
-  [key: string]: unknown;
+  paging?: CommentPaging;
+}
+
+export interface SegmentCommentsResponse {
+  data?: CommentItem[];
+  paging?: CommentPaging;
+}
+
+function normalizeSegmentAuthor(author?: SegmentCommentAuthor): CommentAuthor {
+  const member = author && 'member' in author ? author.member : author;
+  return {
+    role: author && 'member' in author ? author.role : undefined,
+    member: {
+      ...member,
+      id: String(member?.id ?? ''),
+      url_token: member?.url_token ?? '',
+      name: member?.name ?? '',
+      avatar_url: member?.avatar_url ?? '',
+    },
+  };
+}
+
+function normalizeSegmentComment(comment: SegmentComment): CommentItem {
+  const {
+    author,
+    child_comments: childComments,
+    child_comment_count: childCommentCount,
+    type: _type,
+    ...fields
+  } = comment;
+  return {
+    ...fields,
+    id: comment.id ?? '',
+    type: 'comment',
+    content: comment.content ?? '',
+    created_time: comment.created_time ?? 0,
+    author: normalizeSegmentAuthor(author),
+    child_comment_count: childCommentCount ?? 0,
+    child_comments: childComments?.map(normalizeSegmentComment) ?? [],
+  };
 }
 
 export const getSegmentComments = async (
@@ -405,26 +504,21 @@ export const getSegmentComments = async (
   limit = 20,
   offset = '',
 ): Promise<SegmentCommentsResponse> => {
-  const res = await apiClient.get<SegmentCommentsResponse>(
+  const res = await apiClient.get<SegmentCommentsApiResponse>(
     `/comment_v5/answers/${answerId}/segment/root_comment?segment_id=${segmentId}&order_by=score&limit=${limit}&offset=${offset}`,
   );
-  // 基础标准化 (V5 扁平化了作者结构)
-  if (res.data?.data) {
-    res.data.data = res.data.data.map((comment) => {
-      if (comment.author && !comment.author.member) {
-        comment.author = { member: { ...comment.author } };
-      }
-      if (!comment.relationship && comment.liked !== undefined) {
-        comment.relationship = { voting: comment.liked ? 1 : 0 };
-      }
-      if (
-        comment.vote_count === undefined &&
-        comment.like_count !== undefined
-      ) {
-        comment.vote_count = comment.like_count;
-      }
-      return comment;
-    });
-  }
-  return res.data;
+  const data = res.data.data?.map((comment) => {
+    const normalized = normalizeSegmentComment(comment);
+    if (!normalized.relationship && normalized.liked !== undefined) {
+      normalized.relationship = { voting: normalized.liked ? 1 : 0 };
+    }
+    if (
+      normalized.vote_count === undefined &&
+      normalized.like_count !== undefined
+    ) {
+      normalized.vote_count = normalized.like_count;
+    }
+    return normalized;
+  });
+  return { data, paging: res.data.paging };
 };

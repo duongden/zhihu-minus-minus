@@ -1,6 +1,12 @@
-# Renderer V2 Implementation 02：Tiqian 初步集成手册
+# Renderer V2 实验 02：Tiqian 初步集成草案
 
-> 暂不实施。 当前 Tiqian 使用较新的 Kotlin / AGP / Compose 工具链；Expo 55/57 默认基座偏旧。RN 0.87 已明显接近其要求，后续 Expo SDK 更新基座后再做尝试。
+> 尚未接入或验证。本记录保留 Android native module / adapter 的分阶段历史草案；当前架构与验收以 [Renderer V2 计划](./renderer-v2-plan.md) 为准。曾按 Expo 55/57、RN 0.87 等版本讨论接入时机，但这不是已核实的兼容矩阵或升级要求。正式 PoC 前须对照项目锁文件和选定 Tiqian 版本，核验 Kotlin、AGP、Compose、JDK、最低 Android 版本及依赖/API；iOS 没有在本仓完成对应路径。
+
+## 与当前模型的关系（2026-09-30 同步）
+
+本仓已有 [`ZhihuDocument`](../document.ts) 语义模型、遍历和局部属性/消息验证。下文 `RendererDocument` / 最小 Document V0、native API、Gradle 和目录示例均是尚未落地的草案，不应再创建另一份应用公共 AST。真实正文应先规范化为 `ZhihuDocument`，由独立 adapter 编译为选定 Tiqian 版本需要的输入；传输 DTO 只在模块内部定义，并保留节点/段落身份、UTF-16 范围和 source map 的对应。
+
+Enriched 专属 HTML dialect lowering 不能直接替代这一转换。完整 HTML → Document、Rich Text IR、source map、宿主 measurement/scroll/gesture/lifecycle、原生事件与 Release 真机数据仍需分别验证。下面的类型与方法名用于说明边界，不能视为 Tiqian 当前 API 或已完成的 production 模块。
 
 ## 目标
 
@@ -43,9 +49,11 @@ Tiqian / Tiqian Math
 ```text
 Zhihu HTML
     ↓
-JS normalization / parser
+HTML normalization（待实现）
     ↓
-简单 Renderer Document
+ZhihuDocument（已有语义模型）
+    ↓
+Tiqian adapter / 内部传输 DTO（待实现）
     ↓
 native module prop
     ↓
@@ -356,11 +364,13 @@ MarkdownStyle
 <TiqianArticle document={document} />
 ```
 
-但 Document 先保持极简。
+模块传输输入可先只覆盖 `ZhihuDocument` 的段落和标题子集；它应由 adapter 产生，不重新定义应用公共模型。
 
 ---
 
-# 最小 Document V0
+# 最小 Document V0（历史传输草案）
+
+下面的 `RendererDocument` 是早期最小 bridge 示例，缺少当前模型的节点 ID、段落 ID、嵌套 inline、资源、脚注和范围映射。保留它用于说明最小闭环；实施时从 `ZhihuDocument` 投影模块 DTO，并明确版本与映射，不把它作为替代 `document.ts` 的规范。
 
 先只支持：
 
@@ -524,7 +534,9 @@ onLinkPress(url)
 
 ---
 
-# Phase 3A：HTML → RendererDocument
+# Phase 3A：HTML → ZhihuDocument → Adapter
+
+沿用现有 `features/rich-content/document.ts` 作为中立语义层；这一阶段的 parser/normalization 和 Tiqian adapter 尚未实现。下列 `RendererDocument` 名称仅表示早期示意的后端输入，实际传输结构按选定 API 和 source map 约束确认。
 
 初期只覆盖知乎正文中最常见部分：
 
@@ -553,8 +565,10 @@ Zhihu HTML
 parse
    ↓
 normalize
-   ↓
-RendererDocument
+    ↓
+ZhihuDocument
+    ↓
+Tiqian adapter / 内部 DTO
 ```
 
 不要：
@@ -1205,11 +1219,10 @@ modules/tiqian-renderer/
 
 ```text
 features/rich-content/
-├─ renderer-v2/
-│  ├─ document.ts
-│  ├─ parseZhihuHtml.ts
-│  ├─ normalizeFormula.ts
-│  └─ fixtures/
+├─ document.ts              # 已有中立模型，不再创建重复 AST
+├─ normalization/           # 中立转换待实现；Enriched dialect 已有独立实现
+├─ adapters/                # Tiqian adapter 待设计/实现
+└─ fixtures/                # 沿用现有 cases / manifest
 ```
 
 职责：

@@ -5,6 +5,7 @@ import {
 } from 'react-native-enriched-html';
 import { useThemeColor } from '@/components/Themed';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import type { RichContentVariant } from '../imagePolicy';
 import {
   type EnrichedNormalizationResult,
   getEnrichedImageLinkSource,
@@ -19,6 +20,7 @@ export interface ZhihuEnrichedContentProps {
   onImagePress?: (url: string) => void;
   onNormalized?: (result: EnrichedNormalizationResult) => void;
   selectable?: boolean;
+  variant?: RichContentVariant;
 }
 
 const withNearOpaqueAlpha = (color: string) =>
@@ -36,6 +38,7 @@ export const ZhihuEnrichedContent = React.memo(
     onImagePress,
     onNormalized,
     selectable = true,
+    variant = 'default',
   }: ZhihuEnrichedContentProps) => {
     const textColor = useThemeColor({}, 'text');
     const textSecondaryColor = useThemeColor({}, 'textSecondary');
@@ -51,8 +54,9 @@ export const ZhihuEnrichedContent = React.memo(
       () =>
         normalizeZhihuHtmlForEnriched(htmlContent, {
           maxImageWidth: contentWidth,
+          variant,
         }),
-      [contentWidth, htmlContent],
+      [contentWidth, htmlContent, variant],
     );
 
     React.useEffect(() => {
