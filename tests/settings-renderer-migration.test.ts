@@ -30,9 +30,10 @@ beforeEach(() => {
   jest.mocked(SecureStore.getItemAsync).mockResolvedValue(null);
 });
 
-test('defaults to RNRH and persists the renderer selection in settings version 13', () => {
+test('defaults to RNRH with visual feedback enabled in settings version 14', () => {
   expect(useSettingsStore.getState().richContentRenderer).toBe('rnrh');
-  expect(useSettingsStore.persist.getOptions().version).toBe(13);
+  expect(useSettingsStore.getState().enablePressFeedback).toBe(true);
+  expect(useSettingsStore.persist.getOptions().version).toBe(14);
 });
 
 test.each([
@@ -89,6 +90,7 @@ test('retains unrelated settings and the earlier settings migrations', async () 
     richContentRenderer: 'webview',
     pressOpacity: 0.82,
     androidFeedbackType: 'ripple',
+    enablePressFeedback: true,
     enableLocalFeedFilter: false,
     enableHapticFeedback: true,
     useNativeIOSBottomTabs: true,
@@ -115,10 +117,53 @@ test('hydrates legacy settings and writes back only the new renderer field', asy
   expect(persistedJson).toBeDefined();
   if (!persistedJson) throw new Error('Migrated settings must be persisted');
   expect(JSON.parse(persistedJson)).toMatchObject({
-    state: { richContentRenderer: 'webview', fontSizeScale: 1.3 },
-    version: 13,
+    state: {
+      richContentRenderer: 'webview',
+      fontSizeScale: 1.3,
+      enablePressFeedback: true,
+    },
+    version: 14,
   });
   expect(JSON.parse(persistedJson).state).not.toHaveProperty('useWebView');
+});
+
+test('adds visual feedback to v13 settings without changing the saved style or haptics', async () => {
+  const legacy = {
+    androidFeedbackType: 'scale-opacity',
+    pressOpacity: 0.75,
+    pressScale: 0.93,
+    enableHapticFeedback: false,
+  };
+  expect(await migrate(legacy, 13)).toMatchObject({
+    ...legacy,
+    enablePressFeedback: true,
+  });
+  expect(legacy).not.toHaveProperty('enablePressFeedback');
+});
+
+test('persists disabled visual feedback and restores the saved style when reenabled', async () => {
+  useSettingsStore.getState().updateSettings({
+    enablePressFeedback: false,
+    androidFeedbackType: 'scale-opacity',
+    pressOpacity: 0.75,
+    pressScale: 0.93,
+  });
+  const persistedJson = jest
+    .mocked(SecureStore.setItemAsync)
+    .mock.calls.at(-1)?.[1];
+  if (!persistedJson) throw new Error('Feedback preference must be persisted');
+  useSettingsStore.setState({ enablePressFeedback: true });
+  jest.mocked(SecureStore.getItemAsync).mockResolvedValue(persistedJson);
+  await useSettingsStore.persist.rehydrate();
+  expect(useSettingsStore.getState().enablePressFeedback).toBe(false);
+
+  useSettingsStore.getState().updateSettings({ enablePressFeedback: true });
+  expect(useSettingsStore.getState()).toMatchObject({
+    enablePressFeedback: true,
+    androidFeedbackType: 'scale-opacity',
+    pressOpacity: 0.75,
+    pressScale: 0.93,
+  });
 });
 
 test('sanitizes invalid renderer updates and retains a valid renderer during other updates', () => {
