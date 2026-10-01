@@ -1,3 +1,5 @@
+/// <reference types="expo/types/metro-require" />
+
 import manifestJson from '../fixtures/manifest.json';
 import {
   decodeRichContentDevFixture,

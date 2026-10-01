@@ -1,6 +1,6 @@
 # ZhihuRichText 原生文字模块
 
-Rich-content V2 的独立 Expo native view。业务入口由 `features/rich-content` 管理；本模块只接收序列化后的 `RichTextFlow`，不解析 HTML、不访问登录状态。
+`tiqian-super-mini`（原称Native V2）的独立 Expo native view。业务入口由 `features/rich-content` 管理；本模块只接收序列化后的 `RichTextFlow`，不解析 HTML、不访问登录状态。内部模块名与 `native-v2` renderer值保持兼容。
 
 ## Android 实现
 

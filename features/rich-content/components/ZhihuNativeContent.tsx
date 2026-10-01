@@ -825,8 +825,177 @@ function NativeBlock(props: BlockViewProps) {
   }
 }
 
+type NativeDocumentInput = Pick<
+  ZhihuNativeContentProps,
+  | 'content'
+  | 'contentArray'
+  | 'objectId'
+  | 'type'
+  | 'variant'
+  | 'segmentInfos'
+  | 'linkCardInfo'
+>;
+
+interface ReadyNativeDocument {
+  identity: string;
+  revision: number;
+  input: NativeDocumentInput;
+}
+
+/** Keep a measured document visible while its replacement prepares offscreen. */
+export const ZhihuNativeContent = React.memo(function ZhihuNativeContent(
+  props: ZhihuNativeContentProps,
+) {
+  const identity = JSON.stringify([
+    props.type,
+    props.objectId,
+    props.variant ?? 'default',
+  ]);
+  const arraySignature = useMemo(
+    () => JSON.stringify(props.contentArray),
+    [props.contentArray],
+  );
+  const source = useRef({
+    identity,
+    content: props.content,
+    arraySignature,
+    contentArray: props.contentArray,
+    revision: 0,
+  });
+  if (
+    source.current.identity !== identity ||
+    source.current.content !== props.content ||
+    source.current.arraySignature !== arraySignature
+  ) {
+    source.current = {
+      identity,
+      content: props.content,
+      arraySignature,
+      contentArray: props.contentArray,
+      revision: source.current.revision + 1,
+    };
+  }
+  // Equivalent JSON from a fresh response must not invalidate native layout.
+  const contentArray = source.current.contentArray;
+  const input = useMemo(
+    () => ({
+      content: props.content,
+      contentArray,
+      objectId: props.objectId,
+      type: props.type,
+      variant: props.variant,
+      segmentInfos: props.segmentInfos,
+      linkCardInfo: props.linkCardInfo,
+    }),
+    [
+      props.content,
+      contentArray,
+      props.objectId,
+      props.type,
+      props.variant,
+      props.segmentInfos,
+      props.linkCardInfo,
+    ],
+  );
+  const revision = source.current.revision;
+  const [ready, setReady] = useState<ReadyNativeDocument | null>(null);
+  const displayed = ready?.identity === identity ? ready : null;
+  const replacing = displayed !== null && displayed.revision !== revision;
+  const current = useRef({ identity, revision });
+  current.current = { identity, revision };
+
+  useEffect(() => {
+    setReady((previous) =>
+      previous?.identity === identity &&
+      previous.revision === revision &&
+      previous.input !== input
+        ? { ...previous, input }
+        : previous,
+    );
+  }, [identity, revision, input]);
+
+  const onReady = useCallback(() => {
+    if (
+      current.current.identity !== identity ||
+      current.current.revision !== revision
+    )
+      return;
+    setReady({ identity, revision, input });
+    props.onLayoutReady?.();
+  }, [identity, revision, input, props.onLayoutReady]);
+
+  if (!isRichTextNativeAvailable()) return <>{props.renderFallback()}</>;
+
+  const requested = { identity, revision, input };
+  const layers = replacing ? [displayed, requested] : [requested];
+  return (
+    <View style={styles.content}>
+      {layers.map((layer) => {
+        const latest = layer.revision === revision;
+        const visible = !replacing || !latest;
+        const interactive = latest && visible;
+        const isCurrent = () =>
+          current.current.identity === layer.identity &&
+          current.current.revision === layer.revision;
+        return (
+          <View
+            key={`${layer.identity}:${layer.revision}`}
+            testID={
+              visible ? 'native-visible-document' : 'native-pending-document'
+            }
+            pointerEvents={interactive ? 'auto' : 'none'}
+            accessibilityElementsHidden={!visible}
+            importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}
+            style={[
+              styles.content,
+              !visible && { position: 'absolute', top: 0, left: 0, opacity: 0 },
+            ]}
+          >
+            <NativeDocumentContent
+              {...props}
+              {...layer.input}
+              interactive={interactive}
+              selectable={interactive && props.selectable !== false}
+              onLayoutReady={latest ? onReady : undefined}
+              onLinkPress={
+                interactive
+                  ? (url) => isCurrent() && props.onLinkPress?.(url)
+                  : undefined
+              }
+              onImagePress={
+                interactive
+                  ? (url, gallery) =>
+                      isCurrent() && props.onImagePress?.(url, gallery)
+                  : undefined
+              }
+              onImageLongPress={
+                interactive
+                  ? (url) => isCurrent() && props.onImageLongPress?.(url)
+                  : undefined
+              }
+              onSegmentPress={
+                interactive
+                  ? (action, document) =>
+                      isCurrent() && props.onSegmentPress?.(action, document)
+                  : undefined
+              }
+              onSelectionChange={
+                interactive
+                  ? (selection, flow, document) =>
+                      isCurrent() &&
+                      props.onSelectionChange?.(selection, flow, document)
+                  : undefined
+              }
+            />
+          </View>
+        );
+      })}
+    </View>
+  );
+});
+
 /** Native V2 text flows with React Native media boundaries. */
-export const ZhihuNativeContent = React.memo(function ZhihuNativeContent({
+const NativeDocumentContent = React.memo(function NativeDocumentContent({
   content,
   contentArray,
   objectId,
@@ -847,7 +1016,8 @@ export const ZhihuNativeContent = React.memo(function ZhihuNativeContent({
   renderFallback,
   renderPlaceholder,
   onLayoutReady,
-}: ZhihuNativeContentProps) {
+  interactive = true,
+}: ZhihuNativeContentProps & { interactive?: boolean }) {
   const dimensions = useWindowDimensions();
   const settings = useSettingsStore();
   const textColor = useThemeColor({}, 'text');
@@ -1178,6 +1348,7 @@ export const ZhihuNativeContent = React.memo(function ZhihuNativeContent({
 
   return (
     <View
+      testID="native-content-layout"
       key={`${documentLayoutPrefix}:${configJson}`}
       onLayout={(event) => {
         if (
@@ -1286,7 +1457,7 @@ export const ZhihuNativeContent = React.memo(function ZhihuNativeContent({
         )}
       </View>
       <Modal
-        visible={Boolean(footnote)}
+        visible={interactive && Boolean(footnote)}
         transparent
         animationType="fade"
         onRequestClose={() => setFootnoteSelection(null)}

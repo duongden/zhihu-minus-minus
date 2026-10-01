@@ -79,7 +79,7 @@ export default function RichContentFixturesScreen() {
               ]}
             >
               <RNView style={styles.cardHeader}>
-                <Text style={styles.cardTitle}>V2 功能原型</Text>
+                <Text style={styles.cardTitle}>tiqian-super-mini 原型</Text>
                 <Ionicons name="flask-outline" size={20} color={primaryColor} />
               </RNView>
               <Text type="secondary" style={styles.meta}>

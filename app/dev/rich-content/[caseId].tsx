@@ -73,7 +73,7 @@ export default function RichContentFixtureDetailScreen() {
     : renderer === 'webview'
       ? 'WebView / DOM'
       : renderer === 'native-v2'
-        ? 'Native V2'
+        ? 'tiqian-super-mini'
         : 'RNRH';
 
   return (
@@ -169,7 +169,7 @@ export default function RichContentFixtureDetailScreen() {
                         : undefined,
                     ]}
                   >
-                    Native V2
+                    tiqian-super-mini
                   </Text>
                 </BouncyButton>
               </RNView>

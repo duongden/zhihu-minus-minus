@@ -25,13 +25,15 @@
 
 本分支新增直接消费IR的Android系统TextView后端，2026-10-01开始增加iOS UIKit/TextKit adapter，先逐项展示V2能力，再通过正文排版设置开放真实内容试用；[本轮实现与边界](./renderer-v2-experiment-03-native-flow.md)另行记录。新安装默认仍为经典排版。Enriched已正式移除，Tiqian尚未接入，双端完整验收和全量默认迁移仍待推进。
 
-2026-09-30真机试用后，当前开发主线确定为本地Native V2。用户关注的跨段选择、装饰线和行内附件已获得较好的初步效果，并明确要求正式删除Enriched：组件、专属normalizer与测试、依赖、native patch和开发入口均移除，实验记录仅作历史参考。RNRH继续承载现有正文和迁移fallback。此选择针对功能原型的后续投入，不代表已经完成双端生产替换或性能比较。
+2026-09-30真机试用后，当前开发主线确定为本地tiqian-super-mini。用户关注的跨段选择、装饰线和行内附件已获得较好的初步效果，并明确要求正式删除Enriched：组件、专属normalizer与测试、依赖、native patch和开发入口均移除，实验记录仅作历史参考。RNRH继续承载现有正文和迁移fallback。此选择针对功能原型的后续投入，不代表已经完成双端生产替换或性能比较。
 
 ## 当前实现与能力缺口
 
-业务 `ZhihuContent` 默认读取 `richContentRenderer` 偏好，“设置 → 外观与阅读 → 正文排版”可选经典排版、原生排版 V2、网页排版；“功能开关 → 正文排版”进入同一设置页。显式 `renderer` 可覆盖偏好，Android/iOS以外的平台或未包含新模块的客户端按本次渲染回退完整RNRH。开发案例独立切换后端，不写生产偏好；生产构建隐藏开发案例，保留正常设置入口。
+本地原生后端现名 `tiqian-super-mini`，早期记录中的Native V2指同一实现。对外名字更新，`renderer="native-v2"`及已保存偏好保持兼容；Android/iOS仍以系统文字布局消费IR。
 
-settings version 13迁移旧 `useWebView`：true对应网页，其余旧值对应经典。新安装默认 `rnrh`，升级也不会静默启用Native V2；模块不可用时不改写用户保存的选择。
+业务 `ZhihuContent` 默认读取 `richContentRenderer` 偏好，“设置 → 外观与阅读 → 正文排版”可选经典排版、tiqian-super-mini、网页排版；“功能开关 → 正文排版”进入同一设置页。显式 `renderer` 可覆盖偏好，Android/iOS以外的平台或未包含新模块的客户端按本次渲染回退完整RNRH。开发案例独立切换后端，不写生产偏好；生产构建隐藏开发案例，保留正常设置入口。
+
+settings version 13迁移旧 `useWebView`：true对应网页，其余旧值对应经典。新安装默认 `rnrh`，升级也不会静默启用tiqian-super-mini；模块不可用时不改写用户保存的选择。
 
 目前已经完成：
 
@@ -45,9 +47,9 @@ settings version 13迁移旧 `useWebView`：true对应网页，其余旧值对�
 - HTML → Document初步规范化、连续UTF-16 flow与IR编译、选择source map和语义复制。
 - 独立Android Expo模块：同一流跨段选择事件、四种视觉行装饰、图片/SVG行内附件，以及JS独立媒体/表格/脚注adapter。
 - 初步iOS UIKit/TextKit adapter与Expo Apple注册，共享既有IR、JS正文宿主及fallback；平台验证单独记录。
-- 六组合成内容的V2原型入口，Native V2 / RNRH / WebView三后端对照与本地排版/交互调节；共享字号/行高比例修正。
+- 六组合成内容的V2原型入口，tiqian-super-mini / RNRH / WebView三后端对照与本地排版/交互调节；共享字号/行高比例修正。
 - 正式删除Enriched运行链路、依赖及native patch，将V2缺模块/不支持平台的fallback改为RNRH。
-- 正文设置开放Native V2真实内容试用，并迁移旧后端偏好；开发案例切换保持页面局部状态。
+- 正文设置开放tiqian-super-mini真实内容试用，并迁移旧后端偏好；开发案例切换保持页面局部状态。
 - 存量知乎卡片/脚注dialect、结构化想法分段、富文本图注/表格/脚注面板、合并格布局及自然图片比例；回答的知识点和源选区菜单先做精确范围验证。
 
 上述新链路是初步实现，完整知乎dialect、双端完整平台验收、跨媒体选择、复杂公式/双向文字几何、媒体生命周期以及滚动/ready/error协议仍待补齐。现有WebView消息验证也不代表V2协议已完整。

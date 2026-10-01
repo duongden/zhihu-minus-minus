@@ -31,7 +31,7 @@ type DecorationKind = NonNullable<
   ZhihuNativeTypographyOptions['decorationKind']
 >;
 const rendererChoices: readonly { id: RichContentRenderer; title: string }[] = [
-  { id: 'native-v2', title: 'Native V2' },
+  { id: 'native-v2', title: 'tiqian-super-mini' },
   { id: 'rnrh', title: 'RNRH' },
   { id: 'webview', title: 'WebView' },
 ];
@@ -237,7 +237,7 @@ export default function RichContentPrototypeScreen() {
 
   return (
     <View style={[styles.screen, { backgroundColor }]}>
-      <Stack.Screen options={{ title: '富文本 V2 原型' }} />
+      <Stack.Screen options={{ title: 'tiqian-super-mini 原型' }} />
       <ScrollView
         ref={scrollRef}
         contentContainerStyle={{ paddingBottom: insets.bottom + 26 }}
@@ -373,7 +373,7 @@ export default function RichContentPrototypeScreen() {
                   ? '原生使用系统断行与双齐；整字版心只调整文字宽度。'
                   : renderer === 'webview'
                     ? '中西间距和标点压缩取决于设备 WebView 对相应 CSS 的支持。'
-                    : '此后端用于视觉对照；自定义装饰与 V2 选区事件在 Native V2 中演示。'}
+                    : '此后端用于视觉对照；自定义装饰与源选区事件在 tiqian-super-mini 中演示。'}
               </Text>
             </View>
           ) : null}
@@ -384,10 +384,11 @@ export default function RichContentPrototypeScreen() {
             <Text style={[styles.hint, { color: primaryColor }]}>
               当前
               {Platform.OS === 'android' || Platform.OS === 'ios'
-                ? '开发构建缺少 V2 原生模块'
-                : '平台暂不支持 V2 原生模块'}
+                ? '开发构建缺少原生文字模块'
+                : '平台暂不支持原生文字模块'}
               ，正文使用 RNRH fallback
-              与其图片、链接交互；本地选区和知识点菜单在 Native V2 中演示。
+              与其图片、链接交互；本地选区和知识点菜单在 tiqian-super-mini
+              中演示。
             </Text>
           ) : null}
         </View>
@@ -456,7 +457,7 @@ export default function RichContentPrototypeScreen() {
           <Text style={[styles.hint, { color: secondaryColor }]}>
             {selection
               ? `UTF-16 [${selection.start}, ${selection.end}) · ${selectedSource}`
-              : '长按 Native V2 正文即可显示选区；同一文本流支持跨段选择。'}
+              : '长按 tiqian-super-mini 正文即可显示选区；同一文本流支持跨段选择。'}
           </Text>
           {selectionText ? (
             <Text

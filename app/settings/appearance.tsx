@@ -61,7 +61,7 @@ const CONTENT_RENDERER_OPTIONS: readonly {
   },
   {
     value: 'native-v2',
-    label: '原生排版 V2',
+    label: 'tiqian-super-mini',
     description:
       '支持 Android 与 iOS，可跨段选择与显示知识点划线；未包含原生模块时使用经典排版。',
   },

@@ -72,8 +72,11 @@ async function heightEvent(
 }
 
 async function containerLayout(width: number): Promise<void> {
-  if (!screen.root) throw new Error('Missing renderer root');
-  await fireEvent(screen.root, 'layout', {
+  const container = screen
+    .getAllByTestId('native-content-layout', { includeHiddenElements: true })
+    .at(-1);
+  if (!container) throw new Error('Missing renderer container');
+  await fireEvent(container, 'layout', {
     nativeEvent: { layout: { x: 0, y: 0, width, height: 0 } },
   });
 }
@@ -248,10 +251,8 @@ describe('Native V2 renderer staging transitions', () => {
     expect(onLayoutReady).not.toHaveBeenCalled();
     await containerLayout(320);
     expect(onLayoutReady).toHaveBeenCalledTimes(1);
-    if (!screen.root) throw new Error('Missing renderer root');
-    const staleLayout = screen.root.props.onLayout as (
-      event: LayoutChangeEvent,
-    ) => void;
+    const staleLayout = screen.getByTestId('native-content-layout').props
+      .onLayout as (event: LayoutChangeEvent) => void;
     await containerLayout(320);
     expect(onLayoutReady).toHaveBeenCalledTimes(1);
     await renderer.rerender(
@@ -430,6 +431,150 @@ describe('Native V2 renderer staging transitions', () => {
     await heightEvent(after[1]);
     expect(onLayoutReady).toHaveBeenCalledTimes(1);
     expect(screen.queryByTestId('native-content-placeholder')).toBeNull();
+  });
+
+  it('retains the measured body until every replacement flow is ready, without remounting the prepared replacement', async () => {
+    const onLayoutReady = jest.fn();
+    const onSelectionChange = jest.fn();
+    const props = {
+      content: '<p>缓存第一段</p><hr><p>缓存第二段</p>',
+      objectId: 'staging-refetch',
+      type: 'answer' as const,
+      renderFallback: () => <Text>经典排版回退</Text>,
+      renderPlaceholder: () => <Text>首次加载占位</Text>,
+      onLayoutReady,
+      onSelectionChange,
+    };
+    const renderer = await render(<ZhihuNativeContent {...props} />);
+    await containerLayout(320);
+    const before = currentViews();
+    for (const view of before) await heightEvent(view);
+    expect(screen.getByText('缓存第一段')).toBeVisible();
+    expect(onLayoutReady).toHaveBeenCalledTimes(1);
+
+    await renderer.rerender(
+      <ZhihuNativeContent
+        {...props}
+        content="<p>网络第一段完整正文</p><hr><p>网络第二段完整正文</p>"
+      />,
+    );
+    expect(screen.getByText('缓存第一段')).toBeVisible();
+    expect(
+      screen.getByText('网络第一段完整正文', { includeHiddenElements: true }),
+    ).not.toBeVisible();
+    expect(
+      screen.getByText('首次加载占位', { includeHiddenElements: true }),
+    ).not.toBeVisible();
+    expect(
+      screen.getByTestId('native-visible-document').props.pointerEvents,
+    ).toBe('none');
+    const oldFlow = JSON.parse(before[0].flowJson) as RichTextFlow;
+    await act(() => {
+      before[0].onSelectionChange?.({
+        flowId: oldFlow.id,
+        textVersion: oldFlow.textVersion,
+        start: 0,
+        end: 2,
+      });
+    });
+    expect(onSelectionChange).not.toHaveBeenCalled();
+
+    await containerLayout(320);
+    const pending = currentViews();
+    await heightEvent(pending[0]);
+    await heightEvent(before[1]);
+    expect(screen.getByText('缓存第二段')).toBeVisible();
+    expect(onLayoutReady).toHaveBeenCalledTimes(1);
+    await heightEvent(pending[1]);
+    expect(screen.queryByText('缓存第一段')).toBeNull();
+    expect(screen.getByText('网络第一段完整正文')).toBeVisible();
+    expect(screen.queryByTestId('native-pending-document')).toBeNull();
+    expect(screen.queryByText('首次加载占位')).toBeNull();
+    expect(onLayoutReady).toHaveBeenCalledTimes(2);
+    expect(mockNativeMounts.get(flowId(pending[0]))).toBe(2);
+  });
+
+  it('ignores a superseded replacement while keeping the last measured body', async () => {
+    const onLayoutReady = jest.fn();
+    const props = {
+      content: '<p>已读正文</p>',
+      objectId: 'staging-refetch-race',
+      type: 'answer' as const,
+      renderFallback: () => null,
+      onLayoutReady,
+    };
+    const renderer = await render(<ZhihuNativeContent {...props} />);
+    await containerLayout(320);
+    await heightEvent(currentViews()[0]);
+    await renderer.rerender(
+      <ZhihuNativeContent {...props} content="<p>较早响应</p>" />,
+    );
+    await containerLayout(320);
+    const superseded = currentViews()[0];
+    await renderer.rerender(
+      <ZhihuNativeContent {...props} content="<p>最新响应</p>" />,
+    );
+    await containerLayout(320);
+    const latest = currentViews()[0];
+    await heightEvent(superseded);
+    expect(screen.getByText('已读正文')).toBeVisible();
+    expect(
+      screen.queryByText('较早响应', { includeHiddenElements: true }),
+    ).toBeNull();
+    expect(
+      screen.getByText('最新响应', { includeHiddenElements: true }),
+    ).not.toBeVisible();
+    expect(onLayoutReady).toHaveBeenCalledTimes(1);
+    await heightEvent(latest);
+    expect(screen.queryByText('已读正文')).toBeNull();
+    expect(screen.getByText('最新响应')).toBeVisible();
+    expect(onLayoutReady).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not carry a previous answer into a different document', async () => {
+    const props = {
+      content: '<p>回答甲正文</p>',
+      objectId: 'staging-answer-a',
+      type: 'answer' as const,
+      renderFallback: () => null,
+    };
+    const renderer = await render(<ZhihuNativeContent {...props} />);
+    await containerLayout(320);
+    await heightEvent(currentViews()[0]);
+    await renderer.rerender(
+      <ZhihuNativeContent
+        {...props}
+        objectId="staging-answer-b"
+        content="<p>回答乙正文</p>"
+      />,
+    );
+    expect(screen.queryByText('回答甲正文')).toBeNull();
+    expect(screen.getByTestId('native-content-placeholder')).toBeVisible();
+    expect(screen.getByText('回答乙正文')).not.toBeVisible();
+  });
+
+  it('keeps equivalent structured content visible when a fresh response creates a new array', async () => {
+    const props = {
+      content: '',
+      contentArray: [{ type: 'text' as const, content: '同一份想法正文' }],
+      objectId: 'staging-same-pin',
+      type: 'pin' as const,
+      renderFallback: () => null,
+    };
+    const renderer = await render(<ZhihuNativeContent {...props} />);
+    await containerLayout(320);
+    const before = currentViews()[0];
+    await heightEvent(before);
+    await renderer.rerender(
+      <ZhihuNativeContent
+        {...props}
+        contentArray={props.contentArray.map((part) => ({ ...part }))}
+      />,
+    );
+    expect(screen.getByText('同一份想法正文')).toBeVisible();
+    expect(screen.queryByTestId('native-content-placeholder')).toBeNull();
+    expect(screen.queryByTestId('native-pending-document')).toBeNull();
+    expect(mockNativeMounts.get(flowId(before))).toBe(1);
   });
 
   it('uses the complete fallback only when the native module is unavailable', async () => {
