@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Alert,
   type ScrollView as NativeScrollView,
+  type View as NativeView,
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
@@ -38,6 +39,7 @@ import {
 } from '@/features/rich-content';
 import { useCollectionAction } from '@/hooks/useCollectionAction';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
+import { useReadingContentMeasurement } from '@/hooks/useReadingContentMeasurement';
 import { useReadingProgress } from '@/hooks/useReadingProgress';
 import { useScrollHeaderAnim } from '@/hooks/useScrollAnimation';
 import { useCollectionStore } from '@/store/useCollectionStore';
@@ -71,6 +73,7 @@ export const AnswerDetailView = ({
   const _textColor = Colors[colorScheme].text;
 
   const scrollViewRef = useRef<NativeScrollView>(null);
+  const contentViewRef = useRef<NativeView>(null);
 
   const [isLiked, setIsLiked] = React.useState(false);
   const [menuVisible, setMenuVisible] = React.useState(false);
@@ -130,14 +133,23 @@ export const AnswerDetailView = ({
   const handleContentLayoutReady = React.useCallback(() => {
     setReadyLayoutSource(contentLayoutSource);
   }, [contentLayoutSource]);
+  const contentLayoutReady =
+    Boolean(answer) &&
+    (!waitForNativeLayout || readyLayoutSource === contentLayoutSource);
 
   const readingProgress = useReadingProgress({
     contentKey: `answer:${id}`,
     enabled: isFocused,
-    ready:
-      Boolean(answer) &&
-      (!waitForNativeLayout || readyLayoutSource === contentLayoutSource),
+    ready: contentLayoutReady,
+    layoutSource: waitForNativeLayout ? contentLayoutSource : undefined,
     scrollRef: scrollViewRef,
+  });
+  const handleContentSizeChange = useReadingContentMeasurement({
+    enabled: waitForNativeLayout && isFocused,
+    ready: contentLayoutReady,
+    contentRef: contentViewRef,
+    beginMeasurement: readingProgress.beginContentMeasurement,
+    onContentSizeChange: readingProgress.onContentSizeChange,
   });
   const handleTrackedScroll = React.useCallback(
     (offset: number) => {
@@ -342,6 +354,10 @@ export const AnswerDetailView = ({
 
       <Reanimated.ScrollView
         ref={scrollViewRef}
+        innerViewRef={
+          // RN forwards a nullable React ref, but its public prop type omits null.
+          contentViewRef as React.RefObject<NativeView>
+        }
         className="flex-1"
         style={{
           backgroundColor:
@@ -352,7 +368,7 @@ export const AnswerDetailView = ({
         scrollEventThrottle={16}
         onScroll={handleScroll}
         onLayout={readingProgress.onLayout}
-        onContentSizeChange={readingProgress.onContentSizeChange}
+        onContentSizeChange={handleContentSizeChange}
         onScrollEndDrag={readingProgress.commitProgress}
         onMomentumScrollEnd={readingProgress.commitProgress}
         contentContainerStyle={{

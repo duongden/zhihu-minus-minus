@@ -13,6 +13,9 @@
 - 不使用 `LinkMovementMethod`。普通点击分发链接、知识点或附件 action；长按仍交给系统选择，附件可附加 `attachmentLongPress` 事件。
 - 公式使用独立Paint，以当前 `textColor` 的SRC_IN滤镜绘制前景；普通图片保持原色。公式若在四个5%内缩角落中至少三个为近白不透明像素，加载时先转为灰度alpha mask去除浅底，避免底板和文字同时被染白。尺寸、基线和分类保持不变。
 - 解码资源按kind、URL、尺寸、字号/系统缩放及容器宽度保留在进程LRU中，以bitmap.byteCount计数，缓存上限24MB。缓存保留未染主题色的glyph/mask，主题切换在绘制时着色；kind防止普通图复用公式mask。重新挂载的文字流可直接使用已缓存几何；资源失败不阻塞正文首测，也不输出资源URL。
+- 附件加载由全进程共享的两个worker执行，空闲30秒后回收线程；相同资源key的进行中请求共享一次下载和解码。缓存检查与请求登记使用同一把锁，避免刚完成的资源再次下载。每个view只取消自己的订阅，最后一个订阅退出才取消底层任务；旧请求的迟到结果不能覆盖同key的新请求，generation仍保护按帧回填。
+
+附件并发、去重、取消和重试的纯JVM回归位于 `android/src/test/`，生成工程后在项目 `android/` 目录运行 `./gradlew :zhihu-rich-text:testDebugUnitTest`。这些测试不请求真实图源，不替代Android附件的视觉验收。
 
 ## iOS 初步实现
 

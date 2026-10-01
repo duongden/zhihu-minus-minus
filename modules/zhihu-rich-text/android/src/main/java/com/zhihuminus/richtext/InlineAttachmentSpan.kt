@@ -92,9 +92,11 @@ internal object AttachmentLoader {
   private const val MAX_BITMAP_SIDE = 2048
 
   fun load(spec: JSONObject, scale: Float, fontPx: Float, maxWidth: Float): AttachmentAsset? = runCatching {
+    if (Thread.currentThread().isInterrupted) return null
     val source = spec.optString("url")
     if (source.isBlank()) return null
     val bytes = read(source) ?: return null
+    if (Thread.currentThread().isInterrupted) return null
     val prefix = bytes.take(200).toByteArray().toString(Charsets.UTF_8).trimStart()
     if (source.startsWith("data:image/svg+xml", true) || prefix.startsWith("<svg") || prefix.startsWith("<?xml")) {
       val markup = bytes.toString(Charsets.UTF_8)
@@ -179,6 +181,7 @@ internal object AttachmentLoader {
         val output = java.io.ByteArrayOutputStream()
         val buffer = ByteArray(8192)
         while (true) {
+          if (Thread.currentThread().isInterrupted) return null
           val length = input.read(buffer)
           if (length < 0) break
           if (output.size() + length > MAX_BYTES) return null

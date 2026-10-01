@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { AppState, type LayoutChangeEvent } from 'react-native';
 import { useProgressStore } from '@/store/useProgressStore';
 import {
@@ -14,8 +20,15 @@ interface UseReadingProgressOptions {
   contentKey: string;
   enabled?: boolean;
   ready?: boolean;
+  /** Native content requires an actual measurement paired with this identity. */
+  layoutSource?: object;
   scrollRef: React.RefObject<ScrollToRef | null>;
 }
+
+export type CompleteReadingContentMeasurement = (
+  width: number,
+  height: number,
+) => void;
 
 const SAVE_DELAY_MS = 1200;
 const RESTORE_DELAY_MS = 180;
@@ -24,6 +37,7 @@ export function useReadingProgress({
   contentKey,
   enabled = true,
   ready = true,
+  layoutSource,
   scrollRef,
 }: UseReadingProgressOptions) {
   const entry = useProgressStore((state) => state.progress[contentKey]);
@@ -41,8 +55,43 @@ export function useReadingProgress({
   const restoredRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const restoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const restoreEligibilityRef = useRef({ contentKey, enabled, ready });
-  restoreEligibilityRef.current = { contentKey, enabled, ready };
+  const restoreEligibilityRef = useRef({
+    contentKey,
+    enabled,
+    ready,
+    layoutSource,
+  });
+  restoreEligibilityRef.current = { contentKey, enabled, ready, layoutSource };
+  const measurementScopeRef = useRef({
+    contentKey,
+    enabled,
+    layoutSource,
+    epoch: 0,
+  });
+  const measurementRequestRef = useRef(0);
+  const actualMeasurementRef = useRef<{
+    layoutSource: object;
+    height: number;
+    epoch: number;
+    request: number;
+  } | null>(null);
+  const committedTryRestoreRef = useRef<() => void>(() => {});
+
+  useLayoutEffect(() => {
+    measurementScopeRef.current = {
+      contentKey,
+      enabled,
+      layoutSource,
+      epoch: measurementScopeRef.current.epoch + 1,
+    };
+    measurementRequestRef.current += 1;
+    actualMeasurementRef.current = null;
+    return () => {
+      measurementScopeRef.current.enabled = false;
+      measurementRequestRef.current += 1;
+      actualMeasurementRef.current = null;
+    };
+  }, [contentKey, enabled, layoutSource]);
 
   useEffect(() => {
     const unsubscribe = useProgressStore.persist.onFinishHydration(() =>
@@ -80,8 +129,15 @@ export function useReadingProgress({
       restoredRef.current = true;
       return;
     }
+    const measured = actualMeasurementRef.current;
+    const hasActualMeasurement =
+      measured?.layoutSource === layoutSource &&
+      measured?.epoch === measurementScopeRef.current.epoch &&
+      measured?.request === measurementRequestRef.current;
     if (
-      !contentMeasuredWhileReadyRef.current ||
+      (layoutSource
+        ? !hasActualMeasurement
+        : !contentMeasuredWhileReadyRef.current) ||
       contentHeightRef.current <= 0 ||
       viewportHeightRef.current <= 0
     ) {
@@ -96,12 +152,21 @@ export function useReadingProgress({
         !current.enabled ||
         !current.ready ||
         current.contentKey !== contentKey ||
+        current.layoutSource !== layoutSource ||
         restoredRef.current
+      )
+        return;
+      const actual = actualMeasurementRef.current;
+      if (
+        layoutSource &&
+        (actual?.layoutSource !== layoutSource ||
+          actual?.epoch !== measurementScopeRef.current.epoch ||
+          actual?.request !== measurementRequestRef.current)
       )
         return;
       const targetOffset = resolveReadingProgressOffset(
         entry,
-        contentHeightRef.current,
+        layoutSource && actual ? actual.height : contentHeightRef.current,
         viewportHeightRef.current,
       );
       offsetRef.current = targetOffset;
@@ -109,7 +174,48 @@ export function useReadingProgress({
       restoredRef.current = true;
       setRestoredOffset(targetOffset);
     }, RESTORE_DELAY_MS);
-  }, [contentKey, enabled, entry, hasHydrated, ready, scrollRef]);
+  }, [contentKey, enabled, entry, hasHydrated, ready, layoutSource, scrollRef]);
+
+  useLayoutEffect(() => {
+    committedTryRestoreRef.current = tryRestore;
+  }, [tryRestore]);
+
+  const beginContentMeasurement =
+    useCallback((): CompleteReadingContentMeasurement | null => {
+      const scope = measurementScopeRef.current;
+      if (
+        !scope.enabled ||
+        !layoutSource ||
+        scope.contentKey !== contentKey ||
+        scope.layoutSource !== layoutSource
+      )
+        return null;
+      const request = ++measurementRequestRef.current;
+      return (width, height) => {
+        const current = measurementScopeRef.current;
+        if (
+          !current.enabled ||
+          current.contentKey !== contentKey ||
+          current.layoutSource !== layoutSource ||
+          current.epoch !== scope.epoch ||
+          measurementRequestRef.current !== request ||
+          !Number.isFinite(width) ||
+          !Number.isFinite(height) ||
+          width <= 0 ||
+          height <= 0
+        )
+          return;
+        actualMeasurementRef.current = {
+          layoutSource,
+          height,
+          epoch: scope.epoch,
+          request,
+        };
+        contentHeightRef.current = height;
+        // Readiness may have committed since this async measurement was requested.
+        committedTryRestoreRef.current();
+      };
+    }, [contentKey, layoutSource]);
 
   useEffect(() => {
     if (!ready) contentMeasuredWhileReadyRef.current = false;
@@ -154,11 +260,19 @@ export function useReadingProgress({
 
   const onContentSizeChange = useCallback(
     (_width: number, height: number) => {
+      const current = measurementScopeRef.current;
+      if (
+        layoutSource &&
+        (!current.enabled ||
+          current.contentKey !== contentKey ||
+          current.layoutSource !== layoutSource)
+      )
+        return;
       contentHeightRef.current = height;
-      if (ready) contentMeasuredWhileReadyRef.current = true;
+      if (!layoutSource && ready) contentMeasuredWhileReadyRef.current = true;
       tryRestore();
     },
-    [ready, tryRestore],
+    [contentKey, layoutSource, ready, tryRestore],
   );
 
   const dismissRestoreNotice = useCallback(() => {
@@ -174,6 +288,7 @@ export function useReadingProgress({
   }, [contentKey, removeProgress, scrollRef]);
 
   return {
+    beginContentMeasurement,
     commitProgress,
     dismissRestoreNotice,
     onContentSizeChange,

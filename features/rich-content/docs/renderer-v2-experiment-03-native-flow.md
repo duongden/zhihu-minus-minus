@@ -196,3 +196,13 @@ CI的 `NodeRequire.context` 错误来自干净checkout没有本地忽略的 `exp
 本轮最终 `npm run check` 退出码0：33个suite / 468项测试、284个文件的只读Biome（保留2项既有warning）、8个fixture通过；另跑 `npm test -- features/rich-content/tests --runInBand`，19个suite / 329项通过。Pager共13项回归包括手势先开始再到达列表、idle早于selected、多次列表更新、索引重排、当前页暂缺、无确认回调和辅助导航。这轮只修改共享JS与界面文案，不变更原生模块、依赖或持久schema，无需为此重新prebuild。
 
 专用iOS模拟器重新加载最新JS后，原型标题、后端按钮与提示显示 `tiqian-super-mini`，真实原生正文和可见层已挂载，首载占位正常退出。合成A→B替换的远程调试评估失败，未将其记为平台切换验收；重新加载清理临时调试override，不改真实缓存或业务数据。用户随后真机试用反馈二次加载闪白已明显减轻；仍不宣称所有页面完全无闪白，双端全部翻页/刷新组合与未知媒体尺寸的后续布局继续需要验证。
+
+## 2026-10-01：附件并发与同高度正文的阅读恢复
+
+合并前复核发现Android每个含未缓存附件的文字流持有自己的两个worker，挂载多个flow或表格单元格时会增加线程和并发下载；完成态LRU也不能合并进行中请求。改为全进程共享两个worker和资源key登记表，空闲30秒回收线程，保持24MB主题无关缓存。每个span/view使用独立取消订阅，只有最后一个订阅取消时才中断底层任务；任务完成、缓存写入、取消及同key重试以登记身份校验，旧结果不能移除新任务或错误回填。匿名网络读取检查中断，view仍保留generation、dispose及按帧更新门禁。
+
+阅读恢复的缺口发生在首次180ms恢复尚未完成时：详情刷新撤销ready并取消计时，随后新正文与旧正文总高度相同，ScrollView可能不再发出尺寸变化，原先的测量门禁因此一直关闭。现在在正文就绪提交后主动测量ScrollView内容View，实际高度必须匹配当前contentKey、正文来源、聚焦周期与最新测量请求。相同高度也可以重新确认布局；在ready之前收到的普通尺寸事件不能认证原生正文，过期异步结果不能覆盖新布局。普通后端保持原有尺寸回调路径，已经恢复的位置不会二次滚动，持久schema不变。
+
+本轮 `npm run check` 通过：33个suite / 482项测试、285个文件的只读Biome（2项既有warning）与8个fixture分析；rich-content专项19个suite / 329项通过。阅读进度共23项测试，新增14项覆盖同高度替换、尺寸先于ready、旧来源/对象/聚焦周期/请求、保存几何及普通后端。Android重新prebuild后，`./gradlew :zhihu-rich-text:testDebugUnitTest :app:assembleDebug -PreactNativeArchitectures=arm64-v8a`通过，8项JVM测试覆盖共享并发预算、进行中去重、独立取消、排队取消、迟到结果、失败重试与回调隔离。
+
+arm64 Debug已覆盖安装到V2509A（API 36），保留应用数据，通过USB连接Metro。真机合成附件页的小图、两处行内公式、短I和独立公式在暗色中可见；切换跨段、附件、装饰案例后进程保持运行，当前进程无fatal crash记录，附件worker采样为0/2/2/2。用户试用反馈问题不大。同高度阅读恢复依赖上述合成回归，本轮没有单独在双端真机复现该竞态；未重建iOS或验证Release。

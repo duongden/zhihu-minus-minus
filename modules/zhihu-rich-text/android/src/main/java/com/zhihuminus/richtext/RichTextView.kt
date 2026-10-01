@@ -16,7 +16,6 @@ import android.text.style.RelativeSizeSpan
 import android.text.style.StrikethroughSpan
 import android.text.style.StyleSpan
 import android.text.style.UnderlineSpan
-import android.util.LruCache
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -27,8 +26,6 @@ import expo.modules.kotlin.records.Record
 import expo.modules.kotlin.viewevent.EventDispatcher
 import expo.modules.kotlin.views.ExpoView
 import org.json.JSONObject
-import java.util.concurrent.Executors
-import java.util.concurrent.Future
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.min
@@ -57,11 +54,6 @@ data class ActionEvent(
   @Field val url: String? = null
 ) : Record
 
-/** Immutable decoded assets survive view disposal; live spans retain their own references. */
-private object ProcessAttachmentCache : LruCache<String, AttachmentAsset>(24 * 1024 * 1024) {
-  override fun sizeOf(key: String, value: AttachmentAsset): Int = value.bitmap.byteCount.coerceAtLeast(1)
-}
-
 private data class AttachmentUpdate(
   val generation: Int,
   val span: InlineAttachmentSpan,
@@ -77,8 +69,7 @@ class RichTextView(context: Context, appContext: AppContext) : ExpoView(context,
   private val onAction by EventDispatcher<ActionEvent>()
   private val textView = FlowTextView(context)
   private val density = resources.displayMetrics.density
-  private val executor = Executors.newFixedThreadPool(2)
-  private val requests = mutableListOf<Future<*>>()
+  private val requests = mutableListOf<AttachmentSubscription>()
   private val attachmentUpdates = mutableListOf<AttachmentUpdate>()
   private var attachmentFrameScheduled = false
   private val attachmentFrame = Runnable { applyAttachmentUpdates() }
@@ -158,9 +149,8 @@ class RichTextView(context: Context, appContext: AppContext) : ExpoView(context,
   fun dispose() {
     disposed = true
     generation += 1
-    requests.forEach { it.cancel(true) }
+    requests.forEach { it.cancel() }
     requests.clear()
-    executor.shutdownNow()
     textView.selectionListener = null
     textView.actionListener = null
     textView.copyResolver = null
@@ -174,7 +164,7 @@ class RichTextView(context: Context, appContext: AppContext) : ExpoView(context,
     generation += 1
     lastHeightKey = ""
     val currentGeneration = generation
-    requests.forEach { it.cancel(true) }
+    requests.forEach { it.cancel() }
     requests.clear()
     removeCallbacks(attachmentFrame)
     attachmentFrameScheduled = false
@@ -273,7 +263,7 @@ class RichTextView(context: Context, appContext: AppContext) : ExpoView(context,
       if (range.end - range.start != 1 || content[range.start] != '\ufffc') continue
       val span = InlineAttachmentSpan(spec, textScale, fontPx, maxAttachmentWidth, config.secondaryColor, config.textColor)
       val key = assetKey(spec, fontPx, maxAttachmentWidth)
-      val cachedAsset = ProcessAttachmentCache.get(key)
+      val cachedAsset = ProcessAttachmentRequests.cached(key)
       cachedAsset?.let { span.setAsset(it) }
       apply(span, range)
       if (cachedAsset == null && spec.optString("url").isNotBlank()) pending.add(spec to span)
@@ -291,10 +281,8 @@ class RichTextView(context: Context, appContext: AppContext) : ExpoView(context,
     for ((spec, span) in pending) {
       val scale = textScale
       val key = assetKey(spec, fontPx, maxAttachmentWidth)
-      requests.add(executor.submit {
-        val asset = AttachmentLoader.load(spec, scale, fontPx, maxAttachmentWidth) ?: return@submit
-        if (Thread.currentThread().isInterrupted) return@submit
-        ProcessAttachmentCache.put(key, asset)
+      requests.add(ProcessAttachmentRequests.subscribe(key, spec, scale, fontPx, maxAttachmentWidth) { asset ->
+        if (asset == null) return@subscribe
         post {
           if (!disposed && generation == currentGeneration) {
             attachmentUpdates.add(AttachmentUpdate(currentGeneration, span, asset))

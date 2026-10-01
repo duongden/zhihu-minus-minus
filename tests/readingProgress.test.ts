@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { act, renderHook } from '@testing-library/react-native';
-import type { LayoutChangeEvent } from 'react-native';
+import type { LayoutChangeEvent, MeasureOnSuccessCallback } from 'react-native';
+import { useReadingContentMeasurement } from '../hooks/useReadingContentMeasurement';
 import { useReadingProgress } from '../hooks/useReadingProgress';
 import { useProgressStore } from '../store/useProgressStore';
 import {
@@ -17,6 +18,354 @@ jest.mock('expo-secure-store', () => ({
 test('does not retain a position near the start', () => {
   assert.deepEqual(calculateReadingProgress(100, 2000, 500), {
     status: 'at-start',
+  });
+});
+
+describe('source-paired actual Native reading measurements', () => {
+  const contentKey = 'answer:actual-layout-regression';
+  const savedEntry = {
+    offset: 1200,
+    fraction: 0.4,
+    scrollableDistance: 3000,
+    updatedAt: 123,
+  };
+  const viewport = {
+    nativeEvent: { layout: { x: 0, y: 0, width: 320, height: 800 } },
+  } as LayoutChangeEvent;
+  const sourceA = { content: '<p>Feed 正文</p>' };
+  const sourceB = { content: '<p data-pid="new">详情正文</p>' };
+
+  interface HostProps {
+    source: object;
+    ready: boolean;
+    enabled: boolean;
+  }
+
+  async function renderHost(initialProps: HostProps) {
+    const scrollTo = jest.fn();
+    const scrollRef = { current: { scrollTo } };
+    const measurements: MeasureOnSuccessCallback[] = [];
+    const contentRef = {
+      current: {
+        measure: jest.fn((callback: MeasureOnSuccessCallback) => {
+          measurements.push(callback);
+        }),
+      },
+    };
+    const host = await renderHook(
+      ({ source, ready, enabled }: HostProps) => {
+        const progress = useReadingProgress({
+          contentKey,
+          layoutSource: source,
+          ready,
+          enabled,
+          scrollRef,
+        });
+        const onHostContentSizeChange = useReadingContentMeasurement({
+          enabled,
+          ready,
+          contentRef,
+          beginMeasurement: progress.beginContentMeasurement,
+          onContentSizeChange: progress.onContentSizeChange,
+        });
+        return { ...progress, onHostContentSizeChange };
+      },
+      { initialProps },
+    );
+    await act(() => host.result.current.onLayout(viewport));
+    const complete = async (index: number, height = 3800) => {
+      await act(() => measurements[index](0, 0, 320, height, 0, 0));
+    };
+    return { ...host, scrollTo, contentRef, measurements, complete };
+  }
+
+  beforeEach(() => {
+    jest.useFakeTimers();
+    jest.spyOn(useProgressStore.persist, 'hasHydrated').mockReturnValue(true);
+    useProgressStore.setState({ progress: { [contentKey]: savedEntry } });
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
+
+  it('never certifies the first placeholder and proactively measures after the body-ready commit', async () => {
+    const host = await renderHost({
+      source: sourceA,
+      ready: false,
+      enabled: true,
+    });
+    await act(() => {
+      host.result.current.onHostContentSizeChange(320, 480);
+      jest.advanceTimersByTime(1000);
+    });
+    expect(host.measurements).toHaveLength(0);
+    expect(host.scrollTo).not.toHaveBeenCalled();
+    expect(useProgressStore.getState().progress[contentKey]).toEqual(
+      savedEntry,
+    );
+    await host.rerender({ source: sourceA, ready: true, enabled: true });
+    expect(host.measurements).toHaveLength(1);
+    await act(() => jest.advanceTimersByTime(200));
+    expect(host.scrollTo).not.toHaveBeenCalled();
+    await host.complete(0);
+    await act(() => jest.advanceTimersByTime(180));
+    expect(host.scrollTo).toHaveBeenLastCalledWith({
+      y: 1200,
+      animated: false,
+    });
+  });
+
+  it('restores after a same-height replacement that cancels the first restore timer and emits no new size event', async () => {
+    const host = await renderHost({
+      source: sourceA,
+      ready: true,
+      enabled: true,
+    });
+    await host.complete(0);
+    await act(() => jest.advanceTimersByTime(100));
+    await host.rerender({ source: sourceB, ready: false, enabled: true });
+    await act(() => jest.advanceTimersByTime(200));
+    expect(host.scrollTo).not.toHaveBeenCalled();
+    // The old body remains mounted at 3800px; revealing B has the same height.
+    await host.rerender({ source: sourceB, ready: true, enabled: true });
+    expect(host.measurements).toHaveLength(2);
+    await host.complete(1, 3800);
+    await act(() => jest.advanceTimersByTime(180));
+    expect(host.scrollTo).toHaveBeenCalledTimes(1);
+    expect(host.scrollTo).toHaveBeenLastCalledWith({
+      y: 1200,
+      animated: false,
+    });
+  });
+
+  it('recovers when the real content-size event arrived before ready without requiring it to fire again', async () => {
+    const host = await renderHost({
+      source: sourceA,
+      ready: false,
+      enabled: true,
+    });
+    await act(() => host.result.current.onHostContentSizeChange(320, 3800));
+    expect(host.measurements).toHaveLength(0);
+    await host.rerender({ source: sourceA, ready: true, enabled: true });
+    await host.complete(0);
+    await act(() => jest.advanceTimersByTime(180));
+    expect(host.scrollTo).toHaveBeenLastCalledWith({
+      y: 1200,
+      animated: false,
+    });
+  });
+
+  it.each([
+    'before',
+    'after',
+  ] as const)('pairs a verified actual measurement whose callback completes %s ready commits', async (timing) => {
+    const scrollTo = jest.fn();
+    const scrollRef = { current: { scrollTo } };
+    const progress = await renderHook(
+      ({ ready }: { ready: boolean }) =>
+        useReadingProgress({
+          contentKey,
+          layoutSource: sourceA,
+          ready,
+          scrollRef,
+        }),
+      { initialProps: { ready: false } },
+    );
+    await act(() => progress.result.current.onLayout(viewport));
+    const complete = progress.result.current.beginContentMeasurement();
+    expect(complete).not.toBeNull();
+    if (timing === 'before') await act(() => complete?.(320, 3800));
+    await progress.rerender({ ready: true });
+    if (timing === 'after') await act(() => complete?.(320, 3800));
+    await act(() => jest.advanceTimersByTime(180));
+    expect(scrollTo).toHaveBeenLastCalledWith({ y: 1200, animated: false });
+  });
+
+  it('rejects a late callback from a replaced content source', async () => {
+    const host = await renderHost({
+      source: sourceA,
+      ready: true,
+      enabled: true,
+    });
+    await host.rerender({ source: sourceB, ready: false, enabled: true });
+    await host.rerender({ source: sourceB, ready: true, enabled: true });
+    await host.complete(0, 9999);
+    await act(() => jest.advanceTimersByTime(200));
+    expect(host.scrollTo).not.toHaveBeenCalled();
+    await host.complete(1);
+    await act(() => jest.advanceTimersByTime(180));
+    expect(host.scrollTo).toHaveBeenLastCalledWith({
+      y: 1200,
+      animated: false,
+    });
+  });
+
+  it('rejects a measurement requested before blur even after the same source regains focus', async () => {
+    const host = await renderHost({
+      source: sourceA,
+      ready: true,
+      enabled: true,
+    });
+    await host.rerender({ source: sourceA, ready: true, enabled: false });
+    await host.complete(0, 9999);
+    await host.rerender({ source: sourceA, ready: true, enabled: true });
+    await host.complete(0, 9999);
+    await act(() => jest.advanceTimersByTime(200));
+    expect(host.scrollTo).not.toHaveBeenCalled();
+    await host.complete(1);
+    await act(() => jest.advanceTimersByTime(180));
+    expect(host.scrollTo).toHaveBeenLastCalledWith({
+      y: 1200,
+      animated: false,
+    });
+  });
+
+  it('rejects an older pending measurement after a new same-source size event', async () => {
+    const host = await renderHost({
+      source: sourceA,
+      ready: true,
+      enabled: true,
+    });
+    await act(() => host.result.current.onHostContentSizeChange(320, 4200));
+    expect(host.measurements).toHaveLength(2);
+    await host.complete(0, 1000);
+    await act(() => jest.advanceTimersByTime(200));
+    expect(host.scrollTo).not.toHaveBeenCalled();
+    await host.complete(1, 4200);
+    await act(() => jest.advanceTimersByTime(180));
+    expect(host.scrollTo).toHaveBeenLastCalledWith({
+      y: 1360,
+      animated: false,
+    });
+  });
+
+  it('keeps newly reported size geometry for saving while an older measure callback arrives late', async () => {
+    const host = await renderHost({
+      source: sourceA,
+      ready: true,
+      enabled: true,
+    });
+    await host.complete(0);
+    await act(() => jest.advanceTimersByTime(180));
+    await act(() => host.result.current.onHostContentSizeChange(320, 4200));
+    await act(() => host.result.current.onHostContentSizeChange(320, 4800));
+    await host.complete(1, 3800);
+    await act(() => {
+      host.result.current.onScroll(1600);
+      jest.advanceTimersByTime(1200);
+    });
+    expect(useProgressStore.getState().progress[contentKey]).toEqual(
+      expect.objectContaining({ offset: 1600, scrollableDistance: 4000 }),
+    );
+    expect(host.scrollTo).toHaveBeenCalledTimes(1);
+  });
+
+  it('never restores a second time after an already-restored body is replaced', async () => {
+    const host = await renderHost({
+      source: sourceA,
+      ready: true,
+      enabled: true,
+    });
+    await host.complete(0);
+    await act(() => jest.advanceTimersByTime(180));
+    await host.rerender({ source: sourceB, ready: false, enabled: true });
+    await host.rerender({ source: sourceB, ready: true, enabled: true });
+    await host.complete(1, 4200);
+    await act(() => jest.advanceTimersByTime(500));
+    expect(host.scrollTo).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a callback after unmount', async () => {
+    const host = await renderHost({
+      source: sourceA,
+      ready: true,
+      enabled: true,
+    });
+    await host.unmount();
+    await host.complete(0, 9999);
+    await act(() => jest.advanceTimersByTime(200));
+    expect(host.scrollTo).not.toHaveBeenCalled();
+  });
+
+  it('rejects a measurement from an earlier content key even when its layout token is reused', async () => {
+    const nextKey = 'answer:another-actual-layout';
+    useProgressStore.setState({
+      progress: { [contentKey]: savedEntry, [nextKey]: savedEntry },
+    });
+    const scrollTo = jest.fn();
+    const scrollRef = { current: { scrollTo } };
+    const progress = await renderHook(
+      ({ key }: { key: string }) =>
+        useReadingProgress({
+          contentKey: key,
+          layoutSource: sourceA,
+          ready: true,
+          scrollRef,
+        }),
+      { initialProps: { key: contentKey } },
+    );
+    await act(() => progress.result.current.onLayout(viewport));
+    const oldComplete = progress.result.current.beginContentMeasurement();
+    await progress.rerender({ key: nextKey });
+    await act(() => oldComplete?.(320, 9999));
+    await act(() => jest.advanceTimersByTime(200));
+    expect(scrollTo).not.toHaveBeenCalled();
+    const currentComplete = progress.result.current.beginContentMeasurement();
+    await act(() => {
+      currentComplete?.(320, 3800);
+      jest.advanceTimersByTime(180);
+    });
+    expect(scrollTo).toHaveBeenLastCalledWith({ y: 1200, animated: false });
+  });
+
+  it('keeps the ordinary ready/content-size path when native measurement is disabled', async () => {
+    const scrollTo = jest.fn();
+    const scrollRef = { current: { scrollTo } };
+    const measure = jest.fn();
+    const contentRef = { current: { measure } };
+    const progress = await renderHook(() => {
+      const reading = useReadingProgress({ contentKey, scrollRef });
+      const onHostContentSizeChange = useReadingContentMeasurement({
+        enabled: false,
+        ready: true,
+        contentRef,
+        beginMeasurement: reading.beginContentMeasurement,
+        onContentSizeChange: reading.onContentSizeChange,
+      });
+      return { ...reading, onHostContentSizeChange };
+    });
+    await act(() => {
+      progress.result.current.onLayout(viewport);
+      progress.result.current.onHostContentSizeChange(320, 3800);
+      jest.advanceTimersByTime(180);
+    });
+    expect(measure).not.toHaveBeenCalled();
+    expect(scrollTo).toHaveBeenLastCalledWith({ y: 1200, animated: false });
+  });
+
+  it('rejects an old source size handler without changing the current body geometry for saving', async () => {
+    const host = await renderHost({
+      source: sourceA,
+      ready: true,
+      enabled: true,
+    });
+    await host.complete(0);
+    await act(() => jest.advanceTimersByTime(180));
+    const oldSizeHandler = host.result.current.onHostContentSizeChange;
+    await host.rerender({ source: sourceB, ready: false, enabled: true });
+    await host.rerender({ source: sourceB, ready: true, enabled: true });
+    await host.complete(1, 4200);
+    await act(() => {
+      oldSizeHandler(320, 1000);
+      host.result.current.onScroll(1600);
+      jest.advanceTimersByTime(1200);
+    });
+    expect(useProgressStore.getState().progress[contentKey]).toEqual(
+      expect.objectContaining({ offset: 1600, scrollableDistance: 3400 }),
+    );
+    expect(host.scrollTo).toHaveBeenCalledTimes(1);
   });
 });
 
