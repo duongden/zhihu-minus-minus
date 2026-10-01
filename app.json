@@ -2,7 +2,7 @@
   "expo": {
     "name": "知乎--",
     "slug": "ZhihuMinusMinus",
-    "version": "0.6.3",
+    "version": "0.7.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
     "scheme": "zhihu--",
@@ -27,7 +27,7 @@
       }
     },
     "android": {
-      "versionCode": 603,
+      "versionCode": 700,
       "splash": {
         "backgroundColor": "#ffffff",
         "image": "./assets/images/android-icon-monochrome.png",
@@ -307,6 +307,12 @@
     "extra": {
       "router": {},
       "releaseNotes": {
+        "v0.7.0": [
+          "新增 tiqian-super-mini 正文排版: Android 与 iOS 支持原生跨段选择、装饰线、行内公式与图片，可在「外观与阅读 → 正文排版」中开启。",
+          "知乎正文适配: 补齐知识点、选区菜单、链接卡、图注、脚注与想法分段，修复公式换行和暗色公式显示。",
+          "阅读加载更稳定: 减轻缓存正文被详情响应替换时的闪白，修复同高度正文更新后的阅读位置恢复，减少 Android 附件重复加载。",
+          "iOS 启动兼容: 修复使用 iOS 27 SDK 构建时的 Scene 生命周期启动崩溃。"
+        ],
         "v0.6.3": [
           "iOS 页面布局修复: 修复首页等页面顶部留白，以及回答详情页底部操作栏被遮挡的问题。"
         ],
@@ -355,8 +361,8 @@
           "基础稳定性优化: 修复了若干 UI 细节与已知的小概率崩溃问题。"
         ]
       },
-      "status": "🚀 v0.6.3 - iOS 页面布局修复",
-      "lastUpdated": "2026-09-24",
+      "status": "🚀 v0.7.0 - tiqian-super-mini 正文排版",
+      "lastUpdated": "2026-10-01",
       "eas": {
         "projectId": "faa0f061-50e6-4ec4-bb6f-accda0dbd24f"
       }
