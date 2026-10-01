@@ -351,7 +351,7 @@ export default function FilterSettings() {
                         style={[
                           s.tabChipText,
                           filterQualityLevel === lvl.key && {
-                            color: Colors[colorScheme].textInverse,
+                            color: Colors[colorScheme].onPrimary,
                             fontWeight: 'bold',
                           },
                         ]}
@@ -413,7 +413,7 @@ export default function FilterSettings() {
                       style={[
                         s.tabChipText,
                         filterMode === 'collapse' && {
-                          color: Colors[colorScheme].textInverse,
+                          color: Colors[colorScheme].onPrimary,
                           fontWeight: 'bold',
                         },
                       ]}
@@ -435,7 +435,7 @@ export default function FilterSettings() {
                       style={[
                         s.tabChipText,
                         filterMode === 'hide' && {
-                          color: Colors[colorScheme].textInverse,
+                          color: Colors[colorScheme].onPrimary,
                           fontWeight: 'bold',
                         },
                       ]}
@@ -498,8 +498,8 @@ export default function FilterSettings() {
                         try {
                           await feedExposureRepository.clearAll();
                           showToast('本地去重记录已清除');
-                        } catch (error) {
-                          console.error('清除本地去重记录失败', error);
+                        } catch {
+                          console.error('清除本地去重记录失败');
                           showToast('清除失败，请稍后重试');
                         }
                       },

@@ -181,6 +181,39 @@ export const getArticleCollectionStatus = async (
   return res.data;
 };
 
+/** Collection selection and removal must consider every folder, not just page 1. */
+export async function getAllContentCollectionStatus(
+  contentId: string | number,
+  contentType: 'answer' | 'article',
+): Promise<ZhihuCollectionStatusResponse> {
+  const getPage =
+    contentType === 'answer'
+      ? getAnswerCollectionStatus
+      : getArticleCollectionStatus;
+  const data: ZhihuCollectionStatusResponse['data'] = [];
+  const seenIds = new Set<string>();
+  let offset = 0;
+  while (true) {
+    const page = await getPage(contentId, 20, offset);
+    for (const item of page.data) {
+      const id = String(item.id);
+      if (seenIds.has(id)) continue;
+      seenIds.add(id);
+      data.push(item);
+    }
+    if (!page.paging || page.paging.is_end) {
+      return { data, paging: page.paging };
+    }
+    const nextOffset = Number(
+      page.paging.next?.match(/[?&]offset=(\d+)(?:&|$)/)?.[1],
+    );
+    if (!Number.isSafeInteger(nextOffset) || nextOffset <= offset) {
+      throw new Error('收藏夹分页无效，请稍后重试');
+    }
+    offset = nextOffset;
+  }
+}
+
 /**
  * 添加文章到收藏夹
  * POST /collections/{collection_id}/contents?content_id={article_id}&content_type=article

@@ -125,7 +125,7 @@ export function normalizeZhihuAppQuestionFeeds(
   const data = (response.data || []).flatMap((card) => {
     if (card.target_type && card.target_type !== 'answer') return [];
     const target = card.target;
-    if (!target || !target.author) return [];
+    if (!target?.author) return [];
 
     const summary = target.big_card_summary?.trim() || '';
     const excerpt = target.excerpt?.trim() || summary;

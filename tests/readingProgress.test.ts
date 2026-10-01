@@ -14,6 +14,12 @@ jest.mock('expo-secure-store', () => ({
   setItemAsync: jest.fn(async () => undefined),
   deleteItemAsync: jest.fn(async () => undefined),
 }));
+jest.mock('expo-file-system/legacy', () => ({
+  documentDirectory: 'file:///test/',
+  getInfoAsync: jest.fn(async () => ({ exists: false })),
+  readAsStringAsync: jest.fn(async () => null),
+  writeAsStringAsync: jest.fn(async () => undefined),
+}));
 
 test('does not retain a position near the start', () => {
   assert.deepEqual(calculateReadingProgress(100, 2000, 500), {
@@ -343,6 +349,37 @@ describe('source-paired actual Native reading measurements', () => {
     });
     expect(measure).not.toHaveBeenCalled();
     expect(scrollTo).toHaveBeenLastCalledWith({ y: 1200, animated: false });
+  });
+
+  it('saves the outgoing content before restoring another identity in the same hook', async () => {
+    const nextKey = 'answer:next-identity';
+    const nextEntry = { ...savedEntry, offset: 1800, fraction: 0.6 };
+    useProgressStore.setState({
+      progress: { [contentKey]: savedEntry, [nextKey]: nextEntry },
+    });
+    const scrollTo = jest.fn();
+    const host = await renderHook(
+      ({ key }: { key: string }) =>
+        useReadingProgress({
+          contentKey: key,
+          scrollRef: { current: { scrollTo } },
+        }),
+      { initialProps: { key: contentKey } },
+    );
+    await act(() => {
+      host.result.current.onLayout(viewport);
+      host.result.current.onContentSizeChange(320, 3800);
+      jest.advanceTimersByTime(180);
+    });
+    await act(() => host.result.current.onScroll(1500));
+    await host.rerender({ key: nextKey });
+    expect(useProgressStore.getState().progress[contentKey]?.offset).toBe(1500);
+    expect(useProgressStore.getState().progress[nextKey]).toEqual(nextEntry);
+    await act(() => {
+      host.result.current.onContentSizeChange(320, 3800);
+      jest.advanceTimersByTime(180);
+    });
+    expect(scrollTo).toHaveBeenLastCalledWith({ y: 1800, animated: false });
   });
 
   it('rejects an old source size handler without changing the current body geometry for saving', async () => {

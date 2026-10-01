@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { ActivityIndicator } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -40,7 +40,12 @@ export const LikeButton = ({
 }) => {
   const [voted, setVoted] = useState(initialVoted);
   const [count, setCount] = useState(initialCount);
-  const [loading, setLoading] = useState(false);
+  const identity = `${type}:${id}`;
+  const currentIdentityRef = useRef(identity);
+  currentIdentityRef.current = identity;
+  const pendingTargetsRef = useRef(new Set<string>());
+  const [pendingIdentity, setPendingIdentity] = useState<string | null>(null);
+  const loading = pendingIdentity === identity;
   const queryClient = useQueryClient();
   const scale = useSharedValue(1);
   const colorScheme = useColorScheme();
@@ -48,13 +53,11 @@ export const LikeButton = ({
   const tintColor = useThemeColor({}, 'primary');
   const borderColor = Colors[colorScheme].border;
 
-  // 同步外部传入的初始值
+  // biome-ignore lint/correctness/useExhaustiveDependencies: FlashList identity changes must reset local reaction state even when the next item has equal initial values.
   React.useEffect(() => {
     setCount(initialCount);
-  }, [initialCount]);
-  React.useEffect(() => {
     setVoted(initialVoted);
-  }, [initialVoted]);
+  }, [identity, initialCount, initialVoted]);
 
   const isUpvoted = voted === 1;
 
@@ -63,7 +66,8 @@ export const LikeButton = ({
   }));
 
   const handlePress = async () => {
-    if (loading) return;
+    if (pendingTargetsRef.current.has(identity)) return;
+    pendingTargetsRef.current.add(identity);
 
     scale.value = withSequence(
       withTiming(1.4, { duration: 100 }),
@@ -72,7 +76,7 @@ export const LikeButton = ({
 
     const nextVoted = isUpvoted ? 0 : 1;
 
-    setLoading(true);
+    setPendingIdentity(identity);
     try {
       const voteType =
         type === 'pins'
@@ -93,11 +97,14 @@ export const LikeButton = ({
             )
           : undefined);
 
-      setVoted(result.voted);
+      const isCurrent = currentIdentityRef.current === identity;
+      if (isCurrent) setVoted(result.voted);
       // 响应计数优先；接口未返回计数时才按最终状态计算差值。
       if (resolvedCount !== undefined) {
-        setCount(resolvedCount);
-        onVoteChange?.(result.voted, resolvedCount);
+        if (isCurrent) {
+          setCount(resolvedCount);
+          onVoteChange?.(result.voted, resolvedCount);
+        }
 
         if (type !== 'comments') {
           updateContentInteractionCaches(queryClient, {
@@ -118,12 +125,15 @@ export const LikeButton = ({
     } catch (error: unknown) {
       showToast(getZhihuErrorMessage(error));
     } finally {
-      setLoading(false);
+      pendingTargetsRef.current.delete(identity);
+      setPendingIdentity((current) => (current === identity ? null : current));
     }
   };
 
   return (
     <BouncyButton
+      accessibilityRole="button"
+      accessibilityState={{ busy: loading, selected: isUpvoted }}
       onPress={handlePress}
       disabled={loading}
       className={

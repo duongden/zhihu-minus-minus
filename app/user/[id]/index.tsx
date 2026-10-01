@@ -816,14 +816,14 @@ export default function UserDetailScreen() {
                   color={
                     user?.is_following
                       ? Colors[colorScheme].textSecondary
-                      : Colors[colorScheme].textInverse
+                      : Colors[colorScheme].onPrimary
                   }
                 />
               ) : (
                 <Text
                   className="font-bold text-sm"
                   style={[
-                    { color: Colors[colorScheme].textInverse },
+                    { color: Colors[colorScheme].onPrimary },
                     user?.is_following && {
                       color: Colors[colorScheme].textSecondary,
                     },

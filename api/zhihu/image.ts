@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { CryptoDigestAlgorithm, digest } from 'expo-crypto';
 import * as FileSystem from 'expo-file-system/legacy';
+import { type SafeFeedbackCode, SafeFeedbackError } from '@/utils/safeFeedback';
 import apiClient from '../client';
 
 export interface LocalImageAsset {
@@ -202,46 +203,41 @@ function getImageDimensions(asset: LocalImageAsset) {
   };
 }
 
-function getResponseHeader(
-  headers: Record<string, string>,
-  name: string,
-): string | undefined {
-  const entry = Object.entries(headers).find(
-    ([key]) => key.toLowerCase() === name.toLowerCase(),
-  );
-  return entry?.[1];
-}
-
 function getXmlValue(body: string, tag: string): string | undefined {
   const match = body.match(new RegExp(`<${tag}>\\s*([^<]*?)\\s*</${tag}>`));
   return match?.[1];
 }
 
-function sanitizeOssText(value: string | undefined): string | undefined {
-  if (!value) return undefined;
-  const sanitized = value.replace(/\s+/g, ' ').trim().slice(0, 160);
-  return sanitized || undefined;
-}
+const OSS_FEEDBACK: Readonly<Record<string, SafeFeedbackCode>> = {
+  AccessDenied: 'image-credentials',
+  InvalidAccessKeyId: 'image-credentials',
+  InvalidSecurityToken: 'image-credentials',
+  SecurityTokenExpired: 'image-expired',
+  SignatureDoesNotMatch: 'image-signature',
+  RequestTimeTooSkewed: 'image-time',
+  EntityTooLarge: 'image-too-large',
+  InvalidArgument: 'image-format',
+  InvalidDigest: 'image-format',
+  BadDigest: 'image-format',
+  RequestTimeout: 'image-timeout',
+  SlowDown: 'image-busy',
+  InternalError: 'image-server',
+  ServiceUnavailable: 'image-server',
+};
 
-function createOssUploadError(
-  status: number,
-  body: string,
-  headers: Record<string, string>,
-): Error {
-  const code = sanitizeOssText(getXmlValue(body, 'Code'));
-  const message = sanitizeOssText(getXmlValue(body, 'Message'));
-  const requestId = sanitizeOssText(
-    getXmlValue(body, 'RequestId') ||
-      getResponseHeader(headers, 'x-oss-request-id'),
-  );
-  const details = [
-    code,
-    message,
-    requestId ? `request id: ${requestId}` : undefined,
-  ].filter(Boolean);
-  return new Error(
-    `图片上传失败（${status}）${details.length ? `：${details.join('；')}` : ''}`,
-  );
+function createOssUploadError(status: number, body: string): Error {
+  const code = getXmlValue(body, 'Code')?.trim();
+  if (code && Object.hasOwn(OSS_FEEDBACK, code))
+    return new SafeFeedbackError(OSS_FEEDBACK[code]);
+  // OSS diagnostics may echo the signed URL, credentials or request input.
+  if (status === 401 || status === 403)
+    return new SafeFeedbackError('image-credentials');
+  if (status === 408) return new SafeFeedbackError('image-timeout');
+  if (status === 413) return new SafeFeedbackError('image-too-large');
+  if (status === 415) return new SafeFeedbackError('image-format');
+  if (status === 429) return new SafeFeedbackError('image-busy');
+  if (status >= 500) return new SafeFeedbackError('image-server');
+  return new SafeFeedbackError('image-failed');
 }
 
 function normalizeImage(
@@ -249,7 +245,7 @@ function normalizeImage(
   data: ImageDetailResponse,
 ): ZhihuImage {
   if (data.status !== 'success' || !data.src) {
-    throw new Error('知乎图片尚未处理完成');
+    throw new SafeFeedbackError('image-pending');
   }
 
   return {
@@ -263,24 +259,29 @@ function normalizeImage(
 }
 
 /** Fetch the public image URLs for a Zhihu image id. */
-export async function getImage(imageId: string | number): Promise<ZhihuImage> {
+export async function getImage(
+  imageId: string | number,
+  options?: { signal?: AbortSignal },
+): Promise<ZhihuImage> {
   const response = await apiClient.get<ImageDetailResponse>(
     `${IMAGE_API_URL}/${encodeURIComponent(String(imageId))}`,
+    { signal: options?.signal },
   );
   return normalizeImage(imageId, response.data);
 }
 
 async function getImageAfterUpload(
   imageId: string | number,
+  signal?: AbortSignal,
 ): Promise<ZhihuImage> {
   let lastError: unknown;
   for (let attempt = 0; attempt < 8; attempt += 1) {
     try {
-      return await getImage(imageId);
+      return await getImage(imageId, { signal });
     } catch (error) {
       lastError = error;
       const isPendingProcessing =
-        error instanceof Error && error.message === '知乎图片尚未处理完成';
+        error instanceof SafeFeedbackError && error.code === 'image-pending';
       const status = axios.isAxiosError(error)
         ? error.response?.status
         : undefined;
@@ -293,18 +294,19 @@ async function getImageAfterUpload(
           status >= 500);
       if (!isPendingProcessing && !isTransientRequestError) throw error;
       if (attempt === 7) break;
-      await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
+      await waitForProcessing(500 * (attempt + 1), signal);
     }
   }
   throw lastError instanceof Error
     ? lastError
-    : new Error('知乎图片尚未处理完成');
+    : new SafeFeedbackError('image-pending');
 }
 
 async function uploadToObjectStorage(
   asset: LocalImageAsset,
   token: UploadToken,
   objectKey: string,
+  signal?: AbortSignal,
 ): Promise<void> {
   const mimeType = getImageMimeType(asset);
   const ossDate = new Date().toUTCString();
@@ -315,7 +317,8 @@ async function uploadToObjectStorage(
     ossDate,
     OSS_USER_AGENT,
   );
-  const uploadResponse = await FileSystem.uploadAsync(
+  assertNotAborted(signal);
+  const task = FileSystem.createUploadTask(
     `${IMAGE_UPLOAD_URL}/${objectKey}`,
     asset.uri,
     {
@@ -330,20 +333,32 @@ async function uploadToObjectStorage(
       },
     },
   );
+  const cancel = () => {
+    void task.cancelAsync().catch(() => {});
+  };
+  signal?.addEventListener('abort', cancel, { once: true });
+  let uploadResponse: Awaited<ReturnType<typeof task.uploadAsync>>;
+  try {
+    uploadResponse = await task.uploadAsync();
+  } finally {
+    signal?.removeEventListener('abort', cancel);
+  }
+  assertNotAborted(signal);
+  if (!uploadResponse) throw new axios.CanceledError('图片上传已取消');
 
   if (uploadResponse.status < 200 || uploadResponse.status >= 300) {
-    throw createOssUploadError(
-      uploadResponse.status,
-      uploadResponse.body,
-      uploadResponse.headers,
-    );
+    throw createOssUploadError(uploadResponse.status, uploadResponse.body);
   }
 }
 
-async function markImageUploadSuccessful(imageId: string | number) {
+async function markImageUploadSuccessful(
+  imageId: string | number,
+  signal?: AbortSignal,
+) {
   await apiClient.put(
     `${IMAGE_API_URL}/${encodeURIComponent(String(imageId))}/uploading_status`,
     { upload_result: 'success' },
+    { signal },
   );
 }
 
@@ -355,19 +370,28 @@ async function markImageUploadSuccessful(imageId: string | number) {
 export async function uploadImage(
   asset: LocalImageAsset,
   source = 'comment',
+  options?: { signal?: AbortSignal },
 ): Promise<UploadedImage> {
+  const signal = options?.signal;
+  assertNotAborted(signal);
   const fileInfo = await FileSystem.getInfoAsync(asset.uri, { md5: true });
+  assertNotAborted(signal);
   if (!fileInfo.exists || !fileInfo.md5) {
-    throw new Error('无法读取图片文件');
+    throw new SafeFeedbackError('image-read');
   }
 
-  const response = await apiClient.post<ImageCreateResponse>(IMAGE_API_URL, {
-    image_hash: fileInfo.md5,
-    source,
-  });
+  const response = await apiClient.post<ImageCreateResponse>(
+    IMAGE_API_URL,
+    {
+      image_hash: fileInfo.md5,
+      source,
+    },
+    { signal },
+  );
+  assertNotAborted(signal);
   const file = response.data.upload_file;
   if (file?.image_id === undefined || file.image_id === null) {
-    throw new Error('知乎图片上传信息无效');
+    throw new SafeFeedbackError('image-metadata');
   }
 
   const imageId = String(file.image_id);
@@ -378,18 +402,42 @@ export async function uploadImage(
   if (needsUpload) {
     const token = response.data.upload_token;
     if (!token?.access_id || !token.access_key || !token.access_token) {
-      throw new Error('知乎没有返回新图片的上传凭证，请稍后重试');
+      throw new SafeFeedbackError('image-credentials');
     }
 
-    await uploadToObjectStorage(asset, token, objectKey);
-    await markImageUploadSuccessful(imageId);
+    await uploadToObjectStorage(asset, token, objectKey, signal);
+    assertNotAborted(signal);
+    await markImageUploadSuccessful(imageId, signal);
   }
 
-  const image = await getImageAfterUpload(imageId);
+  const image = await getImageAfterUpload(imageId, signal);
   const dimensions = getImageDimensions(asset);
   return {
     ...image,
     imageKey: image.imageKey ?? objectKey,
     ...dimensions,
   };
+}
+
+function assertNotAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new axios.CanceledError('图片上传已取消');
+}
+
+function waitForProcessing(
+  duration: number,
+  signal?: AbortSignal,
+): Promise<void> {
+  assertNotAborted(signal);
+  return new Promise((resolve, reject) => {
+    const cancel = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', cancel);
+      reject(new axios.CanceledError('图片上传已取消'));
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', cancel);
+      resolve();
+    }, duration);
+    signal?.addEventListener('abort', cancel, { once: true });
+  });
 }

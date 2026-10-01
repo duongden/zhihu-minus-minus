@@ -1,9 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQueryClient,
-} from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -17,24 +13,34 @@ import {
   TextInput,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { type ChatMessage, getMessages, sendMessage } from '@/api/zhihu';
+import { type ChatMessage, sendMessage } from '@/api/zhihu';
 import { BouncyButton } from '@/components/BouncyButton';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { StableAvatar } from '@/components/StableAvatar';
-import { Text, useThemeColor, View } from '@/components/Themed';
+import {
+  Text,
+  useRuntimeThemeColors,
+  useThemeColor,
+  View,
+} from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
-import { useAuthStore } from '@/store/useAuthStore';
+import { useChatMessages } from '@/hooks/useChatMessages';
+import { getAuthSessionVersion, useAuthStore } from '@/store/useAuthStore';
 import { showToast } from '@/utils/toast';
 import { getZhihuErrorMessage } from '@/utils/zhihuError';
 
 export default function ChatScreen() {
+  const { onPrimary } = useRuntimeThemeColors();
   const { id, name } = useLocalSearchParams<{ id: string; name: string }>();
   const navigation = useNavigation();
   const colorScheme = useColorScheme();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const { me } = useAuthStore();
+  const myAvatarUrl = useAuthStore((state) => state.me?.avatar_url);
+  const accountKey = useAuthStore((state) =>
+    state.cookies ? (state.me?.id ?? state.me?.url_token ?? null) : null,
+  );
 
   const [inputText, setInputText] = useState('');
   const flatListRef = useRef<FlatList>(null);
@@ -51,38 +57,33 @@ export default function ChatScreen() {
   }, [navigation, name]);
 
   const {
-    data,
+    messages,
     isLoading,
     isError,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
     refetch,
-  } = useInfiniteQuery({
-    queryKey: ['chat', id],
-    queryFn: ({ pageParam = '', signal }) =>
-      getMessages(id, pageParam as string, { signal }),
-    initialPageParam: '',
-    getNextPageParam: (lastPage) => {
-      if (!lastPage || lastPage.paging?.is_end) return undefined;
-      return lastPage.paging?.next;
-    },
-    // Simple polling every 5 seconds
-    refetchInterval: 5000,
-  });
+    latestKey,
+  } = useChatMessages(id, accountKey);
 
   const sendMutation = useMutation({
     mutationFn: (text: string) => sendMessage(id, text),
-    onMutate: async (_newText) => {
+    onMutate: (_newText) => {
       // Optimistic update logic could go here
       setInputText('');
       Keyboard.dismiss();
+      return { sessionVersion: getAuthSessionVersion(), key: latestKey };
     },
-    onSuccess: (_newMessage) => {
+    onSuccess: (_newMessage, _text, context) => {
+      if (context?.sessionVersion !== getAuthSessionVersion()) return;
       // Invalidate and refetch
-      queryClient.invalidateQueries({ queryKey: ['chat', id] });
+      queryClient.invalidateQueries({ queryKey: context.key, exact: true });
     },
-    onError: (err) => {
+    onError: (err, text, context) => {
+      if (context?.sessionVersion !== getAuthSessionVersion()) return;
+      // Preserve a newer draft the user started while this request was pending.
+      setInputText((current) => current || text);
       console.error('发送消息失败');
       showToast(getZhihuErrorMessage(err));
     },
@@ -90,16 +91,14 @@ export default function ChatScreen() {
 
   const handleSend = () => {
     const text = inputText.trim();
-    if (!text) return;
+    if (!text || sendMutation.isPending || !accountKey) return;
     sendMutation.mutate(text);
   };
-
-  const messages = data?.pages.flatMap((page) => page.data) || [];
 
   const renderMessage = ({ item }: { item: ChatMessage }) => {
     const messageInfo = item.info;
 
-    if (!messageInfo || !messageInfo.id) {
+    if (!messageInfo?.id) {
       return null;
     }
 
@@ -111,7 +110,7 @@ export default function ChatScreen() {
     // In POST API, item.sender is ME, item.receiver is the OTHER person.
     // So we use the `id` from params to reliably find the OTHER person's avatar.
     const myAvatar =
-      me?.avatar_url ||
+      myAvatarUrl ||
       (item.sender?.id !== id
         ? item.sender?.avatar_url
         : item.receiver?.avatar_url);
@@ -151,12 +150,16 @@ export default function ChatScreen() {
                   ? 'bg-gray-800 rounded-tl-sm'
                   : 'bg-white rounded-tl-sm'
             }`}
-            style={[isMe && { backgroundColor: primaryColor }]}
+            style={{
+              backgroundColor: isMe
+                ? primaryColor
+                : Colors[colorScheme].surface,
+            }}
           >
             {messageInfo.content_type === 0 ? (
               <Text
-                className={`text-[15px] leading-6 ${isMe ? 'text-white' : ''}`}
-                style={isMe ? { color: 'white' } : {}}
+                className="text-[15px] leading-6"
+                style={isMe ? { color: onPrimary } : {}}
               >
                 {messageInfo.text}
               </Text>
@@ -190,15 +193,16 @@ export default function ChatScreen() {
       <View
         className="flex-1"
         style={{
-          backgroundColor: isDark
-            ? Colors.light.shadow
-            : Colors.light.backgroundTertiary,
+          backgroundColor: Colors[colorScheme].backgroundSecondary,
         }}
       >
         <FlatList
           ref={flatListRef}
           data={messages}
-          keyExtractor={(item, index) => item.info?.id || index.toString()}
+          keyExtractor={(item) => item.info?.id ?? ''}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={9}
           renderItem={renderMessage}
           inverted={true}
           onEndReached={() => {
@@ -266,7 +270,7 @@ export default function ChatScreen() {
 
         <BouncyButton
           onPress={handleSend}
-          disabled={!inputText.trim() || sendMutation.isPending}
+          disabled={!accountKey || !inputText.trim() || sendMutation.isPending}
           className="ml-3 w-10 h-10 rounded-full justify-center items-center"
           style={{
             backgroundColor: inputText.trim()
@@ -277,18 +281,13 @@ export default function ChatScreen() {
           }}
         >
           {sendMutation.isPending ? (
-            <ActivityIndicator
-              size="small"
-              color={Colors[colorScheme].textInverse}
-            />
+            <ActivityIndicator size="small" color={onPrimary} />
           ) : (
             <Ionicons
               name="arrow-up"
               size={20}
               color={
-                inputText.trim()
-                  ? Colors[colorScheme].textInverse
-                  : Colors[colorScheme].textTertiary
+                inputText.trim() ? onPrimary : Colors[colorScheme].textTertiary
               }
             />
           )}

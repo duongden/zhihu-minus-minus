@@ -21,10 +21,8 @@ import { ShareMenu } from '@/components/ShareMenu';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
-import {
-  getNeighborAnswerIds,
-  RICH_CONTENT_STALE_TIME,
-} from '@/features/rich-content';
+import { RICH_CONTENT_STALE_TIME } from '@/features/rich-content';
+import { useNeighborAnswerPrefetch } from '@/hooks/useNeighborAnswerPrefetch';
 import { useZhihuInfiniteQuery } from '@/hooks/useZhihuInfiniteQuery';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { getZhihuErrorStatus } from '@/utils/zhihuError';
@@ -67,7 +65,7 @@ export default function AnswerDetailScreen() {
   // 1. 获取当前回答的基础信息（主要是为了拿到 questionId）
   const { data: initialAnswer, isLoading: loadingInitial } = useQuery({
     queryKey: ['answer-detail', initialId],
-    queryFn: () => getAnswer(initialId),
+    queryFn: ({ signal }) => getAnswer(initialId, undefined, { signal }),
     enabled: !!initialId,
     staleTime: RICH_CONTENT_STALE_TIME,
     retry: (failureCount, err) =>
@@ -223,28 +221,7 @@ export default function AnswerDetailScreen() {
     opacity: interpolate(scrollY.value, [0, 80], [1, 0], Extrapolate.CLAMP),
   }));
 
-  const pagerReady = answerIds.length > 1;
-
-  useEffect(() => {
-    if (!pagerReady) return;
-
-    const idleCallbackId = requestIdleCallback(
-      () => {
-        const neighborIds = getNeighborAnswerIds(answerIds, currentPage);
-
-        for (const answerId of neighborIds) {
-          void queryClient.prefetchQuery({
-            queryKey: ['answer-detail', answerId],
-            queryFn: () => getAnswer(answerId),
-            staleTime: RICH_CONTENT_STALE_TIME,
-          });
-        }
-      },
-      { timeout: 1500 },
-    );
-
-    return () => cancelIdleCallback(idleCallbackId);
-  }, [answerIds, currentPage, pagerReady, queryClient]);
+  useNeighborAnswerPrefetch(answerIds, currentPage);
 
   useEffect(() => {
     if (

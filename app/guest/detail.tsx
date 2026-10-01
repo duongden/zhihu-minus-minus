@@ -31,8 +31,8 @@ export default function GuestDetailScreen() {
       if (params.item) {
         return JSON.parse(params.item as string);
       }
-    } catch (e) {
-      console.error('[GuestDetail] Failed to parse item data:', e);
+    } catch {
+      console.error('[GuestDetail] Failed to parse item data');
     }
     return null;
   }, [params.item]);

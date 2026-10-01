@@ -4,13 +4,8 @@ import axios from 'axios';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet } from 'react-native';
 import {
-  addArticleToCollection,
-  addToCollection,
   createCollection,
-  getAnswerCollectionStatus,
-  getArticleCollectionStatus,
-  removeArticleFromCollection,
-  removeFromCollection,
+  getAllContentCollectionStatus,
 } from '@/api/zhihu/collection';
 import { BouncyButton } from '@/components/BouncyButton';
 import { CollectionEditorForm } from '@/components/CollectionEditorForm';
@@ -18,9 +13,12 @@ import { BottomSheet } from '@/components/overlays/BottomSheet';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import {
+  collectionSelectorStatusKey,
+  useCollectionSelectionToggle,
+} from '@/hooks/useCollectionSelectionToggle';
 import { useCollectionStore } from '@/store/useCollectionStore';
 import type { ZhihuCollectionStatusItem } from '@/types/zhihu';
-import { updateContentInteractionCaches } from '@/utils/contentCache';
 import { showToast } from '@/utils/toast';
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -41,7 +39,6 @@ export function CollectionSelectorModal() {
     selectorContentId,
     selectorContentType,
     closeSelector,
-    setCollectedStatus,
   } = useCollectionStore();
 
   const [editorVisible, setEditorVisible] = useState(false);
@@ -58,72 +55,23 @@ export function CollectionSelectorModal() {
     isLoading,
     refetch,
   } = useQuery({
-    queryKey: [
-      'collection-selector-status',
+    queryKey: collectionSelectorStatusKey(
       selectorContentId,
       selectorContentType,
-    ],
+    ),
     queryFn: async () => {
       if (!selectorContentId || !selectorContentType) return null;
-      return selectorContentType === 'answer'
-        ? getAnswerCollectionStatus(selectorContentId)
-        : getArticleCollectionStatus(selectorContentId);
+      return getAllContentCollectionStatus(
+        selectorContentId,
+        selectorContentType,
+      );
     },
     enabled: selectorVisible && !!selectorContentId && !!selectorContentType,
   });
 
   const collections: ZhihuCollectionStatusItem[] = statusData?.data || [];
 
-  const toggleMutation = useMutation({
-    mutationFn: async ({
-      folderId,
-      isFavorited,
-    }: {
-      folderId: string | number;
-      isFavorited: boolean;
-    }) => {
-      if (!selectorContentId || !selectorContentType) return;
-      if (selectorContentType === 'answer') {
-        return isFavorited
-          ? removeFromCollection(folderId, selectorContentId)
-          : addToCollection(folderId, selectorContentId);
-      }
-      return isFavorited
-        ? removeArticleFromCollection(folderId, selectorContentId)
-        : addArticleToCollection(folderId, selectorContentId);
-    },
-    onSuccess: () => {
-      void refetch().then((updated) => {
-        const id = selectorContentId?.toString();
-        if (!id) return;
-        const wasCollected =
-          useCollectionStore.getState().collectedStatusMap[id] || false;
-        const hasCollections =
-          updated.data?.data?.some((item) => item.is_favorited) || false;
-
-        if (wasCollected !== hasCollections) {
-          useCollectionStore
-            .getState()
-            .updateCollectedCountOffset(id, hasCollections ? 1 : -1);
-        }
-        setCollectedStatus(id, hasCollections);
-        updateContentInteractionCaches(queryClient, {
-          type: selectorContentType === 'answer' ? 'answers' : 'articles',
-          id,
-          isCollected: hasCollections,
-        });
-        void queryClient.invalidateQueries({
-          queryKey: ['answer-collection-status', id],
-        });
-        void queryClient.invalidateQueries({
-          queryKey: ['article-collection-status', id],
-        });
-      });
-    },
-    onError: (error: unknown) => {
-      showToast(getErrorMessage(error, '操作失败'));
-    },
-  });
+  const toggleMutation = useCollectionSelectionToggle();
 
   const createMutation = useMutation({
     mutationFn: createCollection,
@@ -229,15 +177,18 @@ export function CollectionSelectorModal() {
                     accessibilityLabel={item.title}
                     accessibilityState={{
                       checked: item.is_favorited,
-                      disabled: isPending,
+                      disabled: toggleMutation.isPending,
                     }}
-                    disabled={isPending}
-                    onPress={() =>
+                    disabled={toggleMutation.isPending}
+                    onPress={() => {
+                      if (!selectorContentId || !selectorContentType) return;
                       toggleMutation.mutate({
+                        contentId: selectorContentId,
+                        contentType: selectorContentType,
                         folderId: item.id,
                         isFavorited: item.is_favorited,
-                      })
-                    }
+                      });
+                    }}
                     style={[
                       styles.collectionRow,
                       { borderBottomColor: colors.divider },
@@ -309,7 +260,9 @@ export function CollectionSelectorModal() {
             onPress={handleClose}
             style={[styles.doneButton, { backgroundColor: primaryColor }]}
           >
-            <Text style={styles.doneLabel}>完成</Text>
+            <Text style={[styles.doneLabel, { color: colors.onPrimary }]}>
+              完成
+            </Text>
           </BouncyButton>
         </View>
       )}
@@ -392,7 +345,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   doneLabel: {
-    color: '#fff',
     fontSize: 16,
     lineHeight: 22,
     fontWeight: '700',

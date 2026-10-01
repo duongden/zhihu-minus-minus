@@ -328,6 +328,72 @@
         "virtuals.is_liked": false,
         "virtuals.is_favorited": false
       }
+    },
+    {
+      "id": "webview-untrusted-content-001",
+      "file": "./cases/webview-untrusted-content-001.json",
+      "contentPath": "content",
+      "sourceType": "answer",
+      "collectedAt": "2026-10-01",
+      "traits": [
+        "synthetic",
+        "untrusted-html",
+        "webview",
+        "script-delimiter",
+        "footnote-metadata"
+      ],
+      "expected": {
+        "paragraphs": 2,
+        "totalImages": 1,
+        "activeImages": 1,
+        "formulaImages": 0,
+        "linkCards": 0
+      },
+      "expectedMetadata": {
+        "type": "answer",
+        "id": "synthetic-webview-safety"
+      }
+    },
+    {
+      "id": "dense-metric-spans-001",
+      "file": "./cases/dense-metric-spans-001.json",
+      "contentPath": "content",
+      "sourceType": "answer",
+      "collectedAt": "2026-10-01",
+      "traits": [
+        "synthetic",
+        "dense-spans",
+        "overlapping-metric-styles",
+        "performance"
+      ],
+      "expected": {
+        "paragraphs": 16,
+        "totalImages": 0,
+        "activeImages": 0,
+        "formulaImages": 0
+      },
+      "expectedMetadata": {
+        "type": "answer",
+        "id": "synthetic-dense-spans"
+      }
+    },
+    {
+      "id": "offline-formula-001",
+      "file": "./cases/offline-formula-001.json",
+      "contentPath": "content",
+      "sourceType": "answer",
+      "collectedAt": "2026-10-01",
+      "traits": ["synthetic", "offline-katex", "inline-latex", "display-latex"],
+      "expected": {
+        "paragraphs": 2,
+        "totalImages": 0,
+        "activeImages": 0,
+        "formulaImages": 0
+      },
+      "expectedMetadata": {
+        "type": "answer",
+        "id": "synthetic-offline-formula"
+      }
     }
   ]
 }

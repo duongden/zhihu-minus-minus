@@ -36,7 +36,7 @@ internal class InlineAttachmentSpan(
   private var asset: AttachmentAsset? = null
   private var widthPx = initialSize("width", fontPx * if (spec.optString("kind") == "formula") 2f else 1.5f)
   private var heightPx = initialSize("height", fontPx * 1.3f)
-  private var baselinePx = spec.optDouble("baselineOffset", 0.0).toFloat() * scale
+  private var baselinePx = (spec.number("baselineOffset", 0.0).toFloat() * scale).coerceIn(-2048f, 2048f)
   private val rect = RectF()
   private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG)
   // Keep the TextView's paint and cached asset free of theme-specific colors.
@@ -46,12 +46,20 @@ internal class InlineAttachmentSpan(
     }
   } else null
 
+  init {
+    val fit = min(1f, min(maxWidth / widthPx, 2048f / max(widthPx, heightPx)))
+    widthPx = max(1f, widthPx * fit); heightPx = max(1f, heightPx * fit); baselinePx *= fit
+  }
+
+  fun releaseAsset() { asset = null }
+
   fun setAsset(value: AttachmentAsset) {
     asset = value
     val ratio = if (value.width > maxWidth) maxWidth / value.width else 1f
     widthPx = value.width * ratio
     heightPx = value.height * ratio
-    if (!spec.has("baselineOffset")) baselinePx = (value.baselineOffset ?: 0f) * ratio
+    val baseline = spec.number("baselineOffset").toFloat().takeIf { it.isFinite() }?.times(scale) ?: value.baselineOffset ?: 0f
+    baselinePx = (baseline * ratio).coerceIn(-2048f, 2048f)
   }
 
   override fun getSize(paint: Paint, text: CharSequence, start: Int, end: Int, fm: Paint.FontMetricsInt?): Int {
@@ -83,7 +91,7 @@ internal class InlineAttachmentSpan(
   }
 
   private fun initialSize(key: String, fallback: Float): Float =
-    if (spec.has(key)) (spec.optDouble(key).toFloat() * scale).coerceAtLeast(1f) else fallback
+    (spec.number(key).toFloat() * scale).takeIf { it.isFinite() && it > 0 } ?: fallback
 }
 
 /** Asset loading deliberately has no request logging, cookies, or auth headers. */
@@ -92,9 +100,9 @@ internal object AttachmentLoader {
   private const val MAX_BITMAP_SIDE = 2048
 
   fun load(spec: JSONObject, scale: Float, fontPx: Float, maxWidth: Float): AttachmentAsset? = runCatching {
-    if (Thread.currentThread().isInterrupted) return null
-    val source = spec.optString("url")
-    if (source.isBlank()) return null
+    if (Thread.currentThread().isInterrupted || !scale.isFinite() || scale <= 0 || !fontPx.isFinite() || fontPx <= 0 || !maxWidth.isFinite() || maxWidth <= 0) return null
+    val source = spec.opt("url") as? String ?: return null
+    if (source.isBlank() || source.toByteArray(Charsets.UTF_8).size > MAX_BYTES * 3 + 256) return null
     val bytes = read(source) ?: return null
     if (Thread.currentThread().isInterrupted) return null
     val prefix = bytes.take(200).toByteArray().toString(Charsets.UTF_8).trimStart()
@@ -212,5 +220,5 @@ internal object AttachmentLoader {
   }
 
   private fun optionalSize(spec: JSONObject, key: String, scale: Float): Float? =
-    if (spec.has(key)) (spec.optDouble(key).toFloat() * scale).takeIf { it.isFinite() && it > 0 } else null
+    if (spec.has(key)) (spec.number(key).toFloat() * scale).takeIf { it.isFinite() && it > 0 } else null
 }

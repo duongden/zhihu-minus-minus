@@ -1,4 +1,8 @@
 import { classifyNetworkError } from './networkFailure';
+import {
+  getSafeFeedbackMessage,
+  sanitizeBusinessFeedback,
+} from './safeFeedback';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
@@ -6,22 +10,34 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function getZhihuErrorStatus(error: unknown): number | undefined {
   if (!isRecord(error) || !isRecord(error.response)) return undefined;
-  return typeof error.response.status === 'number'
+  return typeof error.response.status === 'number' &&
+    Number.isInteger(error.response.status) &&
+    error.response.status >= 100 &&
+    error.response.status < 600
     ? error.response.status
     : undefined;
 }
 
 export function getZhihuErrorMessage(error: unknown): string {
+  const localMessage = getSafeFeedbackMessage(error);
+  if (localMessage) return localMessage;
+  if (
+    isRecord(error) &&
+    (error.code === 'ERR_CANCELED' ||
+      error.__CANCEL__ === true ||
+      error.name === 'AbortError')
+  )
+    return '操作已取消';
   if (isRecord(error) && isRecord(error.response)) {
-    const status = error.response.status;
+    const status = getZhihuErrorStatus(error);
     const data = error.response.data;
     if (isRecord(data) && isRecord(data.error)) {
-      const message = data.error.message;
-      if (typeof message === 'string' && message) return message;
+      const message = sanitizeBusinessFeedback(data.error.message);
+      if (message) return message;
     }
     if (isRecord(data)) {
-      const message = data.message;
-      if (typeof message === 'string' && message) return message;
+      const message = sanitizeBusinessFeedback(data.message);
+      if (message) return message;
     }
     if (typeof status === 'number') {
       if (status === 400) return '请求参数无效，请检查后重试';
@@ -39,7 +55,7 @@ export function getZhihuErrorMessage(error: unknown): string {
     if (code === 'ECONNABORTED' || code === 'ETIMEDOUT') {
       return '请求超时，请检查网络后重试';
     }
-    if (code === 'ERR_NETWORK') {
+    if (code === 'ERR_NETWORK' || !error.response) {
       const status = classifyNetworkError(error);
       if (status === 'offline') return '当前设备似乎已离线，请检查网络';
       if (status === 'dns-error') return '域名解析失败，请检查 DNS 或代理设置';
@@ -49,14 +65,8 @@ export function getZhihuErrorMessage(error: unknown): string {
       if (status === 'connection-refused')
         return '服务器拒绝了连接，请稍后重试';
       if (status === 'connection-error') return '网络连接已中断，请稍后重试';
-      return '网络连接失败，请检查网络后重试';
+      if (code === 'ERR_NETWORK') return '网络连接失败，请检查网络后重试';
     }
-
-    const message = error.message;
-    if (typeof message === 'string' && message) return message;
   }
-
-  if (error instanceof Error && error.message) return error.message;
-
-  return '未知错误';
+  return '操作失败，请稍后重试';
 }

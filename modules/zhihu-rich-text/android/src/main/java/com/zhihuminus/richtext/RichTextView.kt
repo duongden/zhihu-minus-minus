@@ -3,6 +3,7 @@ package com.zhihuminus.richtext
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Typeface
+import android.graphics.Rect
 import android.os.Build
 import android.text.Layout
 import android.text.Selection
@@ -20,6 +21,8 @@ import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
+import android.widget.ScrollView
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.records.Field
 import expo.modules.kotlin.records.Record
@@ -54,10 +57,16 @@ data class ActionEvent(
   @Field val url: String? = null
 ) : Record
 
+private class AttachmentSlot(
+  val spec: JSONObject, val span: InlineAttachmentSpan, val range: TextRange,
+  val fontPx: Float, val maxWidth: Float, val scale: Float
+) {
+  val visibility = AttachmentVisibilityState()
+  var request: AttachmentSubscription? = null
+}
+
 private data class AttachmentUpdate(
-  val generation: Int,
-  val span: InlineAttachmentSpan,
-  val asset: AttachmentAsset
+  val generation: Int, val revision: Int, val slot: AttachmentSlot, val asset: AttachmentAsset
 )
 
 /** One flow is one TextView, including all paragraph and attachment ranges. */
@@ -69,7 +78,14 @@ class RichTextView(context: Context, appContext: AppContext) : ExpoView(context,
   private val onAction by EventDispatcher<ActionEvent>()
   private val textView = FlowTextView(context)
   private val density = resources.displayMetrics.density
-  private val requests = mutableListOf<AttachmentSubscription>()
+  private val attachments = mutableListOf<AttachmentSlot>()
+  private val viewportRect = Rect()
+  private val screenLocation = IntArray(2)
+  private var observedTree: ViewTreeObserver? = null
+  private var lastViewportTop = Float.NaN
+  private var lastViewportBottom = Float.NaN
+  private var lastAttachmentLayout: Layout? = null
+  private val viewportListener = ViewTreeObserver.OnPreDrawListener { synchronizeAttachments(); true }
   private val attachmentUpdates = mutableListOf<AttachmentUpdate>()
   private var attachmentFrameScheduled = false
   private val attachmentFrame = Runnable { applyAttachmentUpdates() }
@@ -89,6 +105,7 @@ class RichTextView(context: Context, appContext: AppContext) : ExpoView(context,
   private val textScale: Float get() = density * fontScale
 
   init {
+    ProcessAttachmentRequests.observeMemory(context)
     orientation = VERTICAL
     clipChildren = false
     clipToPadding = false
@@ -115,7 +132,7 @@ class RichTextView(context: Context, appContext: AppContext) : ExpoView(context,
   }
 
   fun setContentWidth(value: Float) {
-    val pixels = ceil(value.coerceAtLeast(0f) * density).toInt()
+    val pixels = if (value.isFinite()) ceil(value.coerceAtLeast(0f) * density).toInt() else 0
     if (contentWidthPx == pixels) return
     contentWidthPx = pixels
     rebuild()
@@ -148,9 +165,11 @@ class RichTextView(context: Context, appContext: AppContext) : ExpoView(context,
 
   fun dispose() {
     disposed = true
+    observedTree?.takeIf { it.isAlive }?.removeOnPreDrawListener(viewportListener)
+    observedTree = null
     generation += 1
-    requests.forEach { it.cancel() }
-    requests.clear()
+    releaseAttachments()
+    attachments.clear()
     textView.selectionListener = null
     textView.actionListener = null
     textView.copyResolver = null
@@ -164,8 +183,8 @@ class RichTextView(context: Context, appContext: AppContext) : ExpoView(context,
     generation += 1
     lastHeightKey = ""
     val currentGeneration = generation
-    requests.forEach { it.cancel() }
-    requests.clear()
+    releaseAttachments()
+    attachments.clear()
     removeCallbacks(attachmentFrame)
     attachmentFrameScheduled = false
     attachmentUpdates.clear()
@@ -205,7 +224,7 @@ class RichTextView(context: Context, appContext: AppContext) : ExpoView(context,
       apply(ParagraphHeightSpan(TextRange(0, content.length), px(config.lineHeight), 0, 0), TextRange(0, content.length))
     }
     for (spec in activeFlow.spans) {
-      val range = spec.range(content.length) ?: continue
+      val range = spec.range(activeFlow.text) ?: continue
       when (spec.optString("kind")) {
         "strong" -> apply(StyleSpan(Typeface.BOLD), range)
         "emphasis" -> apply(StyleSpan(Typeface.ITALIC), range)
@@ -225,48 +244,44 @@ class RichTextView(context: Context, appContext: AppContext) : ExpoView(context,
       }
     }
     for ((index, spec) in activeFlow.paragraphs.withIndex()) {
-      val range = spec.range(content.length) ?: continue
+      val range = spec.range(activeFlow.text) ?: continue
       val kind = spec.optString("kind")
-      val headingScale = when (spec.optInt("level", 2)) { 1 -> 1.55f; 2 -> 1.35f; else -> 1.15f }
+      val headingScale = when (spec.number("level", 2.0)) { 1.0 -> 1.55f; 2.0 -> 1.35f; else -> 1.15f }
       var lineHeight = config.lineHeight
       when (kind) {
         "heading" -> {
           // The compiler supplies the same heading metrics as the other backends.
           // Retain the original heuristic only for flows created by older clients.
-          val headingFontSize = spec.optDouble("fontSize", Double.NaN).toFloat()
+          val headingFontSize = spec.number("fontSize", Double.NaN).toFloat()
             .takeIf { it.isFinite() && it > 0f } ?: config.fontSize * headingScale
           apply(RelativeSizeSpan(headingFontSize / config.fontSize), range)
           apply(StyleSpan(Typeface.BOLD), range)
-          lineHeight = spec.optDouble("lineHeight", Double.NaN).toFloat()
+          lineHeight = spec.number("lineHeight", Double.NaN).toFloat()
             .takeIf { it.isFinite() && it > 0f } ?: max(config.lineHeight, headingFontSize * 1.45f)
         }
         "quote" -> {
           apply(QuoteMarginSpan(config.secondaryColor, px(2f), px(10f)), range)
           apply(ForegroundColorSpan(config.secondaryColor), range)
         }
-        "listItem" -> apply(LeadingMarginSpan.Standard(px(spec.optDouble("indent", 18.0).toFloat())), range)
+        "listItem" -> apply(LeadingMarginSpan.Standard(px(spec.number("indent", 18.0).toFloat())), range)
         "code" -> {
           apply(MonoSpan(), range)
           apply(RelativeSizeSpan(0.9f), range)
           apply(BackgroundColorSpan((config.secondaryColor and 0x00ffffff) or 0x16000000), range)
         }
       }
-      val marginTop = spec.optDouble("marginTop", if (kind == "heading" && index > 0) 8.0 else 0.0).toFloat()
-      val marginBottom = spec.optDouble("marginBottom", if (index < activeFlow.paragraphs.lastIndex) config.paragraphSpacing.toDouble() else 0.0).toFloat()
+      val marginTop = spec.number("marginTop", if (kind == "heading" && index > 0) 8.0 else 0.0).toFloat()
+      val marginBottom = spec.number("marginBottom", if (index < activeFlow.paragraphs.lastIndex) config.paragraphSpacing.toDouble() else 0.0).toFloat()
       apply(ParagraphHeightSpan(range, px(lineHeight), px(marginTop), px(marginBottom)), range)
     }
     val maxAttachmentWidth = max(1f, if (contentWidthPx > 0) contentWidthPx.toFloat() else resources.displayMetrics.widthPixels.toFloat())
     val fontPx = config.fontSize * textScale
-    val pending = mutableListOf<Pair<JSONObject, InlineAttachmentSpan>>()
     for (spec in activeFlow.attachments) {
-      val range = spec.range(content.length) ?: continue
+      val range = spec.range(activeFlow.text) ?: continue
       if (range.end - range.start != 1 || content[range.start] != '\ufffc') continue
       val span = InlineAttachmentSpan(spec, textScale, fontPx, maxAttachmentWidth, config.secondaryColor, config.textColor)
-      val key = assetKey(spec, fontPx, maxAttachmentWidth)
-      val cachedAsset = ProcessAttachmentRequests.cached(key)
-      cachedAsset?.let { span.setAsset(it) }
       apply(span, range)
-      if (cachedAsset == null && spec.optString("url").isNotBlank()) pending.add(spec to span)
+      attachments.add(AttachmentSlot(spec, span, range, fontPx, maxAttachmentWidth, textScale))
     }
     textView.setText(content, android.widget.TextView.BufferType.SPANNABLE)
     if (oldFlow != null && oldFlow.id == activeFlow.id && oldFlow.textVersion == activeFlow.textVersion && selectedStart >= 0 && selectedEnd >= 0) {
@@ -278,30 +293,91 @@ class RichTextView(context: Context, appContext: AppContext) : ExpoView(context,
     emitSelection(textView.selectionStart, textView.selectionEnd)
     requestLayout()
     post { if (!disposed && generation == currentGeneration) measureText() }
-    for ((spec, span) in pending) {
-      val scale = textScale
-      val key = assetKey(spec, fontPx, maxAttachmentWidth)
-      requests.add(ProcessAttachmentRequests.subscribe(key, spec, scale, fontPx, maxAttachmentWidth) { asset ->
-        if (asset == null) return@subscribe
+    post { if (!disposed && generation == currentGeneration) synchronizeAttachments() }
+  }
+
+  override fun onAttachedToWindow() {
+    super.onAttachedToWindow()
+    observedTree?.takeIf { it.isAlive }?.removeOnPreDrawListener(viewportListener)
+    observedTree = viewTreeObserver.also { it.addOnPreDrawListener(viewportListener) }
+    post { synchronizeAttachments() }
+  }
+
+  override fun onDetachedFromWindow() {
+    observedTree?.takeIf { it.isAlive }?.removeOnPreDrawListener(viewportListener)
+    observedTree = null
+    releaseAttachments()
+    super.onDetachedFromWindow()
+  }
+
+  override fun onWindowVisibilityChanged(visibility: Int) {
+    super.onWindowVisibilityChanged(visibility)
+    if (visibility != View.VISIBLE) releaseAttachments() else post { synchronizeAttachments() }
+  }
+
+  private fun releaseAttachments() {
+    lastAttachmentLayout = null
+    var changed = false
+    for (slot in attachments) {
+      changed = slot.visibility.setActive(false) || changed
+      slot.request?.cancel()
+      slot.request = null
+      slot.span.releaseAsset()
+    }
+    attachmentUpdates.clear()
+    if (changed) textView.invalidate()
+  }
+
+  private fun synchronizeAttachments() {
+    if (disposed || !isAttachedToWindow || windowVisibility != View.VISIBLE || !isShown) {
+      releaseAttachments(); return
+    }
+    val layout = textView.layout ?: return
+    // The outer ScrollView owns clipping. Its window rect remains available even
+    // when this flow is completely outside it, allowing one viewport of prefetch.
+    var ancestor = parent
+    var viewport: View = rootView
+    while (ancestor is View) {
+      if (ancestor is ScrollView) { viewport = ancestor; break }
+      ancestor = ancestor.parent
+    }
+    if (!viewport.getGlobalVisibleRect(viewportRect)) { releaseAttachments(); return }
+    textView.getLocationOnScreen(screenLocation)
+    val preload = viewportRect.height().toFloat()
+    val top = viewportRect.top - screenLocation[1] - textView.totalPaddingTop - preload
+    val bottom = viewportRect.bottom - screenLocation[1] - textView.totalPaddingTop + preload
+    if (lastAttachmentLayout === layout && lastViewportTop == top && lastViewportBottom == bottom) return
+    lastAttachmentLayout = layout; lastViewportTop = top; lastViewportBottom = bottom
+    for (slot in attachments) {
+      val line = layout.getLineForOffset(slot.range.start)
+      val active = intersectsAttachmentViewport(layout.getLineTop(line).toFloat(), layout.getLineBottom(line).toFloat(), top, bottom)
+      if (slot.visibility.setActive(active) && !active) {
+        slot.request?.cancel(); slot.request = null; slot.span.releaseAsset(); textView.invalidate()
+      }
+      val revision = slot.visibility.beginLoad() ?: continue
+      val currentGeneration = generation
+      val key = assetKey(slot.spec, slot.fontPx, slot.maxWidth)
+      slot.request = ProcessAttachmentRequests.subscribe(key, slot.spec, slot.scale, slot.fontPx, slot.maxWidth) { asset ->
         post {
-          if (!disposed && generation == currentGeneration) {
-            attachmentUpdates.add(AttachmentUpdate(currentGeneration, span, asset))
-            if (!attachmentFrameScheduled) {
-              attachmentFrameScheduled = true
-              postOnAnimation(attachmentFrame)
+          if (!disposed && generation == currentGeneration && slot.visibility.accepts(revision)) {
+            slot.request = null
+            if (asset != null) {
+              attachmentUpdates.add(AttachmentUpdate(currentGeneration, revision, slot, asset))
+              if (!attachmentFrameScheduled) { attachmentFrameScheduled = true; postOnAnimation(attachmentFrame) }
             }
           }
         }
-      })
+      }
     }
   }
 
   private fun applyAttachmentUpdates() {
     attachmentFrameScheduled = false
-    val updates = attachmentUpdates.filter { it.generation == generation }
+    val updates = attachmentUpdates.filter { it.generation == generation && it.slot.visibility.accepts(it.revision) }
     attachmentUpdates.clear()
     if (disposed || updates.isEmpty()) return
-    for (update in updates) update.span.setAsset(update.asset)
+    lastAttachmentLayout = null
+    for (update in updates) { update.slot.span.setAsset(update.asset); update.slot.visibility.hasAsset = true }
     // All completions received during this frame update the layout once, retaining selection.
     // Mutating ReplacementSpan metrics alone does not invalidate TextView's cached Layout.
     val start = textView.selectionStart
@@ -318,6 +394,7 @@ class RichTextView(context: Context, appContext: AppContext) : ExpoView(context,
     textView.invalidate()
     requestLayout()
     measureText()
+    synchronizeAttachments()
   }
 
   private fun measureText() {
@@ -342,8 +419,9 @@ class RichTextView(context: Context, appContext: AppContext) : ExpoView(context,
   private fun emitSelection(start: Int, end: Int) {
     if (disposed || suppressSelection) return
     val activeFlow = flow ?: return
-    val normalizedStart = if (start < 0 || end < 0 || start == end) -1 else min(start, end)
-    val normalizedEnd = if (normalizedStart < 0) -1 else max(start, end)
+    val range = if (textView.isTextSelectable) richTextRange(min(start, end), max(start, end), activeFlow.text) else null
+    val normalizedStart = range?.start ?: -1
+    val normalizedEnd = range?.end ?: -1
     val key = "${activeFlow.id}:${activeFlow.textVersion}:$normalizedStart:$normalizedEnd"
     if (key == lastSelectionKey) return
     lastSelectionKey = key
@@ -352,33 +430,25 @@ class RichTextView(context: Context, appContext: AppContext) : ExpoView(context,
 
   private fun emitAction(spec: JSONObject, kind: String) {
     val activeFlow = flow ?: return
-    val range = spec.range(activeFlow.text.length) ?: return
+    val range = spec.range(activeFlow.text) ?: return
     val id = when (kind) {
-      "link" -> spec.optString("nodeId")
-      "segment" -> spec.optString("actionId", spec.optString("id"))
-      else -> spec.optString("id")
-    }
-    val url = spec.optString("url").takeIf { it.isNotBlank() }
+      "link" -> spec.opt("nodeId") as? String
+      "segment" -> spec.opt("actionId") as? String
+      else -> spec.opt("id") as? String
+    } ?: return
+    val url = (spec.opt("url") as? String)?.takeIf { it.isNotBlank() }
     onAction(ActionEvent(activeFlow.id, activeFlow.textVersion, kind, id, range.start, range.end, url))
   }
 
   private fun copyText(start: Int, end: Int): String {
     val activeFlow = flow ?: return ""
-    val lower = start.coerceIn(0, activeFlow.text.length)
-    val upper = end.coerceIn(lower, activeFlow.text.length)
-    val result = StringBuilder()
-    var cursor = lower
-    for (attachment in activeFlow.attachments.sortedBy { it.optInt("start") }) {
-      val range = attachment.range(activeFlow.text.length) ?: continue
-      if (!range.intersects(lower, upper) || range.start < cursor) continue
-      result.append(activeFlow.text.substring(cursor, range.start))
-      result.append(attachment.optString("copyText", attachment.optString("latex", attachment.optString("alt", ""))))
-      cursor = min(upper, range.end)
+    val slots = activeFlow.attachments.mapNotNull { attachment ->
+      val range = attachment.range(activeFlow.text) ?: return@mapNotNull null
+      RichTextCopySlot(range, attachment.opt("copyText") as? String ?: attachment.opt("latex") as? String ?: attachment.opt("alt") as? String ?: "[图片]")
     }
-    result.append(activeFlow.text.substring(cursor, upper))
-    return result.toString()
+    return richTextSelectionText(activeFlow.text, start, end, slots) ?: ""
   }
 
   private fun px(dp: Float): Int = ceil(dp.coerceAtLeast(0f) * textScale).toInt()
-  private fun assetKey(spec: JSONObject, fontPx: Float, maxWidth: Float): String = "${spec.optString("kind")}|${spec.optString("url")}|${spec.optDouble("width")}|${spec.optDouble("height")}|$fontPx|$maxWidth|$textScale"
+  private fun assetKey(spec: JSONObject, fontPx: Float, maxWidth: Float): String = "${spec.optString("kind")}|${spec.optString("url")}|${spec.number("width")}|${spec.number("height")}|$fontPx|$maxWidth|$textScale"
 }

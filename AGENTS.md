@@ -21,7 +21,7 @@ Zhihu-- 是 Expo SDK 55 / React Native 0.83 / React 19 客户端，使用严格�
 - `api/`：HTTP 客户端、知乎接口与签名。接口函数应声明参数和返回类型；外部不确定数据先接为 `unknown`，随后规范化。
 - `components/`：跨页面组件。业务专属渲染优先放进对应 feature。
 - `features/rich-content/`：富文本运行时、fixtures、分析工具、测试和设计记录。业务代码只能从 `@/features/rich-content` 导入其能力。
-- `features/publishing/`：创作编辑器、媒体选择和发布序列化逻辑。
+- `features/publishing/`：创作编辑器、无损原块、账号隔离草稿、媒体生命周期和发布序列化逻辑，约定见其 `README.md`。
 - `hooks/`：共享状态和交互逻辑；TanStack Query key 与缓存形状必须保持一致。
 - `storage/`：SQLite、本地 Feed 缓存和曝光记录。schema 变化必须新增有序 migration，不能原地改写已发布 migration。
 - `store/`：Zustand store 及持久化迁移。认证、设置、主题、阅读进度和 telemetry 的持久边界分别维护。
@@ -39,7 +39,8 @@ Cookie、`z_c0`、`d_c0`、`_xsrf`、X-ZSE 请求头、完整 Axios config、Sen
 - 调试网络请求时只记录 method、脱敏后的 path、status 和独立 request id；异常对象不能未经筛选直接序列化；
 - 修改 `api/client.ts` 时检查成功与失败分支，避免请求头通过 `error.config` 泄露；
 - 登录 WebView 日志只允许输出去掉 query/fragment 的 origin/path。URL 解析失败只记录固定标记，不记录原始 URL；
-- 登录态主存于应用沙箱内的 `auth-storage.json`，用于容纳多账号 Cookie；旧 SecureStore Cookie 只在首次没有该文件时兼容导入。该文件目前没有静态加密，调整此链路时必须保留向后兼容迁移，不能静默丢失账号；
+- 登录态主存于应用沙箱内的 `auth-storage.json`，用于容纳多账号 Cookie；旧 SecureStore Cookie 只在首次没有该文件时兼容导入。文件及当前备份使用 AES-GCM，密钥单独存于 SecureStore；原生原子读取包含 Android `.bak` 恢复。调整此链路时必须保留旧明文和账号迁移，读取/密钥失败不得覆盖原文件，见 `docs/AUTH_STORAGE.md`；
+- 主色纯色背景使用运行时 `onPrimary`，文字强调和链接使用 `link`；NativeWind 语义颜色由根级 vars 同步。不要把 `Colors` 的运行时值固定进模块级 StyleSheet。
 - telemetry 必须经 `utils/telemetry.ts`，只传递脱敏的事件名、类型和数值；关闭设置后不得继续发送事件；
 - 真机捕获的知乎正文必须先脱敏，再放入 `features/rich-content/fixtures/inbox/`；确认结构后再登记到 `cases/` 和 manifest。
 
@@ -91,7 +92,7 @@ npm run check
 
 `npm run check` 是 CI 和发布前的聚合质量门禁，依次执行类型检查、只读 Biome、全部测试及富文本 fixture 分析。`npm run lint` 只读；需要写入修复时使用 `npm run lint:fix` 或 `npm run format`，运行后必须逐项复核 diff。
 
-专项测试脚本位于 `package.json`，覆盖富文本、主题、用户资料、发布、知乎 App API、网络失败、投票者、更新选择和阅读进度。修改相应模块时优先运行对应脚本，再运行完整 `npm run check`。
+专项测试文件位于 `tests/` 与 `features/rich-content/tests/`，覆盖富文本、主题、用户资料、发布、知乎 App API、网络失败、投票者、更新选择和阅读进度。修改相应模块时优先运行 `npm test -- <测试文件或目录> --runInBand`，再运行完整 `npm run check`。
 
 PR 与 `main` push 使用 `.github/workflows/ci.yml`；手动构建/发布使用 `.github/workflows/build.yaml`。发布工作流构建四个 Android 单 ABI APK 和一个未签名 iOS IPA：Android 使用 `EXPO_TOKEN` 加 4 个 telemetry Secret，iOS 使用其中 4 个 telemetry Secret；完整 workflow 运行需要配置全部 5 个 Secret。详见 `DEVELOPMENT.md`、`docs/RELEASING.md` 和 `docs/TELEMETRY.md`。
 

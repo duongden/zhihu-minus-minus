@@ -36,6 +36,24 @@ struct ModelsSmoke {
     expect(flow.selectionText(NSRange(location: 2, length: 2)) == nil, "Invalid native selections cannot produce a source string")
     expect(RichTextFlow.parse("{") == nil, "Malformed JSON is rejected")
     expect(RichTextFlow.parse("{\"id\":\"missing-fields\"}") == nil, "Flow identity and text are mandatory")
-    print("iOS rich text model smoke: 17 checks passed")
+    for offset: Any in ["1", 1.5, Double.infinity, Double.nan] {
+      expect(richTextRange(["start": offset, "end": 3], in: text) == nil, "Offsets cannot be coerced or truncated")
+    }
+    let visibility = RichTextAttachmentVisibility()
+    expect(visibility.beginLoad() == nil, "Offscreen attachments do not load")
+    visibility.setActive(true)
+    let first = visibility.beginLoad()!
+    expect(visibility.beginLoad() == nil, "A viewport visit loads at most once")
+    visibility.setActive(false)
+    visibility.setActive(true)
+    let second = visibility.beginLoad()!
+    expect(!visibility.accepts(first) && visibility.accepts(second), "Canceled results cannot apply after viewport reentry")
+    visibility.hasAsset = true
+    visibility.setActive(false)
+    expect(!visibility.hasAsset, "Offscreen attachments release their asset state")
+    expect(intersectsRichTextAttachmentViewport(top: 100, bottom: 140, viewportTop: 120, viewportBottom: 200), "Intersecting attachments activate")
+    expect(!intersectsRichTextAttachmentViewport(top: 100, bottom: 120, viewportTop: 120, viewportBottom: 200), "Touching ranges are offscreen")
+    expect(!intersectsRichTextAttachmentViewport(top: 100, bottom: 140, viewportTop: .nan, viewportBottom: 200), "Invalid viewport geometry is rejected")
+    print("iOS rich text model/viewport smoke: 28 checks passed")
   }
 }

@@ -4,6 +4,36 @@ export function isExpoInternalUrl(url: string): boolean {
   );
 }
 
+/** Login navigation logs must never include query, fragment or malformed input. */
+export function sanitizeNavigationUrlForLog(value: string): string {
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+      return '[non-web-url]';
+    }
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return '[invalid-url]';
+  }
+}
+
+/** External content may open web pages, but must not launch arbitrary schemes. */
+export function getSafeExternalUrl(value: string): string | null {
+  try {
+    const parsed = new URL(value.trim());
+    if (
+      (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') ||
+      parsed.username ||
+      parsed.password
+    ) {
+      return null;
+    }
+    return parsed.href;
+  } catch {
+    return null;
+  }
+}
+
 /** Only the development entry point calls this; production Zhihu links are separate. */
 export function parseRichContentDevelopmentUrl(value: string): string | null {
   let candidate = value;
@@ -17,6 +47,7 @@ export function parseRichContentDevelopmentUrl(value: string): string | null {
     }
   }
   const path = candidate.split(/[?#]/, 1)[0];
+  if (path === '/dev/native-validation') return path;
   if (!/^\/dev\/rich-content(?:\/[a-zA-Z0-9_-]+)?$/.test(path)) return null;
   // Synthetic cases can be opened directly for simulator checks. Ignore other
   // query fields; production URL routing never uses this development parser.

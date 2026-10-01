@@ -10,8 +10,11 @@ const dailyClient = axios.create({
 
 dailyClient.interceptors.response.use(
   (response) => response,
-  (error) => {
-    console.error('日报 API 错误:', error.response?.status, error.message);
+  (error: unknown) => {
+    const status = axios.isAxiosError(error)
+      ? error.response?.status
+      : undefined;
+    console.error('日报 API 请求失败', status ?? 'unknown');
     return Promise.reject(error);
   },
 );

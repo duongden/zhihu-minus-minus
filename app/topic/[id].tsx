@@ -173,6 +173,8 @@ export default function TopicDetail() {
           </View>
           <BouncyButton
             onPress={() => followMutation.mutate()}
+            disabled={followMutation.isPending}
+            accessibilityState={{ busy: followMutation.isPending }}
             className="px-4 py-1.5 rounded-full"
             style={[
               {
@@ -255,6 +257,7 @@ export default function TopicDetail() {
     tintColor,
     colorScheme,
     followMutation.mutate,
+    followMutation.isPending,
     refetchTopic,
   ]);
 

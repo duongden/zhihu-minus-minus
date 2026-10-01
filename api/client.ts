@@ -1,7 +1,16 @@
 import CookieManager from '@preeternal/react-native-cookie-manager';
-import axios, { type AxiosError, type AxiosResponse } from 'axios';
+import axios, {
+  type AxiosError,
+  type AxiosResponse,
+  CanceledError,
+  type InternalAxiosRequestConfig,
+} from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import { shouldImportLegacySession, useAuthStore } from '@/store/useAuthStore';
+import {
+  getAuthSessionVersion,
+  shouldImportLegacySession,
+  useAuthStore,
+} from '@/store/useAuthStore';
 import { useVerificationStore } from '@/store/useVerificationStore';
 import { classifyNetworkError } from '@/utils/networkFailure';
 import {
@@ -22,14 +31,27 @@ const apiClient = axios.create({
 
 const requestIds = new WeakMap<object, string>();
 let requestSequence = 0;
-const retriedRequests = new WeakSet<object>();
+interface SessionRequestConfig extends InternalAxiosRequestConfig {
+  zhihuSessionVersion?: number;
+  zhihuSessionRetried?: boolean;
+}
 
 interface SessionRefreshResult {
   success: boolean;
   invalidateSession: boolean;
 }
 
-const refreshPromises = new Map<string, Promise<SessionRefreshResult>>();
+const refreshPromises = new Map<number, Promise<SessionRefreshResult>>();
+
+function isCurrentSession(version: number | undefined): boolean {
+  return version === undefined || version === getAuthSessionVersion();
+}
+
+function requireCurrentSession(version: number | undefined): void {
+  if (!isCurrentSession(version)) {
+    throw new CanceledError('登录会话已切换');
+  }
+}
 
 export interface ApiRequestOptions {
   signal?: AbortSignal;
@@ -40,7 +62,7 @@ function getSafePath(url?: string) {
   try {
     return new URL(url, 'https://www.zhihu.com').pathname;
   } catch {
-    return url.split('?')[0];
+    return '<invalid-url>';
   }
 }
 
@@ -138,7 +160,14 @@ export function mergeCookieHeader(
     const name = firstPart.slice(0, separator).trim();
     const value = firstPart.slice(separator + 1).trim();
     if (!name) continue;
-    if (!value) cookies.delete(name);
+    const maxAge = header.match(/;\s*max-age\s*=\s*(-?\d+)/i);
+    const expires = header.match(/;\s*expires\s*=\s*([^;]+)/i);
+    const expired = maxAge
+      ? Number(maxAge[1]) <= 0
+      : expires
+        ? Date.parse(expires[1]) <= Date.now()
+        : false;
+    if (!value || expired) cookies.delete(name);
     else cookies.set(name, value);
   }
 
@@ -176,7 +205,7 @@ export async function buildZhihuAuthHeaders(
 }
 
 export function hasAuthenticationCookie(cookie: string | null | undefined) {
-  return typeof cookie === 'string' && /(?:^|;\s*)z_c0=/.test(cookie);
+  return typeof cookie === 'string' && /(?:^|;\s*)z_c0=[^;\s]+/.test(cookie);
 }
 
 function getStringField(value: unknown, field: string): string | null {
@@ -190,12 +219,15 @@ function getStringField(value: unknown, field: string): string | null {
 function persistResponseCookies(
   response: AxiosResponse<unknown>,
   requestCookie?: string,
+  sessionVersion = (response.config as SessionRequestConfig)
+    .zhihuSessionVersion,
 ) {
   const setCookieHeaders = getSetCookieHeaders(response.headers);
   if (setCookieHeaders.length === 0) return requestCookie ?? '';
 
   const authState = useAuthStore.getState();
   const currentCookie = authState.cookies || '';
+  if (!isCurrentSession(sessionVersion)) return currentCookie;
   const cookieAtRequest =
     requestCookie || getHeaderValue(response.config?.headers, 'Cookie');
   if (cookieAtRequest && currentCookie && cookieAtRequest !== currentCookie) {
@@ -208,21 +240,28 @@ function persistResponseCookies(
     cookieAtRequest || currentCookie,
     setCookieHeaders,
   );
-  // Persist deletions too (for example `z_c0=; Max-Age=0`), otherwise a
-  // logged-out session could remain usable from the file-backed store.
-  if (mergedCookie !== currentCookie) {
-    authState.updateActiveAccountCookies(mergedCookie);
+  // The auth store represents authenticated sessions. Anonymous response
+  // cookies must not make callers using `!!cookies` enter signed-in mode.
+  // Persist authentication deletions even when anonymous cookies remain.
+  const authenticatedCookie = hasAuthenticationCookie(mergedCookie)
+    ? mergedCookie
+    : '';
+  if (
+    authenticatedCookie !== currentCookie &&
+    (authenticatedCookie || currentCookie)
+  ) {
+    authState.updateActiveAccountCookies(authenticatedCookie);
   }
   return mergedCookie;
 }
 
 async function performZhihuSessionRefresh(
   cookie: string,
+  sessionVersion: number,
 ): Promise<SessionRefreshResult> {
   if (!hasAuthenticationCookie(cookie)) {
     return { success: false, invalidateSession: false };
   }
-  const accountIndexAtStart = useAuthStore.getState().activeAccountIndex;
 
   const refreshClient = axios.create({
     baseURL: 'https://www.zhihu.com',
@@ -247,17 +286,21 @@ async function performZhihuSessionRefresh(
         },
       },
     );
-    const tokenCookie = persistResponseCookies(tokenResponse, cookie);
-    if (useAuthStore.getState().activeAccountIndex !== accountIndexAtStart) {
+    if (!isCurrentSession(sessionVersion)) {
       return { success: false, invalidateSession: false };
     }
+    const tokenCookie = persistResponseCookies(
+      tokenResponse,
+      cookie,
+      sessionVersion,
+    );
     const refreshToken = getStringField(tokenResponse.data, 'refresh_token');
     if (!refreshToken) {
       return { success: false, invalidateSession: true };
     }
     // Account switching can happen while the first refresh request is in
     // flight. Do not exchange the old account's token after that switch.
-    if (useAuthStore.getState().activeAccountIndex !== accountIndexAtStart) {
+    if (!isCurrentSession(sessionVersion)) {
       return { success: false, invalidateSession: false };
     }
 
@@ -294,20 +337,17 @@ async function performZhihuSessionRefresh(
         },
       },
     );
-    if (useAuthStore.getState().activeAccountIndex !== accountIndexAtStart) {
+    if (!isCurrentSession(sessionVersion)) {
       return { success: false, invalidateSession: false };
     }
     const finalCookie = persistResponseCookies(
       oauthResponse,
       tokenCookie || cookie,
+      sessionVersion,
     );
     return {
-      success: hasAuthenticationCookie(
-        useAuthStore.getState().cookies || finalCookie || tokenCookie || cookie,
-      ),
-      invalidateSession: !hasAuthenticationCookie(
-        useAuthStore.getState().cookies || finalCookie || tokenCookie || cookie,
-      ),
+      success: hasAuthenticationCookie(finalCookie),
+      invalidateSession: !hasAuthenticationCookie(finalCookie),
     };
   } catch (error) {
     const status = axios.isAxiosError(error)
@@ -322,14 +362,19 @@ async function performZhihuSessionRefresh(
   }
 }
 
-function refreshZhihuSession(cookie: string): Promise<SessionRefreshResult> {
-  const existing = refreshPromises.get(cookie);
+function refreshZhihuSession(
+  cookie: string,
+  sessionVersion: number,
+): Promise<SessionRefreshResult> {
+  const existing = refreshPromises.get(sessionVersion);
   if (existing) return existing;
 
-  const promise = performZhihuSessionRefresh(cookie).finally(() => {
-    refreshPromises.delete(cookie);
-  });
-  refreshPromises.set(cookie, promise);
+  const promise = performZhihuSessionRefresh(cookie, sessionVersion).finally(
+    () => {
+      refreshPromises.delete(sessionVersion);
+    },
+  );
+  refreshPromises.set(sessionVersion, promise);
   return promise;
 }
 
@@ -343,6 +388,9 @@ apiClient.interceptors.request.use(async (config) => {
   if (!useAuthStore.persist.hasHydrated()) {
     await useAuthStore.persist.rehydrate();
   }
+  const sessionConfig = config as SessionRequestConfig;
+  requireCurrentSession(sessionConfig.zhihuSessionVersion);
+  let sessionVersion = getAuthSessionVersion();
 
   // A hydrated guest state is authoritative. Legacy cookie stores are read
   // only when no file-backed auth state has ever existed on this install.
@@ -351,8 +399,10 @@ apiClient.interceptors.request.use(async (config) => {
 
   if (shouldImportLegacyCookie) {
     cookie = (await SecureStore.getItemAsync('user_cookies')) || '';
+    requireCurrentSession(sessionVersion);
     if (cookie) {
       useAuthStore.getState().setCookies(cookie);
+      sessionVersion = getAuthSessionVersion();
     }
   }
 
@@ -362,6 +412,7 @@ apiClient.interceptors.request.use(async (config) => {
         'https://www.zhihu.com',
         true,
       );
+      requireCurrentSession(sessionVersion);
       if (nativeCookies) {
         const nativeCookie = Object.entries(nativeCookies)
           .map(([name, c]) => `${name}=${c.value}`)
@@ -379,10 +430,12 @@ apiClient.interceptors.request.use(async (config) => {
             hasAuthenticationCookie(cookie)
           ) {
             useAuthStore.getState().setCookies(cookie);
+            sessionVersion = getAuthSessionVersion();
           }
         }
       }
-    } catch {
+    } catch (error) {
+      if (axios.isCancel(error)) throw error;
       console.warn('获取原生 Cookie 失败');
     }
   }
@@ -396,14 +449,19 @@ apiClient.interceptors.request.use(async (config) => {
     const fullUrl = apiClient.getUri(config);
     const configuredReferer = getHeaderValue(config.headers, 'Referer');
     const authHeaders = await buildZhihuAuthHeaders(fullUrl, cookie, body);
+    requireCurrentSession(sessionVersion);
     if (configuredReferer) authHeaders.Referer = configuredReferer;
     Object.assign(config.headers, authHeaders);
   }
+  sessionConfig.zhihuSessionVersion = sessionVersion;
   return config;
 });
 
 apiClient.interceptors.response.use(
   (response) => {
+    requireCurrentSession(
+      (response.config as SessionRequestConfig).zhihuSessionVersion,
+    );
     persistResponseCookies(response);
     const requestId = getRequestId(response.config);
     console.log(
@@ -415,19 +473,30 @@ apiClient.interceptors.response.use(
     const requestId = getRequestId(error.config);
     const method = error.config?.method?.toUpperCase() || '<unknown>';
     const path = getSafePath(error.config?.url);
+    const sessionConfig = error.config as SessionRequestConfig | undefined;
+    requireCurrentSession(sessionConfig?.zhihuSessionVersion);
     let sessionInvalidated = false;
     if (error.response?.status === 401) {
       const requestCookie = getHeaderValue(error.config?.headers, 'Cookie');
-      if (error.config && requestCookie && !retriedRequests.has(error.config)) {
-        retriedRequests.add(error.config);
-        const refreshResult = await refreshZhihuSession(requestCookie);
+      if (
+        sessionConfig &&
+        requestCookie &&
+        !sessionConfig.zhihuSessionRetried
+      ) {
+        // Axios clones config on retry; enumerable metadata survives mergeConfig.
+        sessionConfig.zhihuSessionRetried = true;
+        const refreshResult = await refreshZhihuSession(
+          requestCookie,
+          sessionConfig.zhihuSessionVersion ?? getAuthSessionVersion(),
+        );
+        requireCurrentSession(sessionConfig.zhihuSessionVersion);
         if (refreshResult.success) {
-          return apiClient.request(error.config);
+          return apiClient.request(sessionConfig);
         }
         const authState = useAuthStore.getState();
         if (
           refreshResult.invalidateSession &&
-          authState.cookies === requestCookie
+          isCurrentSession(sessionConfig.zhihuSessionVersion)
         ) {
           authState.updateActiveAccountCookies('');
           sessionInvalidated = true;

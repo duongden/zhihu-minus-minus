@@ -386,7 +386,7 @@ export default function AppearanceSettings() {
                       style={[
                         styles.optionChipText,
                         isSelected && {
-                          color: Colors[colorScheme].textInverse,
+                          color: Colors[colorScheme].onPrimary,
                           fontWeight: 'bold',
                         },
                       ]}
@@ -424,7 +424,7 @@ export default function AppearanceSettings() {
                       style={[
                         styles.optionChipText,
                         isSelected && {
-                          color: Colors[colorScheme].textInverse,
+                          color: Colors[colorScheme].onPrimary,
                           fontWeight: 'bold',
                         },
                       ]}
@@ -462,7 +462,7 @@ export default function AppearanceSettings() {
                       style={[
                         styles.optionChipText,
                         isSelected && {
-                          color: Colors[colorScheme].textInverse,
+                          color: Colors[colorScheme].onPrimary,
                           fontWeight: 'bold',
                         },
                       ]}

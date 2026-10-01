@@ -37,6 +37,9 @@ internal final class RichTextAttachment: NSTextAttachment {
     return nil
   }
 
+  /** Retain bounds so scrolling offscreen never changes text layout. */
+  func releaseAsset() { image = nil }
+
   /** Main-thread only; the owner invalidates layout and restores its current selection. */
   func update(asset: RichTextAttachmentAsset) {
     assert(Thread.isMainThread)

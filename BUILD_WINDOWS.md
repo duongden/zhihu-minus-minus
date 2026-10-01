@@ -4,9 +4,9 @@
 
 文章大半在处理网络环境和安卓打包的常规问题，对于 windows 打包生产 apk 核心是下面这几行
 
-```bash
+```powershell
 # 1. 生成原生 Android 工程
-npx expo prebuild
+npx expo prebuild --platform android
 
 # 2. 禁用 Sentry 自动上传（本地没有 auth token 会卡住）
 $env:SENTRY_DISABLE_AUTO_UPLOAD = "true"; $env:SENTRY_NO_UPLOAD = "1"
@@ -61,12 +61,12 @@ platform-tools
 
 ```powershell
 npm ci               # 按 package-lock.json 安装；postinstall 会自动执行 patch-package
-npx expo prebuild    # 生成 android/ 目录（已被 .gitignore 忽略）
+npx expo prebuild --platform android    # 生成 android/ 目录（已被 .gitignore 忽略）
 ```
 
 **重要**：`android/` 是 `expo prebuild` 的生成物，不入库。这意味着：
 1. 下文对 `android/` 内文件的所有手工修改（镜像 URL 等）在**每次重新 prebuild 后都会被重置**，需要重做；
-2. 反过来，拉取上游代码后 `android/` **不会自动更新**——若 `app.json` 的 `version` 或其他原生字段变了，必须重新 prebuild（或手改 `android/app/build.gradle` 的 `versionName`），否则打出的包版本号是旧的。
+2. 反过来，拉取上游代码后 `android/` **不会自动更新**——若 `app.json` 的 `version` 或其他原生字段变了，必须重新 prebuild，否则打出的包版本号或原生配置可能仍是旧的。
 
 ## 三、国内网络镜像配置（关键）
 
@@ -132,14 +132,14 @@ Push-Location android
 Pop-Location
 ```
 
-产物：`android/app/build/outputs/apk/debug/app-debug.apk`（约 42 MB）。
+产物位于 `android/app/build/outputs/apk/debug/`。启用本项目 ABI split 后，ARM64 文件名为 `app-arm64-v8a-debug.apk`，不能继续使用旧的 universal `app-debug.apk` 路径；以实际目录输出为准。
 
-- `-PreactNativeArchitectures=arm64-v8a`：项目默认编译 4 个 ABI，只编目标机型的单 ABI 可提速约 4 倍（绝大多数现代手机是 arm64-v8a）。
+- `-PreactNativeArchitectures=arm64-v8a`：原生编译与 ABI split 都只选择 ARM64，产物为 `app-arm64-v8a-debug.apk`（Release 为 `app-arm64-v8a-release.apk`）；实际提速取决于缓存与机器。可以用逗号指定多个受支持 ABI；空值或非法 ABI 会中止构建。首次使用更新后的插件时先重新执行 `npx expo prebuild --platform android --no-install`，它会更新已有 split 块。缺省配置仍生成四种独立 ABI APK，CI 的四 ABI 构建不受影响。构建目录可能残留此前的 APK，以本次 `output-metadata.json` 和 APK 内的 `lib/` 为准。
 - **debug 包不打包 JS**（`debuggableVariants` 默认含 `debug`），必须连 Metro 才能运行，不能脱机日用；它是 dev-client，启动进开发菜单。
 
 ### 4.2 Release 包（可脱机日用）
 
-Release 构建会触发 Sentry sourcemap 上传，本地没有 `SENTRY_AUTH_TOKEN` 会在该阶段失败，须先禁用（与 CI 工作流同样的做法）：
+Release 构建会触发 Sentry sourcemap 上传，本地没有 `SENTRY_AUTH_TOKEN` 时应禁用上传。CI 则提供 Secret 并执行上传：
 
 ```powershell
 $env:SENTRY_DISABLE_AUTO_UPLOAD = "true"
@@ -149,7 +149,7 @@ Push-Location android
 Pop-Location
 ```
 
-产物：`android/app/build/outputs/apk/release/app-release.apk`（约 22 MB，内置 JS，可离线运行）。增量构建约 7 分钟。
+产物位于 `android/app/build/outputs/apk/release/`，ARM64 文件名为 `app-arm64-v8a-release.apk`，内置 JS，可离线运行。包体积和构建时间随依赖、缓存与机器变化，不沿用旧版本测量作为当前基线。
 
 > 注意：`expo prebuild` 生成的本地 Android 工程通常使用本机的 debug keystore 为这个 release 变体签名；GitHub Actions 中的 EAS preview 构建可能使用 EAS 管理的另一份凭据。只有两个 APK 的 applicationId 与签名证书都一致时才能互相覆盖安装。若签名不同，需要先卸载旧包（会清除应用数据），或显式为两条构建链配置同一份 keystore。
 
@@ -158,7 +158,7 @@ Pop-Location
 ## 五、装机与开发调试（Debug 包）
 
 ```powershell
-adb install -r android\app\build\outputs\apk\debug\app-debug.apk
+adb install -r android\app\build\outputs\apk\debug\app-arm64-v8a-debug.apk
 adb reverse tcp:8081 tcp:8081
 npx expo start --dev-client
 # 让 dev-client 直接连上本机 Metro：
@@ -204,6 +204,6 @@ adb shell am start -a android.intent.action.VIEW -d "https://zhuanlan.zhihu.com/
 | 换镜像后仍零星 handshake 失败 | 高并发 TLS 连接被 RST | §3.3 提高重试 + `--no-parallel` |
 | assembleRelease 在 Sentry 阶段失败 | 缺 SENTRY_AUTH_TOKEN | §4.2 两个环境变量禁用上传 |
 | release 构建中 Metro 崩溃（exit 7） | .cxx 临时目录竞争 | 构建期间不开 Metro |
-| 打出的包版本号是旧的 | android/ 生成物未随 git 更新 | 重新 prebuild 或手改 versionName |
+| 打出的包版本号是旧的 | android/ 生成物未随 git 更新 | 重新 prebuild |
 | tsc 满屏路由类型错误 | typedRoutes 类型未生成 | 先 `npx expo start` 一次，生成 `.expo/types` |
 | ColorOS 装不上新包 | 系统拦截全新包名 | 覆盖安装放行；或 root 后 pm install |

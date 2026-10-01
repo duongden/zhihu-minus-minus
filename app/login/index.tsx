@@ -1,7 +1,7 @@
 import CookieManager from '@preeternal/react-native-cookie-manager';
 import { useQueryClient } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, StyleSheet } from 'react-native';
 import {
   WebView,
@@ -14,10 +14,16 @@ import { BouncyButton } from '@/components/BouncyButton';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
-import { useAuthStore } from '@/store/useAuthStore';
+import {
+  getAuthSessionVersion,
+  saveAuthState,
+  useAuthStore,
+} from '@/store/useAuthStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { useVerificationStore } from '@/store/useVerificationStore';
 import { syncNativeSessionCookies } from '@/utils/authSession';
+import { showToast } from '@/utils/toast';
+import { sanitizeNavigationUrlForLog } from '@/utils/url';
 
 export default function LoginScreen() {
   const colorScheme = useColorScheme();
@@ -25,14 +31,92 @@ export default function LoginScreen() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [loading, setLoading] = useState(true);
+  const [saveFailedVersion, setSaveFailedVersion] = useState<number | null>(
+    null,
+  );
   const webViewRef = useRef<WebView<WebViewProps>>(null);
   const borderColor = Colors[colorScheme].border;
+  const capturingSessionRef = useRef(false);
+  const abandonedRef = useRef(false);
+  useEffect(() => {
+    abandonedRef.current = false;
+    return () => {
+      abandonedRef.current = true;
+    };
+  }, []);
+
+  const persistAndFinishLogin = async (savingSessionVersion: number) => {
+    if (
+      abandonedRef.current ||
+      getAuthSessionVersion() !== savingSessionVersion
+    )
+      return;
+    const saved = await saveAuthState();
+    if (
+      abandonedRef.current ||
+      getAuthSessionVersion() !== savingSessionVersion
+    )
+      return;
+    if (!saved) {
+      setSaveFailedVersion(savingSessionVersion);
+      showToast('登录状态未保存，请检查存储空间后重试');
+      return;
+    }
+    setSaveFailedVersion(null);
+    useVerificationStore.getState().hide(); // 登录成功后强制关闭验证弹窗
+    queryClient.clear(); // 清理缓存，强制重新拉取数据 (解决 feed 不更新问题)
+    console.log('✅ 登录会话已保存');
+
+    // 成功后跳转，确保存储生效
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      const useNativeIOSBottomTabs =
+        Platform.OS === 'ios' &&
+        useSettingsStore.getState().useNativeIOSBottomTabs;
+      if (useNativeIOSBottomTabs) {
+        router.replace('/(tabs)/profile');
+      } else {
+        // 使用参数跳转，确保回到主容器 index.tsx 从而保留自定义 TabBar
+        router.replace({
+          pathname: '/(tabs)',
+          params: { tab: 'profile' },
+        });
+      }
+    }
+  };
+
+  const retrySavingSession = async () => {
+    if (
+      abandonedRef.current ||
+      capturingSessionRef.current ||
+      saveFailedVersion === null
+    )
+      return;
+    if (getAuthSessionVersion() !== saveFailedVersion) {
+      setSaveFailedVersion(null);
+      showToast('登录会话已变化，请重新登录');
+      return;
+    }
+    capturingSessionRef.current = true;
+    try {
+      await persistAndFinishLogin(saveFailedVersion);
+    } finally {
+      capturingSessionRef.current = false;
+    }
+  };
 
   const handleCookies = async (web_cookie: string) => {
+    if (abandonedRef.current || capturingSessionRef.current) return;
+    capturingSessionRef.current = true;
     // 关键：只有当包含 z_c0 (登录 Token) 时才认为是有效的登录 Cookie
     // 获取 httpOnly cookie，webview 注入 js 是不行的，需要原生支持
+    const capturingVersion = getAuthSessionVersion();
     try {
       const cookies = await CookieManager.get('https://www.zhihu.com', true);
+
+      if (abandonedRef.current || getAuthSessionVersion() !== capturingVersion)
+        return;
 
       // 合并 web_cookie (来自 document.cookie) 和 CookieManager 的结果
       const mergedCookies: Record<string, string> = {};
@@ -73,57 +157,63 @@ export default function LoginScreen() {
           .map(([name, value]) => `${name}=${value}`)
           .join('; ');
 
-        // 同步原生 Cookie 与兼容备份；超长 Cookie 会主动清除旧备份。
+        useAuthStore.getState().setCookies(cookieString);
+        const loginSessionVersion = getAuthSessionVersion();
+        // Native writes are serialized and stop when this session changes.
         try {
           await syncNativeSessionCookies(cookieString);
         } catch {
           console.warn('⚠️ 无法同步原生登录会话');
         }
-
-        useAuthStore.getState().setCookies(cookieString);
+        if (
+          abandonedRef.current ||
+          getAuthSessionVersion() !== loginSessionVersion
+        )
+          return;
 
         // 🟢 预抓取用户信息，确保账号列表立即完整
         try {
           const me = await getMe();
+          if (
+            abandonedRef.current ||
+            getAuthSessionVersion() !== loginSessionVersion
+          )
+            return;
           if (me) {
-            useAuthStore.getState().addAccount(cookieString, me);
+            const authState = useAuthStore.getState();
+            authState.addAccount(authState.cookies || cookieString, me);
           }
         } catch {
+          if (
+            abandonedRef.current ||
+            getAuthSessionVersion() !== loginSessionVersion
+          )
+            return;
           console.error('⚠️ 预抓取用户信息失败（不影响登录）');
         }
 
-        useVerificationStore.getState().hide(); // 登录成功后强制关闭验证弹窗
-        queryClient.clear(); // 清理缓存，强制重新拉取数据 (解决 feed 不更新问题)
-        console.log('✅ 登录会话已保存');
-
-        // 成功后跳转，确保存储生效
-        if (router.canGoBack()) {
-          router.back();
-        } else {
-          const useNativeIOSBottomTabs =
-            Platform.OS === 'ios' &&
-            useSettingsStore.getState().useNativeIOSBottomTabs;
-          if (useNativeIOSBottomTabs) {
-            router.replace('/(tabs)/profile');
-          } else {
-            // 使用参数跳转，确保回到主容器 index.tsx 从而保留自定义 TabBar
-            router.replace({
-              pathname: '/(tabs)',
-              params: { tab: 'profile' },
-            });
-          }
-        }
+        await persistAndFinishLogin(getAuthSessionVersion());
       } else if (hasZc0 && !hasZseCk) {
         console.log('⚠️ 捕获到 z_c0 但缺失 __zse_ck，请在验证页面稍候...');
       }
     } catch {
-      console.error('❌ 获取 Cookie 失败');
+      if (!abandonedRef.current) {
+        console.error('❌ 获取 Cookie 失败');
+        showToast('登录状态未更新，请先恢复已保存账号或稍后重试');
+      }
+    } finally {
+      capturingSessionRef.current = false;
     }
   };
 
   return (
     <View className="flex-1">
       <Stack.Screen options={{ title: '登录知乎' }} />
+      {saveFailedVersion !== null && (
+        <BouncyButton onPress={() => void retrySavingSession()} className="p-3">
+          <Text type="primary">登录状态保存失败，点此重试</Text>
+        </BouncyButton>
+      )}
       {/* 顶部标题栏 */}
       <View
         type="surface"
@@ -133,6 +223,7 @@ export default function LoginScreen() {
         <BouncyButton
           className="p-2 rounded-full"
           onPress={() => {
+            abandonedRef.current = true;
             if (router.canGoBack()) {
               router.back();
             } else {
@@ -158,14 +249,7 @@ export default function LoginScreen() {
         }}
         onNavigationStateChange={(navState: WebViewNavigation) => {
           const { url } = navState;
-          let safeUrl = url.split('?')[0];
-          try {
-            const parsedUrl = new URL(url);
-            safeUrl = `${parsedUrl.origin}${parsedUrl.pathname}`;
-          } catch {
-            // Keep only the URL path when navigation reports a non-standard URL.
-          }
-          console.log('🌐 导航至:', safeUrl);
+          console.log('🌐 导航至:', sanitizeNavigationUrlForLog(url));
           if (
             url === 'https://www.zhihu.com/' ||
             url === 'https://www.zhihu.com'

@@ -44,5 +44,6 @@ yarn-error.*
 /ios
 /android
 /build
+/*.ipa
 /modules/*/android/.gradle/
 /modules/*/android/build/

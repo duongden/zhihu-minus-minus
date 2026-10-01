@@ -49,9 +49,13 @@ import { BouncyButton } from '@/components/BouncyButton';
 import { ImageActionBottomSheet } from '@/components/ImageActionBottomSheet';
 import { ImagePreviewModal } from '@/components/ImagePreviewModal';
 import { ActionSheet } from '@/components/overlays/ActionSheet';
-import { Text, useThemeColor, View } from '@/components/Themed';
+import {
+  Text,
+  useRuntimeThemeColors,
+  useThemeColor,
+  View,
+} from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
-import Colors from '@/constants/Colors';
 import { typography } from '@/constants/designTokens';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import type {
@@ -60,7 +64,11 @@ import type {
   ZhihuSegmentReaction,
 } from '@/types/zhihu';
 import { showToast } from '@/utils/toast';
-import { extractZhihuRedirectTarget, parseZhihuUrl } from '@/utils/url';
+import {
+  extractZhihuRedirectTarget,
+  getSafeExternalUrl,
+  parseZhihuUrl,
+} from '@/utils/url';
 import { getZhihuErrorStatus } from '@/utils/zhihuError';
 import type { ZhihuDocument, ZhihuLinkCardBlock } from '../document';
 import {
@@ -202,7 +210,7 @@ function isLinkCardElement(element: LinkCardElementLike): boolean {
 }
 
 export const LinkCard: React.FC<LinkCardProps> = React.memo(
-  ({ url, title, image, cardInfo, onPress, surfaceColor, colorScheme }) => {
+  ({ url, title, image, cardInfo, onPress, surfaceColor }) => {
     const metadata = useMemo(() => parseLinkCardMetadata(cardInfo), [cardInfo]);
     const display = asRecord(metadata?.display) as LinkCardDisplay | null;
     const displayTitle = getString(display?.title);
@@ -212,7 +220,8 @@ export const LinkCard: React.FC<LinkCardProps> = React.memo(
     const description = stripHtml(getString(display?.desc));
     const internalPath = useMemo(() => parseZhihuUrl(cardUrl), [cardUrl]);
     const isInternal = internalPath !== null;
-    const primaryColor = useThemeColor({}, 'primary');
+    const themeColors = useRuntimeThemeColors();
+    const primaryColor = themeColors.link;
     const cardBorderColor = useThemeColor({}, 'contentBorderStrong');
 
     const parsedId = useMemo(() => {
@@ -336,9 +345,7 @@ export const LinkCard: React.FC<LinkCardProps> = React.memo(
             <Image
               source={{ uri: fetchedImage }}
               className="w-full h-[120px] rounded-lg mt-2.5"
-              style={[
-                { backgroundColor: Colors[colorScheme].backgroundSecondary },
-              ]}
+              style={[{ backgroundColor: themeColors.backgroundSecondary }]}
             />
           )}
         </BouncyButton>
@@ -564,19 +571,12 @@ const LazyImage: React.FC<{
   colorScheme: 'light' | 'dark';
   borderRadius?: number;
   onLoad?: ImageProps['onLoad'];
-}> = ({
-  src,
-  style,
-  resizeMode,
-  resizeMethod,
-  colorScheme,
-  borderRadius = 12,
-  onLoad,
-}) => {
+}> = ({ src, style, resizeMode, resizeMethod, borderRadius = 12, onLoad }) => {
   const [visible, setVisible] = useState(false);
   const containerRef = useRef<RNView>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const placeholderColor = useThemeColor({}, 'contentPlaceholder');
+  const themeColors = useRuntimeThemeColors();
+  const placeholderColor = themeColors.contentPlaceholder;
 
   useEffect(() => {
     if (visible) return;
@@ -629,10 +629,7 @@ const LazyImage: React.FC<{
           onLoad={onLoad}
         />
       ) : (
-        <ActivityIndicator
-          size="small"
-          color={Colors[colorScheme].textTertiary}
-        />
+        <ActivityIndicator size="small" color={themeColors.textTertiary} />
       )}
     </RNView>
   );
@@ -641,6 +638,7 @@ const LazyImage: React.FC<{
 const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
   const { src, width: attrWidth, height: attrHeight, eeimg } = tnode.attributes;
   const rendererProps = useRendererProps('img');
+  const themeColors = useRuntimeThemeColors();
   const [svgError, setSvgError] = useState(false);
   const [intrinsicAspectRatio, setIntrinsicAspectRatio] = useState<
     number | null
@@ -654,7 +652,6 @@ const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
     colorScheme,
     variant,
   } = rendererProps as unknown as ImageRendererProps;
-  const themeColors = Colors[colorScheme === 'dark' ? 'dark' : 'light'];
 
   const originalWidth = parseInt(attrWidth as string, 10) || 0;
   const originalHeight = parseInt(attrHeight as string, 10) || 0;
@@ -702,7 +699,7 @@ const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
 
   // 如果是公式，且是暗色模式，使用 tintColor 将黑色公式变为白色
   if (isFormula && colorScheme === 'dark') {
-    imageStyle.tintColor = themeColors.textInverse;
+    imageStyle.tintColor = themeColors.text;
   }
 
   // 确保 src 有协议
@@ -907,11 +904,12 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
       (useNative && settings.richContentRenderer === 'webview'
         ? 'rnrh'
         : settings.richContentRenderer);
-    const textColor = useThemeColor({}, 'text');
+    const themeColors = useRuntimeThemeColors();
+    const textColor = themeColors.text;
     const textSecondaryColor = useThemeColor({}, 'textSecondary');
     const borderColor = useThemeColor({}, 'border');
     const contentBorderColor = useThemeColor({}, 'contentBorder');
-    const inverseTextColor = useThemeColor({}, 'textInverse');
+    const inverseTextColor = themeColors.onPrimary;
     const surfaceColor = useThemeColor({}, 'surface');
     const router = useRouter();
 
@@ -965,9 +963,11 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
         if (internalPath && internalPath !== '/') {
           router.push(internalPath as Href);
         } else {
-          Linking.openURL(realUrl).catch((err) =>
-            console.error('Failed to open URL:', err),
-          );
+          const externalUrl = getSafeExternalUrl(realUrl);
+          if (externalUrl)
+            Linking.openURL(externalUrl).catch(() =>
+              console.error('Failed to open rich content URL'),
+            );
         }
       },
       [router],
@@ -1196,6 +1196,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
     );
 
     const primaryColor = useThemeColor({}, 'primary');
+    const linkColor = themeColors.link;
     const lightPrimaryColor = useThemeColor({}, 'primary_40');
 
     const classesStyles = useMemo(
@@ -1351,7 +1352,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
         },
         span: { color: textColor },
         div: { color: textColor },
-        a: { color: primaryColor, textDecorationLine: 'none' },
+        a: { color: linkColor, textDecorationLine: 'none' },
         code: {
           backgroundColor: borderColor,
           borderRadius: 4,
@@ -1368,6 +1369,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
         contentBorderColor,
         metrics,
         primaryColor,
+        linkColor,
         typographyOptions?.justify,
       ],
     );
@@ -1711,7 +1713,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
                       : ('heart-outline' as const),
                     label: `${activeSegment.like_count || 0} 赞同`,
                     color: activeSegment.is_like
-                      ? Colors[colorScheme].danger
+                      ? themeColors.danger
                       : undefined,
                     disabled:
                       toggleSegmentLikeMutation.isPending ||

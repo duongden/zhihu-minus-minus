@@ -74,8 +74,8 @@ export async function saveImageToGallery(imageUrl: string): Promise<boolean> {
     showToast('当前设备未获得相册权限，无法保存');
     cleanupTempFile(targetUri, imageUrl);
     return false;
-  } catch (error) {
-    console.error('保存图片失败:', error);
+  } catch {
+    console.error('保存图片失败');
     showToast('保存图片失败');
     return false;
   }
@@ -121,8 +121,8 @@ export async function shareImage(imageUrl: string): Promise<boolean> {
 
     cleanupTempFile(targetUri, imageUrl);
     return true;
-  } catch (error) {
-    console.error('分享图片失败:', error);
+  } catch {
+    console.error('分享图片失败');
     showToast('分享图片失败');
     return false;
   }
@@ -137,8 +137,8 @@ export async function copyImageUrl(imageUrl: string): Promise<boolean> {
     await Clipboard.setStringAsync(imageUrl);
     showToast('图片链接已复制到剪贴板');
     return true;
-  } catch (error) {
-    console.error('复制图片链接失败:', error);
+  } catch {
+    console.error('复制图片链接失败');
     showToast('复制失败');
     return false;
   }

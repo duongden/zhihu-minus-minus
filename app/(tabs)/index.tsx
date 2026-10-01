@@ -60,6 +60,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { hasReusableAnswerDetail } from '@/features/rich-content';
 import { useCollapsibleChromeScroll } from '@/hooks/useCollapsibleChromeScroll';
+import { useScopedAsyncValue } from '@/hooks/useScopedAsyncValue';
 import {
   type FeedCacheContext,
   feedCacheRepository,
@@ -243,12 +244,12 @@ export default function HomeScreen() {
   useEffect(() => {
     if (params.tab && isTabType(params.tab)) {
       const idx = currentTabs.indexOf(params.tab);
-      if (idx >= 0 && idx !== currentPage) {
+      if (idx >= 0) {
         pagerRef.current?.setPage(idx);
         setCurrentPage(idx);
       }
     }
-  }, [params.tab, currentTabs, currentPage]);
+  }, [params.tab, currentTabs]);
 
   const [scrolledTabs, setScrolledTabs] = useState<Record<number, boolean>>({});
   const listRefs = useRef<Array<TabListHandle | null>>([]);
@@ -929,71 +930,45 @@ const FeedList = React.forwardRef<
     // 补页预算耗尽（仍有下一页但已停止自动补）——ref 不触发重渲染，
     // 用一个 state 让 footer 能如实告知用户列表为何偏短。
     const [autoFetchExhausted, setAutoFetchExhausted] = useState(false);
-    const [recentExposureKeys, setRecentExposureKeys] =
-      useState<Set<string> | null>(() =>
-        localDedupEnabled ? null : new Set(),
-      );
-
-    const [initialFeedCache, setInitialFeedCache] = useState<{
-      pages: Array<{ items: FeedListItem[]; nextUrl: string | null }>;
-      pageParams: string[];
-    } | null>(null);
-    const [isCacheCheckDone, setIsCacheCheckDone] = useState(false);
-
-    useEffect(() => {
-      if (!launchCacheContext) {
-        setIsCacheCheckDone(true);
-        return;
-      }
-
-      let cancelled = false;
-      void feedCacheRepository
-        .getFeedCache<FeedListItem>(launchCacheContext)
-        .then((cached) => {
-          if (cancelled) return;
-          if (cached && cached.items.length > 0) {
-            setInitialFeedCache({
-              pages: [{ items: cached.items, nextUrl: cached.nextUrl }],
-              pageParams: [FEED_URLS[tab]],
-            });
-          }
-        })
-        .catch((err) => {
-          console.warn('获取启动 Feed 缓存失败', err);
-        })
-        .finally(() => {
-          if (!cancelled) setIsCacheCheckDone(true);
-        });
-
-      return () => {
-        cancelled = true;
-      };
-    }, [launchCacheContext, tab]);
-
-    useEffect(() => {
-      let cancelled = false;
-      if (!localDedupEnabled || !exposureContext) {
-        setRecentExposureKeys(new Set());
-        return () => {
-          cancelled = true;
-        };
-      }
-
-      setRecentExposureKeys(null);
-      void feedExposureRepository
-        .getRecentContentKeys(exposureContext)
-        .then((keys) => {
-          if (!cancelled) setRecentExposureKeys(keys);
-        })
-        .catch((error) => {
-          console.warn('读取本地 Feed 曝光记录失败', error);
-          if (!cancelled) setRecentExposureKeys(new Set());
-        });
-
-      return () => {
-        cancelled = true;
-      };
-    }, [exposureContext, localDedupEnabled]);
+    const readExposureKeys = useCallback(
+      async (context: FeedExposureContext) => {
+        try {
+          return await feedExposureRepository.getRecentContentKeys(context);
+        } catch {
+          console.warn('读取本地 Feed 曝光记录失败');
+          return new Set<string>();
+        }
+      },
+      [],
+    );
+    const {
+      value: recentExposureKeys,
+      ready: exposureReady,
+      setValue: setRecentExposureKeys,
+    } = useScopedAsyncValue(
+      localDedupEnabled ? exposureContext : null,
+      readExposureKeys,
+    );
+    const readLaunchCache = useCallback(
+      async (context: FeedCacheContext) => {
+        try {
+          const cached =
+            await feedCacheRepository.getFeedCache<FeedListItem>(context);
+          return cached && cached.items.length > 0
+            ? {
+                pages: [{ items: cached.items, nextUrl: cached.nextUrl }],
+                pageParams: [String(FEED_URLS[tab])],
+              }
+            : null;
+        } catch {
+          console.warn('获取启动 Feed 缓存失败');
+          return null;
+        }
+      },
+      [tab],
+    );
+    const { value: initialFeedCache, ready: isCacheCheckDone } =
+      useScopedAsyncValue(launchCacheContext, readLaunchCache);
 
     const exposureTrackingRef = useRef({
       enabled:
@@ -1030,8 +1005,8 @@ const FeedList = React.forwardRef<
         if (identities.length > 0) {
           void feedExposureRepository
             .recordExposures(context, identities)
-            .catch((error) => {
-              console.warn('记录本地 Feed 曝光失败', error);
+            .catch(() => {
+              console.warn('记录本地 Feed 曝光失败');
             });
         }
       },
@@ -1108,7 +1083,7 @@ const FeedList = React.forwardRef<
         if (launchCacheContext && isInitialUrl && items.length > 0) {
           void feedCacheRepository
             .saveFeedCache(launchCacheContext, items, nextUrl)
-            .catch((err) => console.warn('保存启动 Feed 缓存失败', err));
+            .catch(() => console.warn('保存启动 Feed 缓存失败'));
         }
 
         return {
@@ -1127,7 +1102,7 @@ const FeedList = React.forwardRef<
       staleTime: launchCacheContext && initialFeedCache ? 5 * 60 * 1000 : 0,
       enabled:
         (!!cookies || guestCookieReady) &&
-        (!localDedupEnabled || recentExposureKeys !== null) &&
+        (!localDedupEnabled || exposureReady) &&
         (!launchCacheContext || isCacheCheckDone),
     });
 
@@ -1151,8 +1126,8 @@ const FeedList = React.forwardRef<
                 exposureContext,
               );
             setRecentExposureKeys(keys);
-          } catch (error) {
-            console.warn('刷新本地 Feed 曝光记录失败', error);
+          } catch {
+            console.warn('刷新本地 Feed 曝光记录失败');
           }
         }
         const initialParam =
@@ -1180,6 +1155,7 @@ const FeedList = React.forwardRef<
       queryClient,
       feedQueryKey,
       refetch,
+      setRecentExposureKeys,
       tab,
     ]);
 

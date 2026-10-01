@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { ActivityIndicator } from 'react-native';
 import Animated, {
   useAnimatedStyle,
@@ -34,15 +34,21 @@ export const DownvoteButton = ({
   variant?: 'default' | 'minimal';
 }) => {
   const [voted, setVoted] = useState(initialVoted);
-  const [loading, setLoading] = useState(false);
+  const identity = `${type}:${id}`;
+  const currentIdentityRef = useRef(identity);
+  currentIdentityRef.current = identity;
+  const pendingTargetsRef = useRef(new Set<string>());
+  const [pendingIdentity, setPendingIdentity] = useState<string | null>(null);
+  const loading = pendingIdentity === identity;
   const queryClient = useQueryClient();
   const scale = useSharedValue(1);
   const colorScheme = useColorScheme();
   const tintColor = useThemeColor({}, 'primary');
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: FlashList identity changes must reset local reaction state even when the next item has equal initial values.
   React.useEffect(() => {
     setVoted(initialVoted);
-  }, [initialVoted]);
+  }, [identity, initialVoted]);
 
   const isDownvoted = voted === -1;
 
@@ -51,7 +57,8 @@ export const DownvoteButton = ({
   }));
 
   const handlePress = async () => {
-    if (loading) return;
+    if (pendingTargetsRef.current.has(identity)) return;
+    pendingTargetsRef.current.add(identity);
 
     scale.value = withSequence(
       withTiming(0.8, { duration: 100 }),
@@ -60,11 +67,11 @@ export const DownvoteButton = ({
 
     const nextVoted = isDownvoted ? 0 : -1;
 
-    setLoading(true);
+    setPendingIdentity(identity);
     try {
       const voteType = nextVoted === -1 ? 'down' : 'neutral';
       const result = await voteContent(id, type, voteType);
-      setVoted(result.voted);
+      if (currentIdentityRef.current === identity) setVoted(result.voted);
       if (type !== 'comments') {
         updateContentInteractionCaches(queryClient, {
           type,
@@ -77,12 +84,15 @@ export const DownvoteButton = ({
     } catch (err) {
       showToast(getZhihuErrorMessage(err));
     } finally {
-      setLoading(false);
+      pendingTargetsRef.current.delete(identity);
+      setPendingIdentity((current) => (current === identity ? null : current));
     }
   };
 
   return (
     <BouncyButton
+      accessibilityRole="button"
+      accessibilityState={{ busy: loading, selected: isDownvoted }}
       onPress={handlePress}
       disabled={loading}
       className={

@@ -1,6 +1,22 @@
 import ExpoModulesCore
 import UIKit
 
+private final class RichTextAttachmentSlot {
+  let spec: RichTextSpec
+  let attachment: RichTextAttachment
+  let range: NSRange
+  let fontSize: CGFloat
+  let maxWidth: CGFloat
+  let scale: CGFloat
+  let visibility = RichTextAttachmentVisibility()
+  var request: RichTextAttachmentRequest?
+
+  init(spec: RichTextSpec, attachment: RichTextAttachment, range: NSRange, fontSize: CGFloat, maxWidth: CGFloat, scale: CGFloat) {
+    self.spec = spec; self.attachment = attachment; self.range = range
+    self.fontSize = fontSize; self.maxWidth = maxWidth; self.scale = scale
+  }
+}
+
 /** One flow, one UTF-16 buffer and one UIKit selection context. */
 public final class RichTextView: ExpoView, UITextViewDelegate, UIGestureRecognizerDelegate {
   private let onSelectionChange = EventDispatcher()
@@ -23,8 +39,13 @@ public final class RichTextView: ExpoView, UITextViewDelegate, UIGestureRecogniz
   private var suppressSelection = false
   private var lastHeightKey = ""
   private var lastSelectionKey = ""
-  private var requests: [RichTextAttachmentRequest] = []
-  private var attachmentUpdates: [(RichTextAttachment, NSRange, RichTextAttachmentAsset)] = []
+  private var attachments: [RichTextAttachmentSlot] = []
+  private var attachmentUpdates: [(RichTextAttachmentSlot, Int, RichTextAttachmentAsset)] = []
+  private var viewportObservations: [NSKeyValueObservation] = []
+  private var lifecycleObservers: [NSObjectProtocol] = []
+  private var pausedAttachments = false
+  private var synchronizingAttachments = false
+  private var lastAttachmentViewport: CGRect?
   private var attachmentUpdateScheduled = false
   private var tapHadSelection = false
   private var longPressActive = false
@@ -71,7 +92,38 @@ public final class RichTextView: ExpoView, UITextViewDelegate, UIGestureRecogniz
   }
 
   deinit {
-    requests.forEach { $0.cancel() }
+    attachments.forEach { $0.request?.cancel() }
+    lifecycleObservers.forEach { NotificationCenter.default.removeObserver($0) }
+  }
+
+  public override func didMoveToWindow() {
+    super.didMoveToWindow()
+    viewportObservations.removeAll()
+    lifecycleObservers.forEach { NotificationCenter.default.removeObserver($0) }
+    lifecycleObservers.removeAll()
+    guard window != nil else { releaseAttachments(); return }
+    pausedAttachments = UIApplication.shared.applicationState == .background
+    var ancestor = superview
+    while let view = ancestor {
+      if let scroll = view as? UIScrollView {
+        viewportObservations.append(scroll.observe(\.contentOffset, options: [.new]) { [weak self] _, _ in self?.synchronizeAttachments() })
+        viewportObservations.append(scroll.observe(\.bounds, options: [.new]) { [weak self] _, _ in self?.synchronizeAttachments() })
+        viewportObservations.append(scroll.observe(\.contentSize, options: [.new]) { [weak self] _, _ in self?.synchronizeAttachments() })
+      }
+      ancestor = view.superview
+    }
+    for name in [UIApplication.willResignActiveNotification, UIApplication.didEnterBackgroundNotification] {
+      lifecycleObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+        self?.pausedAttachments = true; self?.releaseAttachments()
+      })
+    }
+    lifecycleObservers.append(NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+      self?.pausedAttachments = false; self?.synchronizeAttachments()
+    })
+    lifecycleObservers.append(NotificationCenter.default.addObserver(forName: UIApplication.didReceiveMemoryWarningNotification, object: nil, queue: .main) { [weak self] _ in
+      self?.releaseAttachments()
+    })
+    synchronizeAttachments()
   }
 
   func setFlowJson(_ value: String) {
@@ -139,12 +191,11 @@ public final class RichTextView: ExpoView, UITextViewDelegate, UIGestureRecogniz
     let previousFlowIdentity = renderedIdentity
     let selection = textView.selectedRange
     generation += 1
-    let currentGeneration = generation
     needsRebuild = false
     lastWidth = width
     lastHeightKey = ""
-    requests.forEach { $0.cancel() }
-    requests.removeAll()
+    releaseAttachments()
+    attachments.removeAll()
     attachmentUpdates.removeAll()
     attachmentUpdateScheduled = false
     manager.decorations = []
@@ -238,13 +289,12 @@ public final class RichTextView: ExpoView, UITextViewDelegate, UIGestureRecogniz
         offset: CGFloat(richTextNumber(spec["offset"], fallback: 3)) * scale
       )
     }
-    var pending: [(RichTextSpec, RichTextAttachment, NSRange)] = []
     for spec in flow.attachments {
       guard let range = richTextRange(spec, in: flow.text), range.length == 1,
             flow.text.character(at: range.location) == 0xfffc else { continue }
       let attachment = RichTextAttachment(spec: spec, font: baseFont, maxWidth: width, textColor: config.textColor, secondaryColor: config.secondaryColor, scale: scale)
       content.addAttribute(.attachment, value: attachment, range: range)
-      pending.append((spec, attachment, range))
+      attachments.append(RichTextAttachmentSlot(spec: spec, attachment: attachment, range: range, fontSize: baseFont.pointSize, maxWidth: width, scale: scale))
     }
     storage.setAttributedString(content)
     textView.isSelectable = selectable
@@ -256,13 +306,56 @@ public final class RichTextView: ExpoView, UITextViewDelegate, UIGestureRecogniz
     } else {
       textView.selectedRange = NSRange(location: 0, length: 0)
     }
-    for (spec, attachment, range) in pending {
-      let request = RichTextAttachmentLoader.load(spec: spec, fontSize: baseFont.pointSize, maxWidth: width, scale: scale) { [weak self] asset in
-        guard let self, self.generation == currentGeneration, let asset else { return }
-        self.attachmentUpdates.append((attachment, range, asset))
+  }
+
+  private func releaseAttachments() {
+    lastAttachmentViewport = nil
+    for slot in attachments {
+      slot.visibility.setActive(false)
+      slot.request?.cancel(); slot.request = nil
+      slot.attachment.releaseAsset()
+      manager.invalidateDisplay(forCharacterRange: slot.range)
+    }
+    attachmentUpdates.removeAll()
+    textView.setNeedsDisplay()
+  }
+
+  private func synchronizeAttachments() {
+    guard !synchronizingAttachments else { return }
+    guard let window, !pausedAttachments, !isHidden, !window.isHidden else { releaseAttachments(); return }
+    guard !attachments.isEmpty, container.size.width > 0 else { return }
+    synchronizingAttachments = true
+    defer { synchronizingAttachments = false }
+    var viewport = window.convert(window.bounds, to: textView)
+    var ancestor = superview
+    while let view = ancestor {
+      if view.isHidden { releaseAttachments(); return }
+      if view is UIScrollView { viewport = viewport.intersection(view.convert(view.bounds, to: textView)) }
+      ancestor = view.superview
+    }
+    guard !viewport.isNull, viewport.height > 0 else { releaseAttachments(); return }
+    guard lastAttachmentViewport != viewport else { return }
+    lastAttachmentViewport = viewport
+    let top = Double(viewport.minY - viewport.height)
+    let bottom = Double(viewport.maxY + viewport.height)
+    manager.ensureLayout(for: container)
+    for slot in attachments {
+      let glyphs = manager.glyphRange(forCharacterRange: slot.range, actualCharacterRange: nil)
+      let rect = manager.boundingRect(forGlyphRange: glyphs, in: container)
+      let active = intersectsRichTextAttachmentViewport(top: Double(rect.minY), bottom: Double(rect.maxY), viewportTop: top, viewportBottom: bottom)
+      if slot.visibility.setActive(active), !active {
+        slot.request?.cancel(); slot.request = nil; slot.attachment.releaseAsset()
+        manager.invalidateDisplay(forCharacterRange: slot.range)
+      }
+      guard let revision = slot.visibility.beginLoad() else { continue }
+      let currentGeneration = generation
+      slot.request = RichTextAttachmentLoader.load(spec: slot.spec, fontSize: slot.fontSize, maxWidth: slot.maxWidth, scale: slot.scale) { [weak self, weak slot] asset in
+        guard let self, let slot, self.generation == currentGeneration, slot.visibility.accepts(revision) else { return }
+        slot.request = nil
+        guard let asset else { return }
+        self.attachmentUpdates.append((slot, revision, asset))
         self.scheduleAttachmentUpdate(generation: currentGeneration)
       }
-      if let request { requests.append(request) }
     }
   }
 
@@ -282,24 +375,26 @@ public final class RichTextView: ExpoView, UITextViewDelegate, UIGestureRecogniz
     DispatchQueue.main.async { [weak self] in
       guard let self, self.generation == generation else { return }
       self.attachmentUpdateScheduled = false
-      let updates = self.attachmentUpdates
+      let updates = self.attachmentUpdates.filter { $0.0.visibility.accepts($0.1) }
       self.attachmentUpdates.removeAll()
       let selection = self.textView.selectedRange
       self.suppressSelection = true
       self.storage.beginEditing()
-      for (attachment, range, asset) in updates {
-        attachment.update(asset: asset)
-        self.storage.edited(.editedAttributes, range: range, changeInLength: 0)
+      for (slot, _, asset) in updates {
+        slot.attachment.update(asset: asset)
+        slot.visibility.hasAsset = true
+        self.storage.edited(.editedAttributes, range: slot.range, changeInLength: 0)
       }
       self.storage.endEditing()
       // TextKit can generate glyphs when invalidating layout; the storage edit
       // transaction must be finished before asking it to fill layout holes.
-      for (_, range, _) in updates {
-        self.manager.invalidateLayout(forCharacterRange: range, actualCharacterRange: nil)
-        self.manager.invalidateDisplay(forCharacterRange: range)
+      for (slot, _, _) in updates {
+        self.manager.invalidateLayout(forCharacterRange: slot.range, actualCharacterRange: nil)
+        self.manager.invalidateDisplay(forCharacterRange: slot.range)
       }
       self.textView.selectedRange = selection
       self.suppressSelection = false
+      self.lastAttachmentViewport = nil
       self.measureAndLayout(width: self.effectiveWidth)
       self.textView.setNeedsDisplay()
       self.setNeedsLayout()
@@ -316,6 +411,7 @@ public final class RichTextView: ExpoView, UITextViewDelegate, UIGestureRecogniz
     let pixelScale = max(1, traitCollection.displayScale)
     let height = ceil(rawHeight * pixelScale) / pixelScale
     textView.frame = CGRect(x: 0, y: 0, width: width, height: height)
+    synchronizeAttachments()
     let key = "\(flow.id)|\(flow.textVersion)|\(layoutKey)|\(height)"
     guard key != lastHeightKey else { return }
     lastHeightKey = key

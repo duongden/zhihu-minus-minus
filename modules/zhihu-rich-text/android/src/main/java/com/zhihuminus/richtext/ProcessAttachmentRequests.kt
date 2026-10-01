@@ -1,6 +1,9 @@
 package com.zhihuminus.richtext
 
 import android.util.LruCache
+import android.content.ComponentCallbacks2
+import android.content.Context
+import android.content.res.Configuration
 import org.json.JSONObject
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.ThreadFactory
@@ -13,6 +16,21 @@ internal object ProcessAttachmentRequests {
   private val cache = object : LruCache<String, AttachmentAsset>(24 * 1024 * 1024) {
     override fun sizeOf(key: String, value: AttachmentAsset): Int = value.bitmap.byteCount.coerceAtLeast(1)
   }
+  private var callbacksRegistered = false
+
+  @Synchronized
+  fun observeMemory(context: Context) {
+    if (callbacksRegistered) return
+    callbacksRegistered = true
+    context.applicationContext.registerComponentCallbacks(object : ComponentCallbacks2 {
+      override fun onConfigurationChanged(configuration: Configuration) { }
+      override fun onLowMemory() { cache.evictAll() }
+      override fun onTrimMemory(level: Int) {
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) cache.evictAll()
+      }
+    })
+  }
+
   private val threadSequence = AtomicInteger()
   private val executor = ThreadPoolExecutor(
     2, 2, 30, TimeUnit.SECONDS, LinkedBlockingQueue(),

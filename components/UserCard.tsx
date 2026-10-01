@@ -1,6 +1,6 @@
 import { type QueryKey, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator } from 'react-native';
 import {
   followMember,
@@ -40,7 +40,12 @@ const UserCardComponent = ({
   const cookies = useAuthStore((state) => state.cookies);
   const [isFollowing, setIsFollowing] = useState(Boolean(user.is_following));
   const [followerCount, setFollowerCount] = useState(user.follower_count || 0);
-  const [loading, setLoading] = useState(false);
+  const identity = user.url_token || user.id;
+  const currentIdentityRef = useRef(identity);
+  currentIdentityRef.current = identity;
+  const pendingTargetsRef = useRef(new Set<string>());
+  const [pendingIdentity, setPendingIdentity] = useState<string | null>(null);
+  const loading = pendingIdentity === identity;
   const colorScheme = useColorScheme();
 
   const borderColor = Colors[colorScheme].border;
@@ -56,13 +61,14 @@ const UserCardComponent = ({
   }, [user.follower_count, user.id, user.is_following, user.url_token]);
 
   const handleFollow = async () => {
-    if (loading) return;
+    if (pendingTargetsRef.current.has(identity)) return;
     if (!cookies) {
       router.push('/login');
       return;
     }
     const targetId = user.url_token || user.id;
-    setLoading(true);
+    pendingTargetsRef.current.add(identity);
+    setPendingIdentity(identity);
     try {
       const nextIsFollowing = !isFollowing;
       let nextFollowerCount = followerCount;
@@ -74,8 +80,10 @@ const UserCardComponent = ({
         const data = await followMember(targetId);
         nextFollowerCount = data.follower_count ?? followerCount + 1;
       }
-      setFollowerCount(nextFollowerCount);
-      setIsFollowing(nextIsFollowing);
+      if (currentIdentityRef.current === identity) {
+        setFollowerCount(nextFollowerCount);
+        setIsFollowing(nextIsFollowing);
+      }
 
       const memberIdentifiers = Array.from(
         new Set([String(user.id), user.url_token].filter(Boolean)),
@@ -102,7 +110,8 @@ const UserCardComponent = ({
       console.error('关注操作失败');
       showToast('操作失败，请稍后重试');
     } finally {
-      setLoading(false);
+      pendingTargetsRef.current.delete(identity);
+      setPendingIdentity((current) => (current === identity ? null : current));
     }
   };
 

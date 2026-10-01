@@ -1,7 +1,7 @@
 import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
 
 const DATABASE_NAME = 'local-data.db';
-const DATABASE_VERSION = 3;
+const DATABASE_VERSION = 4;
 
 interface UserVersionRow {
   user_version: number;
@@ -64,6 +64,18 @@ const MIGRATIONS: DatabaseMigration[] = [
       -- earlier builds wrote a row for every feed tab. Those rows are dead
       -- weight; drop them once.
       DELETE FROM feed_cache WHERE feed_type <> 'recommend';
+    `,
+  },
+  {
+    version: 4,
+    sql: `
+      CREATE TABLE publishing_drafts (
+        account_key TEXT NOT NULL CHECK (length(account_key) > 0),
+        draft_key TEXT NOT NULL CHECK (length(draft_key) > 0),
+        value_json TEXT NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (account_key, draft_key)
+      );
     `,
   },
 ];

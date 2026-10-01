@@ -515,6 +515,9 @@ export interface ZhihuNotificationTarget {
 
 export interface ZhihuNotificationContent {
   verb?: string;
+  text?: string;
+  title?: string;
+  sub_text?: string;
   actors?: ZhihuNotificationActor[];
   target?: ZhihuNotificationTarget;
   extend?: {

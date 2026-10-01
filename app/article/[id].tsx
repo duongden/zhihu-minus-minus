@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getArticle, getDailyDetail } from '@/api/zhihu';
-import { getArticleCollectionStatus } from '@/api/zhihu/collection';
+import { getAllContentCollectionStatus } from '@/api/zhihu/collection';
 import {
   followColumn,
   getArticleColumnCard,
@@ -117,7 +117,7 @@ export default function ArticleDetail() {
   // 3. 获取文章被收藏状态
   const { data: collectionStatus, isFetchedAfterMount } = useQuery({
     queryKey: ['article-collection-status', id],
-    queryFn: () => getArticleCollectionStatus(id as string),
+    queryFn: () => getAllContentCollectionStatus(id as string, 'article'),
     enabled: !!id && !isDaily && !isLoading,
     staleTime: 60 * 1000, // 1 minute
   });
@@ -475,6 +475,8 @@ export default function ArticleDetail() {
                   e.stopPropagation();
                   columnFollowMutation.mutate();
                 }}
+                disabled={columnFollowMutation.isPending}
+                accessibilityState={{ busy: columnFollowMutation.isPending }}
                 className="px-4 py-1.5 rounded-full"
                 style={[
                   {

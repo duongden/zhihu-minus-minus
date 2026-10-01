@@ -84,3 +84,7 @@ HTML 统计还包括 `memberMentions`（`a.member_mention`）和 `topicTags`（`
 `cases/pin-link-card-001.json` 的 pin 正文位于 `content_html`，但知乎问题卡片位于 `content.1`；这类案例必须同时保留两个字段，不能只保存 HTML。
 
 `cases/pin-member-mention-muted.json` 和 `cases/pin-topic-tag-001.json` 分别覆盖 `member_mention` 与 `hash_tag` anchor，并保留 pin 的状态和内容数组。
+
+`cases/webview-untrusted-content-001.json` 是脱敏合成的 answer envelope，用于覆盖执行节点、事件属性、危险链接、CSS 资源 URL、脚注文本与脚本分隔符。它不来自真机抓取，`synthetic` trait 明确区分这类安全输入与真实知乎格式样本。
+
+`dense-metric-spans-001` 为 16 段、8,224 个重叠度量 span 的合成性能样本；`offline-formula-001` 为不含外部图源的行内/块级 LaTeX 样本，切换到 WebView 可验证离线公式。两者均先进入 inbox 再登记到 cases/manifest，不含捕获的真实正文。manifest 的 formulaImages 只统计 HTML 公式图片，LaTeX 文本不计入该数值。

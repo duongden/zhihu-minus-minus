@@ -235,11 +235,13 @@ const ANSWER_PUBLISH_INCLUDE =
 export const getAnswer = async (
   id: string | number,
   include?: string,
+  options?: { signal?: AbortSignal },
 ): Promise<AnswerDetail> => {
   const defaultInclude =
     'content,editable_content,paid_info,can_comment,excerpt,thanks_count,voteup_count,comment_count,visited_count,reaction,ip_info,question.topics,author.is_following,reaction.relation.voting,segment_infos,favlists_count';
   const res = await apiClient.get<AnswerDetail>(
     `/answers/${id}?include=${include || defaultInclude}`,
+    { signal: options?.signal },
   );
   return res.data;
 };

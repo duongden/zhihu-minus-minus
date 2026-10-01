@@ -54,6 +54,7 @@ jest.mock('@tanstack/react-query', () => ({
   }),
   useQueryClient: () => mockQueryClient,
 }));
+jest.mock('../hooks/useActiveScreen', () => ({ useActiveScreen: () => true }));
 jest.mock('../hooks/useZhihuInfiniteQuery', () => ({
   useZhihuInfiniteQuery: () => ({
     data: mockPages ? { pages: mockPages } : undefined,
@@ -123,7 +124,14 @@ jest.mock('../components/BouncyButton', () => ({
     jest.requireActual<typeof import('react-native')>('react-native').Pressable,
 }));
 jest.mock('../store/useSettingsStore', () => ({
-  useSettingsStore: () => false,
+  useSettingsStore: Object.assign(() => false, {
+    getState: () => ({
+      primaryColor: null,
+      readingBackground: 'default',
+      textContrast: 'standard',
+      surfaceStyle: 'layered',
+    }),
+  }),
 }));
 jest.mock('../features/rich-content', () => ({
   getNeighborAnswerIds: () => [],

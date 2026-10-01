@@ -31,8 +31,8 @@ export async function signRequest96(
   try {
     // 调用移植自 zhi-purity 的新签名算法
     return await getSignaturePurity(pathname, dc0);
-  } catch (e) {
-    console.error('zse96签名失败', e);
+  } catch {
+    console.error('zse96签名失败');
     throw new Error('zse96签名失败！请向开发者反馈');
   }
 }

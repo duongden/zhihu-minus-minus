@@ -1,44 +1,32 @@
 import Constants from 'expo-constants';
 import * as Device from 'expo-device';
-import { File, Paths } from 'expo-file-system';
-import * as FileSystem from 'expo-file-system/legacy';
-import {
-  createDownloadResumable,
-  getContentUriAsync,
-} from 'expo-file-system/legacy';
-import * as IntentLauncher from 'expo-intent-launcher';
 import * as SecureStore from 'expo-secure-store';
-import * as Sharing from 'expo-sharing';
 import * as WebBrowser from 'expo-web-browser';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Linking, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import {
+  getGithubReleaseHistory,
+  getLatestGithubRelease,
+} from '@/api/githubReleases';
 import { MarkdownText } from '@/components/MarkdownText';
 import { AppDialog } from '@/components/overlays/AppDialog';
-import { Text, useThemeColor } from '@/components/Themed';
+import { Text, useRuntimeThemeColors } from '@/components/Themed';
 import { showToast } from '@/utils/toast';
+import {
+  cleanupUpdatePartials,
+  downloadAndInstallVerifiedApk,
+} from '@/utils/updateDownload';
+import {
+  assertUpdateActive,
+  type GithubReleaseAsset,
+  isTrustedReleaseUrl,
+  MAX_CHECKSUM_BYTES,
+  UpdateFailure,
+} from '@/utils/updateSecurity';
 import { isVersionNewer, selectAndroidApk } from '@/utils/updateSelection';
 
-const GITHUB_RELEASE_API =
-  'https://api.github.com/repos/huamurui/zhihu-minus-minus/releases/latest';
-const GITHUB_RELEASES_API =
-  'https://api.github.com/repos/huamurui/zhihu-minus-minus/releases';
 const IGNORED_VERSION_KEY = 'ignored_version_tag';
-
-interface GithubReleaseAsset {
-  name: string;
-  browser_download_url: string;
-}
-
-interface GithubRelease {
-  tag_name?: string;
-  assets?: GithubReleaseAsset[];
-  html_url: string;
-  body?: string;
-  name?: string | null;
-  prerelease?: boolean;
-  published_at?: string | null;
-}
 
 export interface ReleaseHistoryItem {
   name: string;
@@ -51,6 +39,8 @@ export interface ReleaseHistoryItem {
 
 export interface UpdateInfo {
   apkUrl?: string;
+  apkAsset?: GithubReleaseAsset;
+  checksumAsset?: GithubReleaseAsset;
   currentVersion: string;
   latestVersion: string;
   latestVersionTag: string;
@@ -59,268 +49,163 @@ export interface UpdateInfo {
   updateAvailable: boolean;
 }
 
-export async function getUpdateInfo(): Promise<UpdateInfo> {
-  const response = await fetch(GITHUB_RELEASE_API);
-  if (!response.ok) {
-    throw new Error(`GitHub Releases 请求失败 (${response.status})`);
-  }
-
-  const data = (await response.json()) as GithubRelease;
-  if (!data.tag_name || !data.html_url) {
-    throw new Error('最新版本信息不完整');
-  }
-
-  const latestVersionTag = data.tag_name;
-  const latestVersion = latestVersionTag.replace(/^v/, '');
+export async function getUpdateInfo(options?: {
+  signal?: AbortSignal;
+}): Promise<UpdateInfo> {
+  const data = await getLatestGithubRelease(options);
+  const latestVersion = data.tag.slice(1);
   const currentVersion =
     Constants.expoConfig?.version || Constants.nativeAppVersion || '0.0.0';
-  const apkUrl =
+  const selected =
     Platform.OS === 'android'
-      ? selectAndroidApk(data.assets ?? [], Device.supportedCpuArchitectures)
-          ?.browser_download_url
+      ? selectAndroidApk(data.assets, Device.supportedCpuArchitectures)
       : undefined;
-
+  const checksumAsset = data.assets.find(
+    (asset) =>
+      asset.name === 'SHA256SUMS.txt' && asset.size <= MAX_CHECKSUM_BYTES,
+  );
+  // Old releases without a verifiable digest remain available in the browser.
+  const apkAsset =
+    selected && (selected.sha256 || checksumAsset) ? selected : undefined;
   return {
-    apkUrl,
+    apkUrl: apkAsset?.browser_download_url,
+    apkAsset,
+    checksumAsset,
     currentVersion,
     latestVersion,
-    latestVersionTag,
-    releaseNotes: data.body || '无更新说明',
-    releaseUrl: data.html_url,
+    latestVersionTag: data.tag,
+    releaseNotes: data.notes || '无更新说明',
+    releaseUrl: data.url,
     updateAvailable: isVersionNewer(latestVersion, currentVersion),
   };
 }
 
-function normalizeRelease(value: unknown): ReleaseHistoryItem | null {
-  if (!value || typeof value !== 'object') return null;
-  const release = value as Record<string, unknown>;
-  if (
-    typeof release.tag_name !== 'string' ||
-    typeof release.html_url !== 'string'
-  ) {
-    return null;
-  }
-
-  return {
-    name:
-      typeof release.name === 'string' && release.name.trim()
-        ? release.name
-        : release.tag_name,
-    notes: typeof release.body === 'string' ? release.body : '',
-    prerelease: release.prerelease === true,
-    publishedAt:
-      typeof release.published_at === 'string' ? release.published_at : null,
-    tag: release.tag_name,
-    url: release.html_url,
-  };
-}
-
-export async function getReleaseHistory(): Promise<ReleaseHistoryItem[]> {
-  const releases: ReleaseHistoryItem[] = [];
-  const perPage = 100;
-
-  for (let page = 1; ; page += 1) {
-    const response = await fetch(
-      `${GITHUB_RELEASES_API}?per_page=${perPage}&page=${page}`,
-    );
-    if (!response.ok) {
-      throw new Error(`GitHub Releases 请求失败 (${response.status})`);
-    }
-
-    const data: unknown = await response.json();
-    if (!Array.isArray(data)) {
-      throw new Error('版本记录格式无效');
-    }
-
-    releases.push(
-      ...data
-        .map((release) => normalizeRelease(release))
-        .filter((release): release is ReleaseHistoryItem => release !== null),
-    );
-
-    if (data.length < perPage) break;
-  }
-
-  return releases;
+export async function getReleaseHistory(options?: {
+  signal?: AbortSignal;
+}): Promise<ReleaseHistoryItem[]> {
+  return (await getGithubReleaseHistory(options)).map(
+    ({ assets: _assets, ...release }) => release,
+  );
 }
 
 export const useCheckUpdate = (
   onUpdateAvailable?: (info: UpdateInfo) => void,
 ) => {
   const onUpdateAvailableRef = useRef(onUpdateAvailable);
-
+  onUpdateAvailableRef.current = onUpdateAvailable;
   useEffect(() => {
-    onUpdateAvailableRef.current = onUpdateAvailable;
-  }, [onUpdateAvailable]);
-
-  useEffect(() => {
-    const checkUpdate = async () => {
-      // 延迟检查，避免干扰首屏路由
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-      try {
-        const updateInfo = await getUpdateInfo();
-
-        if (updateInfo.updateAvailable) {
-          // 检查是否已经忽略了此版本
-          const ignoredVersion =
-            await SecureStore.getItemAsync(IGNORED_VERSION_KEY);
-          if (ignoredVersion === updateInfo.latestVersionTag) {
-            return;
-          }
-          onUpdateAvailableRef.current?.(updateInfo);
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const updateInfo = await getUpdateInfo({ signal: controller.signal });
+          assertUpdateActive(controller.signal);
+          if (!updateInfo.updateAvailable) return;
+          const ignored = await SecureStore.getItemAsync(IGNORED_VERSION_KEY);
+          assertUpdateActive(controller.signal);
+          if (ignored !== updateInfo.latestVersionTag)
+            onUpdateAvailableRef.current?.(updateInfo);
+        } catch (error) {
+          if (!(error instanceof UpdateFailure && error.code === 'cancelled'))
+            console.warn('检查更新失败');
         }
-      } catch (error) {
-        console.error('Failed to check for updates:', error);
-      }
+      })();
+    }, 2000);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
     };
-
-    checkUpdate();
   }, []);
 };
-
-/**
- * Android APK Download & Install
- */
-async function downloadAndInstallApk(
-  url: string,
-  version: string,
-  onProgress?: (progress: number) => void,
-  onStatusChange?: (isDownloading: boolean) => void,
-) {
-  try {
-    onStatusChange?.(true);
-    onProgress?.(0);
-    const filename = `zhihu--_${version}.apk`;
-
-    // Modern API v55: Use Paths class
-    const cacheDir = Paths.cache?.uri;
-    const docDir = Paths.document?.uri;
-    const baseDir = cacheDir || docDir;
-
-    if (!baseDir) {
-      console.error(
-        '[Update] Paths.cache.uri and Paths.document.uri are both empty',
-      );
-      throw new Error('Storage directory not found');
-    }
-
-    const fileUri =
-      (baseDir.endsWith('/') ? baseDir : `${baseDir}/`) + filename;
-    console.log('[Update] target path:', fileUri);
-
-    // Modern API v55: Delete if exists to avoid "Destination already exists"
-    try {
-      const targetFile = new File(fileUri);
-      if (typeof targetFile.delete === 'function') {
-        await targetFile.delete();
-      } else {
-        await FileSystem.deleteAsync(fileUri, { idempotent: true });
-      }
-    } catch (_e) {}
-
-    showToast('开始下载更新...');
-
-    let downloadedUri = '';
-
-    // Always use legacy createDownloadResumable for progress support
-    console.log('[Update] Using legacy createDownloadResumable for progress');
-    const downloadResumable = createDownloadResumable(
-      url,
-      fileUri,
-      {},
-      (downloadProgress) => {
-        const progress =
-          downloadProgress.totalBytesWritten /
-          downloadProgress.totalBytesExpectedToWrite;
-        onProgress?.(progress);
-      },
-    );
-    const result = await downloadResumable.downloadAsync();
-    downloadedUri = result?.uri || '';
-
-    if (downloadedUri) {
-      onProgress?.(1);
-      if (Platform.OS === 'android') {
-        try {
-          const cUri = await getContentUriAsync(downloadedUri);
-          console.log('[Update] Content URI:', cUri);
-
-          // android.intent.action.VIEW is the modern way to install APKs
-          // FLAG_GRANT_READ_URI_PERMISSION (1) | FLAG_ACTIVITY_NEW_TASK (0x10000000)
-          await IntentLauncher.startActivityAsync(
-            'android.intent.action.VIEW',
-            {
-              data: cUri,
-              flags: 1 | 0x10000000,
-              type: 'application/vnd.android.package-archive',
-            },
-          );
-
-          // Delay closing the modal to ensure the intent has time to launch
-          setTimeout(() => onStatusChange?.(false), 1000);
-        } catch (intentError) {
-          console.error(
-            '[Update] Intent failed, trying fallback sharing:',
-            intentError,
-          );
-          onStatusChange?.(false);
-          showToast('直接安装失败，尝试通过分享打开...');
-          await Sharing.shareAsync(downloadedUri, {
-            mimeType: 'application/vnd.android.package-archive',
-            dialogTitle: '安装更新',
-          });
-        }
-      } else {
-        onStatusChange?.(false);
-        await Sharing.shareAsync(downloadedUri);
-      }
-    } else {
-      onStatusChange?.(false);
-    }
-  } catch (e: unknown) {
-    onStatusChange?.(false);
-    console.error('[Update] Error details:', e);
-    showToast(`更新失败: ${e instanceof Error ? e.message : '未知错误'}`);
-  }
-}
 
 export const UpdateChecker: React.FC = () => {
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
   const [pendingUpdate, setPendingUpdate] = useState<UpdateInfo | null>(null);
-  const primaryColor = useThemeColor({}, 'primary');
-
+  const downloadRef = useRef<AbortController | null>(null);
+  const cleanupRef = useRef<Promise<void>>(Promise.resolve());
+  const mountedRef = useRef(true);
+  const { primary: primaryColor } = useRuntimeThemeColors();
   useCheckUpdate(setPendingUpdate);
 
-  if (!isDownloading && !pendingUpdate) return null;
+  useEffect(() => {
+    mountedRef.current = true;
+    cleanupRef.current = cleanupUpdatePartials().catch(() =>
+      console.warn('清理更新临时文件失败'),
+    );
+    return () => {
+      mountedRef.current = false;
+      downloadRef.current?.abort();
+    };
+  }, []);
 
+  if (!isDownloading && !pendingUpdate) return null;
   const closeUpdate = () => setPendingUpdate(null);
   const ignoreUpdate = async () => {
     if (!pendingUpdate) return;
     const versionTag = pendingUpdate.latestVersionTag;
     setPendingUpdate(null);
-    await SecureStore.setItemAsync(IGNORED_VERSION_KEY, versionTag);
+    await SecureStore.setItemAsync(IGNORED_VERSION_KEY, versionTag).catch(() =>
+      showToast('无法保存忽略的版本'),
+    );
   };
   const openRelease = () => {
     if (!pendingUpdate) return;
-    const releaseUrl = pendingUpdate.releaseUrl;
-    setPendingUpdate(null);
-    if (Platform.OS === 'android') {
-      void WebBrowser.openBrowserAsync(releaseUrl);
-    } else {
-      void Linking.openURL(releaseUrl);
+    const { releaseUrl, latestVersionTag } = pendingUpdate;
+    if (!isTrustedReleaseUrl(releaseUrl, latestVersionTag)) {
+      showToast('版本页面地址无效');
+      return;
     }
+    setPendingUpdate(null);
+    const opening =
+      Platform.OS === 'android'
+        ? WebBrowser.openBrowserAsync(releaseUrl)
+        : Linking.openURL(releaseUrl);
+    void opening.catch(() => showToast('无法打开 GitHub 版本页面'));
   };
   const startDownload = () => {
-    if (!pendingUpdate?.apkUrl) return;
-    const { apkUrl, latestVersionTag } = pendingUpdate;
+    if (!pendingUpdate?.apkAsset || downloadRef.current) return;
+    const info = pendingUpdate;
+    const asset = pendingUpdate.apkAsset;
+    const controller = new AbortController();
+    downloadRef.current = controller;
     setPendingUpdate(null);
-    void downloadAndInstallApk(
-      apkUrl,
-      latestVersionTag,
-      setDownloadProgress,
-      setIsDownloading,
-    );
+    setDownloadProgress(0);
+    setIsDownloading(true);
+    void cleanupRef.current
+      .then(() => {
+        assertUpdateActive(controller.signal);
+        return downloadAndInstallVerifiedApk(
+          {
+            tag: info.latestVersionTag,
+            asset,
+            checksumAsset: info.checksumAsset,
+          },
+          {
+            signal: controller.signal,
+            onProgress: (fraction) => {
+              if (
+                mountedRef.current &&
+                downloadRef.current === controller &&
+                !controller.signal.aborted
+              )
+                setDownloadProgress(fraction);
+            },
+          },
+        );
+      })
+      .catch((error: unknown) => {
+        if (!mountedRef.current || controller.signal.aborted) return;
+        showToast(
+          error instanceof UpdateFailure ? error.message : '更新失败，请重试',
+        );
+        setPendingUpdate(info);
+      })
+      .finally(() => {
+        if (downloadRef.current !== controller) return;
+        downloadRef.current = null;
+        if (mountedRef.current) setIsDownloading(false);
+      });
   };
 
   return (
@@ -339,7 +224,7 @@ export const UpdateChecker: React.FC = () => {
               onPress: () => void ignoreUpdate(),
               variant: 'destructive',
             },
-            ...(pendingUpdate.apkUrl
+            ...(pendingUpdate.apkAsset
               ? [
                   {
                     label: '直接更新',
@@ -351,7 +236,7 @@ export const UpdateChecker: React.FC = () => {
             {
               label: '去下载（GitHub）',
               onPress: openRelease,
-              variant: 'secondary' as const,
+              variant: 'secondary',
             },
           ]}
         >
@@ -367,9 +252,16 @@ export const UpdateChecker: React.FC = () => {
       {isDownloading ? (
         <AppDialog
           visible
-          title="正在下载更新"
+          title="正在下载并校验更新"
           icon="cloud-download-outline"
           dismissible={false}
+          actions={[
+            {
+              label: '取消',
+              onPress: () => downloadRef.current?.abort(),
+              variant: 'secondary',
+            },
+          ]}
         >
           <View style={styles.progressContent}>
             <View style={styles.progressTrack}>
@@ -387,7 +279,7 @@ export const UpdateChecker: React.FC = () => {
               {(downloadProgress * 100).toFixed(1)}%
             </Text>
             <Text type="secondary" style={styles.hint}>
-              下载完成后将自动启动安装
+              校验通过后将启动安装
             </Text>
           </View>
         </AppDialog>

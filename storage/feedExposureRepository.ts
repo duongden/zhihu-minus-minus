@@ -10,6 +10,7 @@ export const MAX_FEED_EXPOSURES_PER_CONTEXT = 5_000;
 export const MAX_FEED_EXPOSURES = 20_000;
 
 const EXPOSURE_TIMESTAMP_UPDATE_INTERVAL_MS = 60_000;
+export const FEED_EXPOSURE_MAINTENANCE_INTERVAL_MS = 15 * 60 * 1000;
 
 export interface FeedExposureContext {
   accountKey: string;
@@ -36,8 +37,9 @@ interface CountRow {
  * This is intentionally not a complete behavior/event log. Future local
  * recommendation signals should use dedicated tables in the shared database.
  */
-class FeedExposureRepository {
+export class FeedExposureRepository {
   private maintenancePromise: Promise<void> | null = null;
+  private lastMaintenanceAt: number | null = null;
 
   async getRecentContentKeys(
     context: FeedExposureContext,
@@ -125,6 +127,7 @@ class FeedExposureRepository {
         }
 
         await this.pruneContextIfNeeded(database, context);
+        await this.pruneGlobalIfNeeded(database);
       });
     });
   }
@@ -148,15 +151,25 @@ class FeedExposureRepository {
   }
 
   private async ensureMaintained(): Promise<void> {
-    if (!this.maintenancePromise) {
-      this.maintenancePromise = localDatabase
-        .run((database) => this.maintain(database, Date.now()))
-        .catch((error) => {
-          this.maintenancePromise = null;
-          throw error;
-        });
-    }
-    await this.maintenancePromise;
+    if (this.maintenancePromise) return this.maintenancePromise;
+    const now = Date.now();
+    if (
+      this.lastMaintenanceAt !== null &&
+      now >= this.lastMaintenanceAt &&
+      now - this.lastMaintenanceAt < FEED_EXPOSURE_MAINTENANCE_INTERVAL_MS
+    )
+      return;
+    this.maintenancePromise = localDatabase
+      .run((database) =>
+        database.withTransactionAsync(() => this.maintain(database, now)),
+      )
+      .then(() => {
+        this.lastMaintenanceAt = now;
+      })
+      .finally(() => {
+        this.maintenancePromise = null;
+      });
+    return this.maintenancePromise;
   }
 
   private isValidContext(context: FeedExposureContext): boolean {
@@ -164,9 +177,8 @@ class FeedExposureRepository {
   }
 
   /**
-   * Full maintenance pass, run once per app launch. Retention and the global
-   * cap are only enforced here; between launches the per-context cap bounds
-   * table growth, and reads filter by timestamp so stale rows are inert.
+   * Retention maintenance runs on access, at most once per 15 minutes. Writes
+   * also enforce both caps inside their transaction throughout long sessions.
    */
   private async maintain(database: SQLiteDatabase, now: number): Promise<void> {
     await database.runAsync(
@@ -188,6 +200,10 @@ class FeedExposureRepository {
       });
     }
 
+    await this.pruneGlobalIfNeeded(database);
+  }
+
+  private async pruneGlobalIfNeeded(database: SQLiteDatabase): Promise<void> {
     const totalRow = await database.getFirstAsync<CountRow>(
       'SELECT COUNT(*) AS count FROM recent_feed_exposures',
     );
