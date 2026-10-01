@@ -305,7 +305,7 @@ export default function HistoryScreen() {
           className="absolute bottom-8 left-8 right-8 py-3 rounded-xl items-center"
           style={{ backgroundColor: primaryColor }}
         >
-          <Text className="text-white text-base font-bold">
+          <Text className="text-on-primary text-base font-bold">
             删除选中 ({selectedIds.size})
           </Text>
         </BouncyButton>

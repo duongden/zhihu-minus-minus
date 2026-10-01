@@ -1,0 +1,5 @@
+{
+  "type": "answer",
+  "id": "synthetic-offline-formula",
+  "content": "<p data-pid=\"offline-inline\">离线行内公式：$a^2+b^2=c^2$。</p><p data-pid=\"offline-display\">离线块级公式：$$\\frac{a^2}{b}+\\sqrt{x}$$</p>"
+}

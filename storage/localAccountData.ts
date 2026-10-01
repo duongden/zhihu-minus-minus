@@ -1,5 +1,6 @@
 import { feedCacheRepository } from './feedCacheRepository';
 import { feedExposureRepository } from './feedExposureRepository';
+import { publishingDraftRepository } from './publishingDraftRepository';
 
 /**
  * Removes every piece of locally stored data owned by the given account key.
@@ -12,5 +13,6 @@ export async function clearLocalAccountData(accountKey: string): Promise<void> {
   await Promise.all([
     feedExposureRepository.clearAccount(accountKey),
     feedCacheRepository.clearAccountCache(accountKey),
+    publishingDraftRepository.clearAccount(accountKey),
   ]);
 }

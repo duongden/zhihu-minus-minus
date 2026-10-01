@@ -121,8 +121,8 @@ export default function ReplyDetailScreen() {
     if (!parent) return null;
     try {
       return JSON.parse(decodeURIComponent(parent));
-    } catch (e) {
-      console.error('Failed to parse parent comment:', e);
+    } catch {
+      console.error('Failed to parse parent comment');
       return null;
     }
   }, [parent]);

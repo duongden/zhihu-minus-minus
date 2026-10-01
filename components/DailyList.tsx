@@ -212,7 +212,7 @@ export const DailyList = React.forwardRef<
           style={{ backgroundColor: primaryColor }}
           onPress={() => refetch()}
         >
-          <Text className="text-white font-bold">重试一下</Text>
+          <Text className="text-on-primary font-bold">重试一下</Text>
         </BouncyButton>
       </View>
     );

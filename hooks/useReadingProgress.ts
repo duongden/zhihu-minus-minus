@@ -76,6 +76,7 @@ export function useReadingProgress({
     request: number;
   } | null>(null);
   const committedTryRestoreRef = useRef<() => void>(() => {});
+  const progressIdentityRef = useRef(contentKey);
 
   useLayoutEffect(() => {
     measurementScopeRef.current = {
@@ -116,6 +117,25 @@ export function useReadingProgress({
       removeProgress(contentKey);
     }
   }, [contentKey, enabled, removeProgress, saveProgress]);
+
+  useLayoutEffect(() => {
+    if (progressIdentityRef.current !== contentKey) {
+      progressIdentityRef.current = contentKey;
+      contentHeightRef.current = 0;
+      contentMeasuredWhileReadyRef.current = false;
+      offsetRef.current = 0;
+      restoredRef.current = false;
+      setRestoredOffset(null);
+    }
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      if (restoreTimerRef.current) clearTimeout(restoreTimerRef.current);
+      saveTimerRef.current = null;
+      restoreTimerRef.current = null;
+      // Save the outgoing identity before the next layout resets shared refs.
+      commitProgress();
+    };
+  }, [contentKey, commitProgress]);
 
   const scheduleSave = useCallback(() => {
     if (!enabled || !restoredRef.current) return;
@@ -232,15 +252,6 @@ export function useReadingProgress({
     });
     return () => subscription.remove();
   }, [commitProgress]);
-
-  useEffect(
-    () => () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      if (restoreTimerRef.current) clearTimeout(restoreTimerRef.current);
-      commitProgress();
-    },
-    [commitProgress],
-  );
 
   const onScroll = useCallback(
     (offset: number) => {

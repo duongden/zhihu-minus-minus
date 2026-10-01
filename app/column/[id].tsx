@@ -129,6 +129,8 @@ export default function ColumnDetail() {
           </View>
           <BouncyButton
             onPress={() => followMutation.mutate()}
+            disabled={followMutation.isPending}
+            accessibilityState={{ busy: followMutation.isPending }}
             className="px-4 py-1.5 rounded-full"
             style={[
               {

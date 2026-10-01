@@ -2,17 +2,20 @@
 
 import katex from 'katex';
 import { colors, typography } from '@/constants/designTokens';
+import katexStyle from '@/features/rich-content/assets/katex-style.json';
 
 interface MathViewProps {
   formula: string;
   displayMode?: boolean;
   colorScheme?: 'light' | 'dark';
+  textColor?: string;
 }
 
 export default function MathView({
   formula,
   displayMode = false,
   colorScheme = 'light',
+  textColor: resolvedTextColor,
 }: MathViewProps) {
   const html = katex.renderToString(formula, {
     displayMode: displayMode,
@@ -20,7 +23,7 @@ export default function MathView({
     strict: false,
   });
 
-  const textColor = colors[colorScheme].text;
+  const textColor = resolvedTextColor ?? colors[colorScheme].text;
 
   return (
     <span
@@ -30,10 +33,7 @@ export default function MathView({
         backgroundColor: 'transparent',
       }}
     >
-      <link
-        rel="stylesheet"
-        href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css"
-      />
+      <style>{katexStyle.css}</style>
       <style>{`
         body {
           margin: 0;

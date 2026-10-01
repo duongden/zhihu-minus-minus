@@ -18,7 +18,24 @@ function migrateAppDelegate(contents, language = 'swift') {
       'iOS Scene lifecycle requires the Expo SDK 55 Swift AppDelegate.',
     );
   }
-  if (contents.includes(`// @generated begin ${TAG}`)) return contents;
+  const sceneDelegate = fs.readFileSync(
+    path.join(__dirname, 'ios/ZhihuSceneDelegate.swift'),
+    'utf8',
+  );
+  const generatedBlock = `// @generated begin ${TAG}\n${sceneDelegate}\n// @generated end ${TAG}`;
+  if (contents.includes(`// @generated begin ${TAG}`)) {
+    const blockPattern = new RegExp(
+      `// @generated begin ${TAG}\\r?\\n[\\s\\S]*?// @generated end ${TAG}`,
+      'g',
+    );
+    if ((contents.match(blockPattern) ?? []).length !== 1) {
+      throw new Error(
+        'Invalid generated iOS Scene block; regenerate or review AppDelegate.',
+      );
+    }
+    // Refresh our owned block so Swift source changes also reach existing builds.
+    return contents.replace(blockPattern, () => generatedBlock);
+  }
   if (
     !WINDOW_START.test(contents) ||
     !contents.includes('var reactNativeFactory: RCTReactNativeFactory?') ||
@@ -28,10 +45,6 @@ function migrateAppDelegate(contents, language = 'swift') {
       'Unrecognized AppDelegate: review the iOS Scene lifecycle plugin before changing the Expo template.',
     );
   }
-  const sceneDelegate = fs.readFileSync(
-    path.join(__dirname, 'ios/ZhihuSceneDelegate.swift'),
-    'utf8',
-  );
   return `${contents
     .replace(
       'var reactNativeFactory: RCTReactNativeFactory?',
@@ -46,9 +59,7 @@ function migrateAppDelegate(contents, language = 'swift') {
         ? `#if os(iOS) || os(tvOS)\n${firebaseInitialization}\n#endif\n    // The SceneDelegate creates the window and starts React Native.`
         : '// The SceneDelegate creates the window and starts React Native.',
     )}
-// @generated begin ${TAG}
-${sceneDelegate}
-// @generated end ${TAG}
+${generatedBlock}
 `;
 }
 

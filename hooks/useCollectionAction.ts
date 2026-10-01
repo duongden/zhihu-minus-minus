@@ -3,12 +3,11 @@ import { useRouter } from 'expo-router';
 import {
   fastCollectAnswer,
   fastCollectArticle,
-  getAnswerCollectionStatus,
-  getArticleCollectionStatus,
+  getAllContentCollectionStatus,
   removeArticleFromCollection,
   removeFromCollection,
 } from '@/api/zhihu/collection';
-import { useAuthStore } from '@/store/useAuthStore';
+import { getAuthSessionVersion, useAuthStore } from '@/store/useAuthStore';
 import { useCollectionStore } from '@/store/useCollectionStore';
 import { updateContentInteractionCaches } from '@/utils/contentCache';
 import { showToast as baseShowToast } from '@/utils/toast';
@@ -40,10 +39,14 @@ export function useCollectionAction() {
         return fastCollectArticle(id);
       }
     },
-    onSuccess: (res, variables) => {
+    onMutate: () => ({ sessionVersion: getAuthSessionVersion() }),
+    onSuccess: (res, variables, context) => {
+      if (context?.sessionVersion !== getAuthSessionVersion()) return;
       const idStr = variables.id.toString();
+      const wasCollected =
+        useCollectionStore.getState().collectedStatusMap[idStr];
       setCollectedStatus(idStr, true);
-      updateCollectedCountOffset(idStr, 1);
+      if (wasCollected !== true) updateCollectedCountOffset(idStr, 1);
       updateContentInteractionCaches(queryClient, {
         type: variables.type === 'answer' ? 'answers' : 'articles',
         id: variables.id,
@@ -61,7 +64,8 @@ export function useCollectionAction() {
       const folderName = res?.collection?.title || '默认收藏夹';
       showToast(variables.id, variables.type, `已收藏到「${folderName}」`);
     },
-    onError: (err: unknown) => {
+    onError: (err: unknown, _variables, context) => {
+      if (context?.sessionVersion !== getAuthSessionVersion()) return;
       baseShowToast(getZhihuErrorMessage(err) || '收藏失败');
     },
   });
@@ -74,11 +78,12 @@ export function useCollectionAction() {
       id: string | number;
       type: 'answer' | 'article';
     }) => {
+      const sessionVersion = getAuthSessionVersion();
       // 1. 获取当前收藏状态以知道它在哪些收藏夹里
-      const statusRes =
-        type === 'answer'
-          ? await getAnswerCollectionStatus(id)
-          : await getArticleCollectionStatus(id);
+      const statusRes = await getAllContentCollectionStatus(id, type);
+      if (sessionVersion !== getAuthSessionVersion()) {
+        throw new Error('登录状态已改变');
+      }
 
       const favoritedFolders =
         statusRes?.data?.filter((item) => item.is_favorited) || [];
@@ -95,10 +100,14 @@ export function useCollectionAction() {
       await Promise.all(promises);
       return favoritedFolders;
     },
-    onSuccess: (removedFolders, variables) => {
+    onMutate: () => ({ sessionVersion: getAuthSessionVersion() }),
+    onSuccess: (removedFolders, variables, context) => {
+      if (context?.sessionVersion !== getAuthSessionVersion()) return;
       const idStr = variables.id.toString();
+      const wasCollected =
+        useCollectionStore.getState().collectedStatusMap[idStr];
       setCollectedStatus(idStr, false);
-      updateCollectedCountOffset(idStr, -1);
+      if (wasCollected !== false) updateCollectedCountOffset(idStr, -1);
       updateContentInteractionCaches(queryClient, {
         type: variables.type === 'answer' ? 'answers' : 'articles',
         id: variables.id,
@@ -118,7 +127,8 @@ export function useCollectionAction() {
         .join('、');
       baseShowToast(foldersStr ? `已从「${foldersStr}」中移出` : '已取消收藏');
     },
-    onError: (err: unknown) => {
+    onError: (err: unknown, _variables, context) => {
+      if (context?.sessionVersion !== getAuthSessionVersion()) return;
       baseShowToast(getZhihuErrorMessage(err) || '取消收藏失败');
     },
   });

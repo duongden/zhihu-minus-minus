@@ -1,8 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { type StyleProp, View, type ViewStyle } from 'react-native';
 import { WebView } from 'react-native-webview';
-import { colors, radii, typography } from '@/constants/designTokens';
+import { useRuntimeThemeColors } from '@/components/Themed';
+import { radii, typography } from '@/constants/designTokens';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import katexRuntime from '../assets/katex-runtime.json';
+import katexStyle from '../assets/katex-style.json';
 import {
   parseRichContentBridgeMessage,
   type TextSelectionInfo,
@@ -14,6 +17,11 @@ import {
   RICH_CONTENT_PARAGRAPH_SPACING,
 } from '../presentation';
 import type { RichContentTypographyOptions } from '../types';
+import {
+  getSafeRichContentUrl,
+  sanitizeRichContentHtml,
+  serializeInlineScriptValue,
+} from '../webviewSecurity';
 
 export type { TextSelectionInfo } from '../bridge';
 
@@ -39,7 +47,6 @@ export default React.memo(function ZhihuDOMContent({
   htmlContent,
   segmentInfosStr,
   linkCardInfoStr,
-  colorScheme,
   onImagePress,
   onImageLongPress,
   onLinkPress,
@@ -53,11 +60,14 @@ export default React.memo(function ZhihuDOMContent({
   typographyOptions,
 }: ZhihuDOMContentProps) {
   const [height, setHeight] = useState(400);
-  const [_loading, _setLoading] = useState(true);
+  const safeHtmlContent = useMemo(
+    () => sanitizeRichContentHtml(htmlContent),
+    [htmlContent],
+  );
 
-  const textColor = colors[colorScheme].text;
+  const themeColors = useRuntimeThemeColors();
+  const textColor = themeColors.text;
   const settings = useSettingsStore();
-  const customPrimaryColor = settings.primaryColor;
   const metrics = createRichContentMetrics(
     fontSizeOverride ?? settings.fontSizeScale,
     lineHeightOverride ?? settings.lineHeightScale,
@@ -68,7 +78,7 @@ export default React.memo(function ZhihuDOMContent({
         `.zhihu-content ${tag} { font-size: ${metric.fontSize}px; line-height: ${metric.lineHeight}px; font-weight: bold; margin: ${metric.marginTop}px 0 ${metric.marginBottom}px; }`,
     )
     .join('\n');
-  const primaryColor = customPrimaryColor || colors.light.primary;
+  const primaryColor = themeColors.link;
   const dailyStyles =
     variant === 'daily'
       ? `
@@ -96,7 +106,7 @@ export default React.memo(function ZhihuDOMContent({
         .zhihu-content .meta .bio {
           flex: 1 1 auto;
           min-width: 0;
-          color: ${colors[colorScheme].textSecondary};
+          color: ${themeColors.textSecondary};
           font-size: 14px;
         }
         .zhihu-content .question-title:empty {
@@ -110,9 +120,9 @@ export default React.memo(function ZhihuDOMContent({
     <html lang="zh-Hans">
     <head>
       <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
-      <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
-      <script src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+      <style>${katexStyle.css}</style>
+      <script>${katexRuntime.script.replace(/<\/script/gi, '<\\/script')}</script>
+      <script>${katexRuntime.autoRender.replace(/<\/script/gi, '<\\/script')}</script>
       <style>
         body {
           margin: 0;
@@ -153,11 +163,11 @@ export default React.memo(function ZhihuDOMContent({
           text-autospace: no-autospace;
         }
         .highlight {
-          background-color: ${colors[colorScheme].backgroundSecondary};
+          background-color: ${themeColors.backgroundSecondary};
           padding: 12px;
           border-radius: 8px;
           margin: 15px 0;
-          border: 1px solid ${colors[colorScheme].border};
+          border: 1px solid ${themeColors.border};
         }
         .zhihu-content p {
           margin: 0 0 ${RICH_CONTENT_PARAGRAPH_SPACING}px;
@@ -174,7 +184,7 @@ export default React.memo(function ZhihuDOMContent({
           text-align: center;
         }
         .zhihu-content figcaption {
-          color: ${colors[colorScheme].iconMuted};
+          color: ${themeColors.iconMuted};
           font-size: ${metrics.captionFontSize}px;
           margin-top: 8px;
           font-style: italic;
@@ -191,9 +201,9 @@ export default React.memo(function ZhihuDOMContent({
           overflow: hidden;
           margin: 16px 0;
           padding: 14px 16px;
-          border: 1px solid ${colors[colorScheme].contentBorderStrong};
+          border: 1px solid ${themeColors.contentBorderStrong};
           border-radius: ${radii.md}px;
-          background: ${colors[colorScheme].backgroundTertiary};
+          background: ${themeColors.backgroundTertiary};
           color: ${textColor};
         }
         .zhihu-link-card-title {
@@ -209,7 +219,7 @@ export default React.memo(function ZhihuDOMContent({
         }
         .zhihu-link-card-desc {
           margin-top: 4px;
-          color: ${colors[colorScheme].textSecondary};
+          color: ${themeColors.textSecondary};
           font-size: ${typography.fontSize.caption}px;
           line-height: ${typography.lineHeight.compact};
           display: -webkit-box;
@@ -235,10 +245,10 @@ export default React.memo(function ZhihuDOMContent({
           margin: 15px 0;
           font-size: ${metrics.body.fontSize}px;
           line-height: ${metrics.body.lineHeight}px;
-          color: ${colors[colorScheme].textSecondary};
+          color: ${themeColors.textSecondary};
         }
         .zhihu-content blockquote p {
-          color: ${colors[colorScheme].textSecondary};
+          color: ${themeColors.textSecondary};
           font-size: ${metrics.body.fontSize}px;
           line-height: ${metrics.body.lineHeight}px;
         }
@@ -246,7 +256,7 @@ export default React.memo(function ZhihuDOMContent({
         ${headingStyles}
         .zhihu-content ul, .zhihu-content ol { padding-left: 20px; margin: 10px 0; }
         .zhihu-content li { margin-bottom: ${RICH_CONTENT_LIST_ITEM_SPACING}px; font-size: ${metrics.body.fontSize}px; line-height: ${metrics.body.lineHeight}px; }
-        .zhihu-content hr { height: 1px; background-color: ${colors[colorScheme].contentBorder}; border: none; margin: 25px 0; }
+        .zhihu-content hr { height: 1px; background-color: ${themeColors.contentBorder}; border: none; margin: 25px 0; }
         ${dailyStyles}
 
         .segment-interactable {
@@ -265,9 +275,9 @@ export default React.memo(function ZhihuDOMContent({
     <body>
       <div id="content" class="zhihu-content"></div>
       <script>
-        const htmlContent = ${JSON.stringify(htmlContent)};
-        const segmentInfosStr = ${JSON.stringify(segmentInfosStr || '[]')};
-        const linkCardInfoStr = ${JSON.stringify(linkCardInfoStr || '{}')};
+        const htmlContent = ${serializeInlineScriptValue(safeHtmlContent)};
+        const segmentInfosStr = ${serializeInlineScriptValue(segmentInfosStr || '[]')};
+        const linkCardInfoStr = ${serializeInlineScriptValue(linkCardInfoStr || '{}')};
 
         const container = document.getElementById('content');
         container.innerHTML = htmlContent;
@@ -294,7 +304,12 @@ export default React.memo(function ZhihuDOMContent({
           if (typeof value !== 'string') return '';
           const candidate = value.trim();
           if (!/^(https?:)?\\/\\//i.test(candidate)) return '';
-          return candidate.indexOf('//') === 0 ? 'https:' + candidate : candidate;
+          try {
+            const url = new URL(candidate.indexOf('//') === 0 ? 'https:' + candidate : candidate);
+            return !url.username && !url.password && /^(https?:)$/.test(url.protocol) ? url.href : '';
+          } catch (_) {
+            return '';
+          }
         }
 
         function getLinkCardImage(display) {
@@ -308,9 +323,9 @@ export default React.memo(function ZhihuDOMContent({
 
         function getCardText(value) {
           if (typeof value !== 'string') return '';
-          const element = document.createElement('div');
+          const element = document.createElement('template');
           element.innerHTML = value;
-          return (element.textContent || '').trim();
+          return (element.content.textContent || '').trim();
         }
 
         // Zhihu stores link cards as editor-only anchors. Turn them into
@@ -320,7 +335,7 @@ export default React.memo(function ZhihuDOMContent({
           const info = getLinkCardInfo(href);
           const display = info && info.display && typeof info.display === 'object' ? info.display : {};
           const cardHref = typeof display.card_open_url === 'string' ? display.card_open_url : href;
-          const title = typeof display.title === 'string' ? display.title : getCardText(anchor.textContent) || href;
+          const title = getCardText(display.title) || (anchor.textContent || '').trim() || href;
           const desc = getCardText(display.desc);
           const card = document.createElement('a');
           card.href = cardHref;
@@ -426,8 +441,8 @@ export default React.memo(function ZhihuDOMContent({
               }
             });
           }
-        } catch (e) {
-          console.error('Failed to parse segmentInfos', e);
+        } catch (_) {
+          // Invalid optional metadata cannot block layout or reveal its contents.
         }
 
         // Process footnotes
@@ -436,7 +451,7 @@ export default React.memo(function ZhihuDOMContent({
           if (footnotes.length > 0) {
             const footnoteList = document.createElement('div');
             footnoteList.style.marginTop = '40px';
-            footnoteList.style.borderTop = '1px solid ${colors[colorScheme].contentBorder}';
+            footnoteList.style.borderTop = '1px solid ${themeColors.contentBorder}';
             footnoteList.style.paddingTop = '15px';
             footnoteList.style.fontSize = '14px';
 
@@ -459,32 +474,48 @@ export default React.memo(function ZhihuDOMContent({
               item.id = footnoteId;
               item.style.marginBottom = '8px';
               item.style.lineHeight = '1.5';
-              item.style.color = '${colors[colorScheme].textSecondary}';
+              item.style.color = '${themeColors.textSecondary}';
 
-              item.innerHTML = '<a href="#' + refId + '" style="color:${primaryColor}; text-decoration:none; font-weight:bold;">[' + numero + ']</a> ' + text;
+              const backlink = document.createElement('a');
+              backlink.href = '#' + refId;
+              backlink.style.color = '${primaryColor}';
+              backlink.style.fontWeight = 'bold';
+              backlink.textContent = '[' + numero + ']';
+              item.appendChild(backlink);
+              item.appendChild(document.createTextNode(' ' + (text || '')));
 
               footnoteList.appendChild(item);
 
-              sup.innerHTML = '<a href="#' + footnoteId + '" style="color:${primaryColor}; text-decoration:none;">[' + numero + ']</a>';
+              const reference = document.createElement('a');
+              reference.href = '#' + footnoteId;
+              reference.style.color = '${primaryColor}';
+              reference.textContent = '[' + numero + ']';
+              sup.replaceChildren(reference);
             });
 
             container.appendChild(footnoteList);
           }
-        } catch (e) {
-          console.error('Failed to process footnotes', e);
+        } catch (_) {
+          // Invalid optional footnotes cannot block the surrounding content.
         }
 
         // Render Math
-        renderMathInElement(container, {
-          delimiters: [
-            { left: '$$', right: '$$', display: true },
-            { left: '$', right: '$', display: false },
-            { left: '\\(', right: '\\)', display: false },
-            { left: '\\[', right: '\\]', display: true }
-          ],
-          throwOnError: false,
-          strict: false,
-        });
+        if (typeof renderMathInElement === 'function') {
+          try {
+            renderMathInElement(container, {
+              delimiters: [
+                { left: '$$', right: '$$', display: true },
+                { left: '$', right: '$', display: false },
+                { left: '\\(', right: '\\)', display: false },
+                { left: '\\[', right: '\\]', display: true }
+              ],
+              throwOnError: false,
+              strict: false,
+            });
+          } catch (_) {
+            // CDN or formula failures keep text, interactions and height reporting available.
+          }
+        }
 
         // Click and touch long-press handlers
         var imageTouchTimer = null;
@@ -627,16 +658,12 @@ export default React.memo(function ZhihuDOMContent({
         }
 
         function getTextOffset(paragraph, targetNode, targetOffset) {
-          var walker = document.createTreeWalker(paragraph, NodeFilter.SHOW_TEXT, null, false);
-          var offset = 0;
-          var node;
-          while (node = walker.nextNode()) {
-            if (node === targetNode) {
-              return offset + targetOffset;
-            }
-            offset += node.textContent.length;
-          }
-          return offset;
+          // DOM selections may end at an element's child boundary as well as
+          // inside a text node. Range handles both in the same UTF-16 space.
+          var prefix = document.createRange();
+          prefix.selectNodeContents(paragraph);
+          prefix.setEnd(targetNode, targetOffset);
+          return prefix.toString().length;
         }
 
         var selectionTimeout;
@@ -652,11 +679,11 @@ export default React.memo(function ZhihuDOMContent({
             var range = selection.getRangeAt(0);
             var startP = findParagraph(range.startContainer);
             var endP = findParagraph(range.endContainer);
-            if (startP) {
+            if (startP && endP) {
               var startPid = startP.getAttribute('data-pid');
-              var endPid = endP ? endP.getAttribute('data-pid') : startPid;
+              var endPid = endP.getAttribute('data-pid');
               var sOff = getTextOffset(startP, range.startContainer, range.startOffset);
-              var eOff = endP ? getTextOffset(endP, range.endContainer, range.endOffset) : sOff + text.length;
+              var eOff = getTextOffset(endP, range.endContainer, range.endOffset);
               window.ReactNativeWebView.postMessage(JSON.stringify({
                 type: 'selection',
                 info: {
@@ -667,6 +694,8 @@ export default React.memo(function ZhihuDOMContent({
                   endOffset: eOff
                 }
               }));
+            } else {
+              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'selection', info: null }));
             }
           }, 300);
         });
@@ -701,7 +730,8 @@ export default React.memo(function ZhihuDOMContent({
           window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'height', height }));
         }
 
-        // Wait for images and fonts to load
+        // Font face completion can follow math insertion; measure its final metrics.
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(sendHeight);
         window.onload = sendHeight;
         setTimeout(sendHeight, 100);
         setTimeout(sendHeight, 500);
@@ -738,13 +768,22 @@ export default React.memo(function ZhihuDOMContent({
               onReady?.();
               break;
             case 'image':
-              onImagePress(data.src);
+              {
+                const src = getSafeRichContentUrl(data.src, true);
+                if (src) onImagePress(src);
+              }
               break;
             case 'image_long_press':
-              onImageLongPress?.(data.src);
+              {
+                const src = getSafeRichContentUrl(data.src, true);
+                if (src) onImageLongPress?.(src);
+              }
               break;
             case 'link':
-              onLinkPress(data.href);
+              {
+                const href = getSafeRichContentUrl(data.href);
+                if (href) onLinkPress(href);
+              }
               break;
             case 'segment':
               onSegmentPress(data.pid);
@@ -753,6 +792,16 @@ export default React.memo(function ZhihuDOMContent({
               onTextSelected?.(data.info);
               break;
           }
+        }}
+        onShouldStartLoadWithRequest={(request) => {
+          if (
+            request.url === 'about:blank' ||
+            request.url.startsWith('about:blank#')
+          )
+            return true;
+          const href = getSafeRichContentUrl(request.url);
+          if (href) onLinkPress(href);
+          return false;
         }}
       />
     </View>

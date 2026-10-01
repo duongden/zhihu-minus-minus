@@ -4,10 +4,6 @@ import android.graphics.Color
 import org.json.JSONArray
 import org.json.JSONObject
 
-internal data class TextRange(val start: Int, val end: Int) {
-  fun intersects(startOffset: Int, endOffset: Int) = start < endOffset && end > startOffset
-}
-
 internal data class FlowData(
   val id: String,
   val textVersion: String,
@@ -21,7 +17,7 @@ internal data class FlowData(
     fun parse(value: String): FlowData? = runCatching {
       val json = JSONObject(value)
       FlowData(
-        json.getString("id"), json.getString("textVersion"), json.getString("text"),
+        json.opt("id") as? String ?: return@runCatching null, json.opt("textVersion") as? String ?: return@runCatching null, json.opt("text") as? String ?: return@runCatching null,
         json.optJSONArray("spans").objects(), json.optJSONArray("paragraphs").objects(),
         json.optJSONArray("decorations").objects(), json.optJSONArray("attachments").objects()
       )
@@ -43,9 +39,9 @@ internal data class TextConfig(
     fun parse(value: String): TextConfig = runCatching {
       val json = JSONObject(value)
       TextConfig(
-        json.optDouble("fontSize", 17.0).toFloat().coerceIn(8f, 64f),
-        json.optDouble("lineHeight", 28.0).toFloat().coerceIn(8f, 120f),
-        json.optDouble("paragraphSpacing", 12.0).toFloat().coerceIn(0f, 120f),
+        json.number("fontSize", 17.0).toFloat().coerceIn(8f, 64f),
+        json.number("lineHeight", 28.0).toFloat().coerceIn(8f, 120f),
+        json.number("paragraphSpacing", 12.0).toFloat().coerceIn(0f, 120f),
         parseColor(json.optString("textColor"), Color.rgb(35, 39, 43)),
         parseColor(json.optString("secondaryColor"), Color.rgb(112, 117, 123)),
         parseColor(json.optString("linkColor"), Color.rgb(23, 91, 199)),
@@ -56,11 +52,9 @@ internal data class TextConfig(
   }
 }
 
-internal fun JSONObject.range(textLength: Int): TextRange? {
-  val start = optInt("start", -1)
-  val end = optInt("end", -1)
-  return if (start >= 0 && end > start && end <= textLength) TextRange(start, end) else null
-}
+internal fun JSONObject.range(text: String): TextRange? = richTextRange(opt("start"), opt("end"), text)
+
+internal fun JSONObject.number(key: String, fallback: Double = Double.NaN): Double = richTextNumber(opt(key), fallback)
 
 internal fun JSONArray?.objects(): List<JSONObject> =
   if (this == null) emptyList() else (0 until length()).mapNotNull { optJSONObject(it) }

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -15,26 +15,31 @@ import {
   getQuestion,
   updateAnswer,
 } from '@/api/zhihu';
-import type { UploadedImage } from '@/api/zhihu/image';
 import { BouncyButton } from '@/components/BouncyButton';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import {
-  deserializePublishingHtml,
+  createPublishingDocument,
+  emptyPublishingDraft,
+  hasPublishingDocumentContent,
+  PublishingDocumentEditor,
+  PublishingDraftNotice,
   PublishingEditor,
+  serializePublishingDocument,
   serializePublishingMarkdown,
+  usePublishingDraft,
 } from '@/features/publishing';
+import type { PublishingMediaItem } from '@/features/publishing/types';
+import { getAuthSessionVersion } from '@/store/useAuthStore';
 import { getZhihuErrorMessage } from '@/utils/zhihuError';
 
 export default function WriteAnswerScreen() {
-  const primaryColor = useThemeColor({}, 'primary');
+  const primaryColor = useThemeColor({}, 'link');
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const _insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const [content, setContent] = useState('');
-  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [editorBusy, setEditorBusy] = useState(false);
-  const initializedAnswerId = useRef<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const { data: question, isLoading: qLoading } = useQuery({
     queryKey: ['question', id],
@@ -52,30 +57,71 @@ export default function WriteAnswerScreen() {
     queryKey: ['answer-edit', existingAnswerId],
     queryFn: () => getAnswer(existingAnswerId as string),
     enabled: !!existingAnswerId,
+    // Keep the base revision stable during editing and fetch a fresh revision
+    // when the editor is opened again.
+    staleTime: Infinity,
+    gcTime: 0,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 
-  useEffect(() => {
-    if (!existingAnswerId) {
-      initializedAnswerId.current = null;
-      return;
-    }
-    if (!existingAnswer || initializedAnswerId.current === existingAnswerId) {
-      return;
-    }
-    const editableContent =
-      existingAnswer.editable_content || existingAnswer.content || '';
-    setContent(deserializePublishingHtml(editableContent));
-    initializedAnswerId.current = existingAnswerId;
-  }, [existingAnswer, existingAnswerId]);
+  const initialDraft = useMemo(
+    () => ({
+      ...emptyPublishingDraft(),
+      document: existingAnswer
+        ? createPublishingDocument(
+            existingAnswer.editable_content || existingAnswer.content || '',
+          )
+        : null,
+    }),
+    [existingAnswer],
+  );
+  const draft = usePublishingDraft(
+    'answer',
+    `${id}:${existingAnswerId ?? 'new'}`,
+    initialDraft,
+    !qLoading &&
+      !answerLoading &&
+      (!existingAnswerId || Boolean(existingAnswer)),
+    editorBusy,
+    submitting,
+  );
+  const { update } = draft;
+  const { content, images: uploadedImages, document } = draft.value;
+  const setContent = useCallback(
+    (value: string) => update({ content: value }),
+    [update],
+  );
+  const setUploadedImages = useCallback(
+    (value: typeof uploadedImages) => update({ images: value }),
+    [update],
+  );
+  const setMedia = useCallback(
+    (value: PublishingMediaItem[]) => update({ media: value }),
+    [update],
+  );
+  const hasContent = Boolean(
+    content.trim() || (document && hasPublishingDocumentContent(document)),
+  );
 
+  const submissionSessionRef = useRef<number | null>(null);
   const mutation = useMutation({
     mutationFn: () => {
-      const html = serializePublishingMarkdown(content, uploadedImages);
+      if (submissionSessionRef.current !== getAuthSessionVersion())
+        throw new Error('登录会话已变化，请重新进入编辑');
+      const html =
+        (document
+          ? serializePublishingDocument(document, uploadedImages)
+          : '') + serializePublishingMarkdown(content, uploadedImages);
       return existingAnswerId
         ? updateAnswer(id as string, existingAnswerId, html)
         : createAnswer(id as string, html);
     },
-    onSuccess: () => {
+    onMutate: () => ({ sessionVersion: submissionSessionRef.current }),
+    onSuccess: async (_result, _variables, context) => {
+      if (context?.sessionVersion !== getAuthSessionVersion()) return;
+      await draft.completePublished();
+      if (context?.sessionVersion !== getAuthSessionVersion()) return;
       Alert.alert(
         existingAnswerId ? '保存成功' : '发布成功',
         existingAnswerId ? '你的回答修改已保存喵！' : '你的回答已发布喵！',
@@ -88,15 +134,22 @@ export default function WriteAnswerScreen() {
       }
       router.back();
     },
-    onError: (error: unknown) =>
-      Alert.alert(
-        existingAnswerId ? '保存失败' : '发布失败',
-        getZhihuErrorMessage(error),
-      ),
+    onSettled: () => {
+      submissionSessionRef.current = null;
+      setSubmitting(false);
+    },
+    onError: (error: unknown, _variables, context) => {
+      if (context?.sessionVersion === getAuthSessionVersion())
+        Alert.alert(
+          existingAnswerId ? '保存失败' : '发布失败',
+          getZhihuErrorMessage(error),
+        );
+    },
   });
 
   const handlePublish = () => {
-    if (!content.trim()) {
+    if (submissionSessionRef.current !== null) return;
+    if (!hasContent) {
       Alert.alert('提示', '请输入回答内容');
       return;
     }
@@ -104,6 +157,9 @@ export default function WriteAnswerScreen() {
       Alert.alert('图片上传中', '请等待图片上传完成后再发布。');
       return;
     }
+    if (!draft.ready || draft.hasConflict || mutation.isPending) return;
+    submissionSessionRef.current = getAuthSessionVersion();
+    setSubmitting(true);
     mutation.mutate();
   };
 
@@ -124,8 +180,14 @@ export default function WriteAnswerScreen() {
             <BouncyButton
               className="px-3 py-2 rounded-full"
               onPress={handlePublish}
-              disabled={mutation.isPending || editorBusy || !content.trim()}
-              style={{ opacity: !content.trim() ? 0.5 : 1 }}
+              disabled={
+                !draft.ready ||
+                draft.hasConflict ||
+                mutation.isPending ||
+                editorBusy ||
+                !hasContent
+              }
+              style={{ opacity: !hasContent ? 0.5 : 1 }}
             >
               {mutation.isPending ? (
                 <ActivityIndicator size="small" color={primaryColor} />
@@ -151,17 +213,32 @@ export default function WriteAnswerScreen() {
           <Text className="text-lg font-bold mb-5 leading-[26px]">
             {question?.title}
           </Text>
-          <PublishingEditor
-            autoFocus
-            contentType="answer"
-            disabled={mutation.isPending}
-            minHeight={300}
-            onBusyChange={setEditorBusy}
-            onChangeText={setContent}
-            onImagesChange={setUploadedImages}
-            placeholder="知乎致力于建设友善的讨论氛围，建议在此写下你的真知灼见..."
-            value={content}
-          />
+          <PublishingDraftNotice draft={draft} />
+          {draft.ready && document && (
+            <PublishingDocumentEditor
+              document={document}
+              disabled={mutation.isPending || draft.hasConflict}
+              onChange={(value) => update({ document: value })}
+            />
+          )}
+          {draft.ready && (
+            <PublishingEditor
+              key={draft.scopeKey}
+              draftScope={draft.scope}
+              initialMedia={draft.value.media}
+              initialImages={draft.value.images}
+              onMediaChange={setMedia}
+              autoFocus
+              contentType="answer"
+              disabled={mutation.isPending || draft.hasConflict}
+              minHeight={300}
+              onBusyChange={setEditorBusy}
+              onChangeText={setContent}
+              onImagesChange={setUploadedImages}
+              placeholder="知乎致力于建设友善的讨论氛围，建议在此写下你的真知灼见..."
+              value={content}
+            />
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

@@ -232,7 +232,7 @@ function ChoiceChip({
         style={[
           styles.chipText,
           selected && {
-            color: Colors[colorScheme].textInverse,
+            color: Colors[colorScheme].onPrimary,
             fontWeight: '700',
           },
         ]}

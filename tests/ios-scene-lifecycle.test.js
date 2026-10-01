@@ -145,6 +145,28 @@ describe('iOS scene lifecycle app delegate migration', () => {
     expect((once.match(/class ZhihuSceneDelegate\b/g) ?? []).length).toBe(1);
   });
 
+  test('refreshes an existing generated Scene block from the current Swift source', () => {
+    const current = migrateAppDelegate(SDK_55_APP_DELEGATE);
+    const outdated = current.replace(
+      /\/\/ @generated begin zhihu-ios-scene-lifecycle[\s\S]*?\/\/ @generated end zhihu-ios-scene-lifecycle/,
+      '// @generated begin zhihu-ios-scene-lifecycle\n// old delegate\n// @generated end zhihu-ios-scene-lifecycle',
+    );
+
+    expect(migrateAppDelegate(outdated)).toBe(current);
+  });
+
+  test('rejects a truncated or duplicated generated block', () => {
+    const current = migrateAppDelegate(SDK_55_APP_DELEGATE);
+    expect(() =>
+      migrateAppDelegate(
+        current.replace('// @generated end zhihu-ios-scene-lifecycle', ''),
+      ),
+    ).toThrow('Invalid generated iOS Scene block');
+    expect(() => migrateAppDelegate(current + current)).toThrow(
+      'Invalid generated iOS Scene block',
+    );
+  });
+
   test('retains Firebase initialization from the real plugin in didFinish before Scene startup', () => {
     const configured = modifySwiftAppDelegate(SDK_55_APP_DELEGATE);
     const firebaseBlock = configured.slice(

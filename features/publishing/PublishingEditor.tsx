@@ -1,24 +1,24 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
 import type React from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   type NativeSyntheticEvent,
   ScrollView,
   StyleSheet,
   TextInput,
   type TextInputSelectionChangeEventData,
 } from 'react-native';
-import { type UploadedImage, uploadImage } from '@/api/zhihu/image';
+import type { UploadedImage } from '@/api/zhihu/image';
 import { BouncyButton } from '@/components/BouncyButton';
 import { Text, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { ZhihuContent } from '@/features/rich-content';
-import { getZhihuErrorMessage } from '@/utils/zhihuError';
+import { PublishingMediaList } from './PublishingMediaPicker';
 import { serializePublishingMarkdown } from './serializer';
+import type { PublishingDraftScope, PublishingMediaItem } from './types';
+import { usePublishingMedia } from './usePublishingMedia';
 
 type PublishingContentType = 'answer' | 'article' | 'question';
 
@@ -37,6 +37,10 @@ interface PublishingEditorProps {
   onImagesChange?: (images: UploadedImage[]) => void;
   placeholder: string;
   value: string;
+  draftScope?: PublishingDraftScope | null;
+  initialMedia?: PublishingMediaItem[];
+  initialImages?: UploadedImage[];
+  onMediaChange?: (items: PublishingMediaItem[]) => void;
 }
 
 interface ToolbarAction {
@@ -56,24 +60,59 @@ export function PublishingEditor({
   onImagesChange,
   placeholder,
   value,
+  draftScope = null,
+  initialMedia = [],
+  initialImages = [],
+  onMediaChange,
 }: PublishingEditorProps) {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme];
   const inputRef = useRef<TextInput>(null);
   const valueRef = useRef(value);
-  const uploadedImagesRef = useRef<UploadedImage[]>([]);
   const [selection, setSelection] = useState<TextSelection>({
     start: 0,
     end: 0,
   });
   const [isPreviewing, setIsPreviewing] = useState(false);
-  const [isPicking, setIsPicking] = useState(false);
-  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
-  const [uploadingCount, setUploadingCount] = useState(0);
-
+  const callbacks = useRef({ onMediaChange, onImagesChange, onChangeText });
+  callbacks.current = { onMediaChange, onImagesChange, onChangeText };
   valueRef.current = value;
-
-  const isBusy = isPicking || uploadingCount > 0;
+  const media = usePublishingMedia({
+    scope: draftScope,
+    initialItems: initialMedia,
+    disabled,
+    onChange: (items) => {
+      callbacks.current.onMediaChange?.(items);
+      const images = [
+        ...initialImages.filter((image) =>
+          valueRef.current.includes(image.src),
+        ),
+        ...items.flatMap((item) => (item.uploaded ? [item.uploaded] : [])),
+      ];
+      callbacks.current.onImagesChange?.(
+        Array.from(
+          new Map(images.map((image) => [image.imageId, image])).values(),
+        ),
+      );
+    },
+    onUploaded: (item) => {
+      if (!item.uploaded || item.inserted) return;
+      const image = item.uploaded;
+      insertUploadedImages([
+        `![图片](${image.src} "${image.width}x${image.height}")`,
+      ]);
+      media.markInserted(item.id);
+    },
+  });
+  const uploadedImages = useMemo(
+    () => [
+      ...initialImages,
+      ...media.items.flatMap((item) => (item.uploaded ? [item.uploaded] : [])),
+    ],
+    [initialImages, media.items],
+  );
+  const isBusy = media.isBusy;
+  const uploadingCount = media.uploadingCount;
   useEffect(() => {
     onBusyChange?.(isBusy);
   }, [isBusy, onBusyChange]);
@@ -125,66 +164,9 @@ export function PublishingEditor({
     const currentValue = valueRef.current;
     const separator = currentValue.trimEnd() ? '\n\n' : '';
     const nextValue = `${currentValue.trimEnd()}${separator}${imageMarkdown.join('\n\n')}`;
+    valueRef.current = nextValue;
     onChangeText(nextValue);
     focusAt({ start: nextValue.length, end: nextValue.length });
-  };
-
-  const chooseImages = async () => {
-    if (disabled || isBusy) return;
-
-    try {
-      const permission =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('需要相册权限', '请允许访问照片，才能把图片插入正文。');
-        return;
-      }
-
-      setIsPicking(true);
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: false,
-        allowsMultipleSelection: true,
-        selectionLimit: 9,
-        quality: 1,
-      });
-      setIsPicking(false);
-
-      if (result.canceled || result.assets.length === 0) return;
-      setUploadingCount(result.assets.length);
-      const uploaded = await Promise.all(
-        result.assets.map(async (asset) => {
-          try {
-            const image = await uploadImage(
-              {
-                uri: asset.uri,
-                width: asset.width,
-                height: asset.height,
-                mimeType: asset.mimeType,
-                fileName: asset.fileName,
-              },
-              'article',
-            );
-            return image;
-          } finally {
-            setUploadingCount((count) => Math.max(0, count - 1));
-          }
-        }),
-      );
-      const nextImages = [...uploadedImagesRef.current, ...uploaded];
-      uploadedImagesRef.current = nextImages;
-      setUploadedImages(nextImages);
-      onImagesChange?.(nextImages);
-      insertUploadedImages(
-        uploaded.map(
-          (image) => `![图片](${image.src} "${image.width}x${image.height}")`,
-        ),
-      );
-    } catch (error: unknown) {
-      setIsPicking(false);
-      setUploadingCount(0);
-      Alert.alert('图片上传失败', getZhihuErrorMessage(error));
-    }
   };
 
   const toolbarActions: ToolbarAction[] = [
@@ -228,7 +210,7 @@ export function PublishingEditor({
       key: 'image',
       icon: 'image-outline',
       label: '图片',
-      onPress: () => void chooseImages(),
+      onPress: () => void media.chooseImages(),
     },
   ];
 
@@ -263,9 +245,9 @@ export function PublishingEditor({
               style={{ opacity: disabled || isBusy || isPreviewing ? 0.4 : 1 }}
             >
               {action.key === 'image' && isBusy ? (
-                <ActivityIndicator size="small" color={colors.primary} />
+                <ActivityIndicator size="small" color={colors.link} />
               ) : (
-                <Ionicons name={action.icon} size={20} color={colors.primary} />
+                <Ionicons name={action.icon} size={20} color={colors.link} />
               )}
               <Text type="secondary" className="mt-0.5 text-[10px]">
                 {action.label}
@@ -287,12 +269,29 @@ export function PublishingEditor({
 
       {uploadingCount > 0 && (
         <View className="flex-row items-center py-2 bg-transparent">
-          <ActivityIndicator size="small" color={colors.primary} />
+          <ActivityIndicator size="small" color={colors.link} />
           <Text type="secondary" className="ml-2 text-xs">
             正在上传 {uploadingCount} 张图片，上传完成后会插入正文
           </Text>
         </View>
       )}
+
+      <PublishingMediaList
+        media={media}
+        disabled={disabled}
+        onRemove={(item) => {
+          if (item.uploaded && item.inserted) {
+            const image = item.uploaded;
+            const next = valueRef.current.replace(
+              `![图片](${image.src} "${image.width}x${image.height}")`,
+              '',
+            );
+            valueRef.current = next;
+            onChangeText(next);
+          }
+          media.remove(item.id);
+        }}
+      />
 
       {isPreviewing ? (
         <View style={{ minHeight }} className="pt-4 bg-transparent">

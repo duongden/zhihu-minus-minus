@@ -5,7 +5,12 @@ import {
   useMutation,
   useQueryClient,
 } from '@tanstack/react-query';
-import { useFocusEffect, useNavigation, useRouter } from 'expo-router';
+import {
+  type Href,
+  useFocusEffect,
+  useNavigation,
+  useRouter,
+} from 'expo-router';
 import type { ComponentProps } from 'react';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet } from 'react-native';
@@ -21,6 +26,7 @@ import type {
   ZhihuNotificationItem,
 } from '@/types/zhihu';
 import { formatDateTime } from '@/utils/date';
+import { getNotificationBody, getNotificationPath } from '@/utils/notification';
 import { refreshInfiniteQuery } from '@/utils/query';
 
 type NotificationIconName = ComponentProps<typeof Ionicons>['name'];
@@ -149,7 +155,6 @@ export default function NotificationScreen() {
   const renderItem = ({ item }: { item: ZhihuNotificationItem }) => {
     const content = getNotificationContent(item.content);
     const actor = content?.actors?.[0] || item.actors?.[0] || {};
-    const target = content?.target || item.target || {};
     const time = formatDateTime(item.create_time);
     const iconConfig = getIconConfig(item);
 
@@ -161,26 +166,8 @@ export default function NotificationScreen() {
           borderBottomColor: borderColor,
         }}
         onPress={() => {
-          const link = content?.target?.link;
-          if (link) {
-            if (link.includes('/answer/')) {
-              const id = link.split('/answer/')[1];
-              router.push(`/answer/${id}`);
-              return;
-            }
-            if (link.includes('/question/')) {
-              const id = link.split('/question/')[1];
-              router.push(`/question/${id}`);
-              return;
-            }
-          }
-          if (target.type === 'answer' || item.type === 'answer') {
-            router.push(`/answer/${target.id || item.id}`);
-          } else if (target.type === 'article') {
-            router.push(`/article/${target.id}`);
-          } else if (target.type === 'member') {
-            router.push(`/user/${target.id}`);
-          }
+          const path = getNotificationPath(item);
+          if (path) router.push(path as Href);
         }}
       >
         <View
@@ -213,10 +200,7 @@ export default function NotificationScreen() {
                 {content.verb}{' '}
               </Text>
             ) : null}
-            {content?.extend?.text ||
-              content?.target?.text ||
-              item.target?.content ||
-              (typeof item.content === 'string' ? item.content : '新的动态')}
+            {getNotificationBody(item)}
           </Text>
           {content?.target?.text && (
             <View

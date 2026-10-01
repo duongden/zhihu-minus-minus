@@ -5,7 +5,11 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { LinkCard } from '@/features/rich-content';
 import type { ZhihuContentSegment } from '@/types/zhihu';
-import { extractZhihuRedirectTarget, parseZhihuUrl } from '@/utils/url';
+import {
+  extractZhihuRedirectTarget,
+  getSafeExternalUrl,
+  parseZhihuUrl,
+} from '@/utils/url';
 import { Text, View } from './Themed';
 
 function parseExcerpt(html: string): { text: string; links: string[] } {
@@ -72,11 +76,13 @@ export const FeedExcerpt: React.FC<{
       if (!url) return;
       const realUrl = extractZhihuRedirectTarget(url);
       const internalPath = parseZhihuUrl(realUrl);
-      if (internalPath && internalPath !== '/') {
+      if (internalPath) {
         router.push(internalPath as Href);
       } else {
-        Linking.openURL(realUrl).catch((err) =>
-          console.error('Failed to open URL:', err),
+        const externalUrl = getSafeExternalUrl(realUrl);
+        if (!externalUrl) return;
+        Linking.openURL(externalUrl).catch(() =>
+          console.error('Failed to open external URL'),
         );
       }
     },

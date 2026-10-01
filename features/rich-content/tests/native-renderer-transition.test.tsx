@@ -34,7 +34,13 @@ jest.mock('../../../modules/zhihu-rich-text', () => {
   };
 });
 jest.mock('../../../components/Themed', () => ({
-  useThemeColor: () => mockTextColor,
+  useRuntimeThemeColors: () => ({
+    text: mockTextColor,
+    textSecondary: mockTextColor,
+    link: mockTextColor,
+    backgroundSecondary: mockTextColor,
+    border: mockTextColor,
+  }),
 }));
 jest.mock('../../../store/useSettingsStore', () => ({
   useSettingsStore: () => ({ fontSizeScale: 1, lineHeightScale: 1.5 }),
@@ -91,6 +97,50 @@ beforeEach(() => {
 });
 
 describe('Native V2 renderer staging transitions', () => {
+  it('keeps source mapping in JS while sending only layout fields to native', async () => {
+    const onSelectionChange = jest.fn();
+    await render(
+      <ZhihuNativeContent
+        content='<p data-pid="source-one">甲<strong>乙丙</strong></p>'
+        objectId="staging-source-map"
+        type="answer"
+        renderFallback={() => null}
+        onSelectionChange={onSelectionChange}
+      />,
+    );
+    const view = currentViews()[0];
+    const serialized = JSON.parse(view.flowJson) as RichTextFlow;
+    expect(serialized.sourceMap).toBeUndefined();
+    await containerLayout(view.contentWidth);
+    await heightEvent(currentViews()[0]);
+    const ready = currentViews()[0];
+    await act(() => {
+      ready.onSelectionChange?.({
+        flowId: serialized.id,
+        textVersion: serialized.textVersion,
+        start: 1,
+        end: 3,
+      });
+    });
+    expect(onSelectionChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mapping: expect.objectContaining({
+          text: '乙丙',
+          start: expect.objectContaining({
+            paragraphId: 'source-one',
+            offset: 1,
+          }),
+          end: expect.objectContaining({
+            paragraphId: 'source-one',
+            offset: 3,
+          }),
+        }),
+      }),
+      expect.objectContaining({ sourceMap: expect.any(Array) }),
+      expect.any(Object),
+    );
+  });
+
   it('keeps short inline formulas inside the surrounding list sentence', async () => {
     await render(
       <ZhihuNativeContent

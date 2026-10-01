@@ -17,6 +17,23 @@ export interface ZhihuPaginatedPage {
   };
 }
 
+export function getZhihuNextOffset(
+  page: ZhihuPaginatedPage,
+): number | undefined {
+  if (page.paging?.is_end || !page.paging?.next) return undefined;
+  try {
+    const value = new URL(
+      page.paging.next,
+      'https://www.zhihu.com',
+    ).searchParams.get('offset');
+    if (value === null || !/^\d+$/.test(value)) return undefined;
+    const offset = Number(value);
+    return Number.isSafeInteger(offset) ? offset : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * useInfiniteQuery 的知乎特化版本:统一从 paging.next 的 offset 查询参数
  * 推导下一页的 pageParam。除 getNextPageParam 由本 hook 提供外,
@@ -40,11 +57,6 @@ export function useZhihuInfiniteQuery<
 ) {
   return useInfiniteQuery({
     ...options,
-    getNextPageParam: (lastPage) => {
-      if (!lastPage || lastPage.paging?.is_end) return undefined;
-      const nextUrl = lastPage.paging?.next;
-      const match = nextUrl?.match(/offset=(\d+)/);
-      return match ? parseInt(match[1], 10) : undefined;
-    },
+    getNextPageParam: getZhihuNextOffset,
   });
 }

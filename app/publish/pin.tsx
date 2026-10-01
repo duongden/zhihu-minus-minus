@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,15 +12,27 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createPin } from '@/api/zhihu';
-import type { UploadedImage } from '@/api/zhihu/image';
 import { BouncyButton } from '@/components/BouncyButton';
-import { Text, useThemeColor, View } from '@/components/Themed';
+import {
+  Text,
+  useRuntimeThemeColors,
+  useThemeColor,
+  View,
+} from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
-import { PublishingMediaPicker, serializePinText } from '@/features/publishing';
+import {
+  PublishingDraftNotice,
+  PublishingMediaPicker,
+  serializePinText,
+  usePublishingDraft,
+} from '@/features/publishing';
+import type { PublishingMediaItem } from '@/features/publishing/types';
+import { getAuthSessionVersion } from '@/store/useAuthStore';
 import { getZhihuErrorMessage } from '@/utils/zhihuError';
 
 export default function PublishPinScreen() {
+  const { onPrimary } = useRuntimeThemeColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -30,27 +42,66 @@ export default function PublishPinScreen() {
   const secondaryColor = Colors[colorScheme].textSecondary;
   const borderCol = Colors[colorScheme].border;
 
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [images, setImages] = useState<UploadedImage[]>([]);
   const [mediaBusy, setMediaBusy] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const draft = usePublishingDraft(
+    'pin',
+    'new',
+    undefined,
+    true,
+    mediaBusy,
+    submitting,
+  );
+  const { update } = draft;
+  const { title, content, images, media } = draft.value;
+  const setTitle = useCallback(
+    (value: string) => update({ title: value }),
+    [update],
+  );
+  const setContent = useCallback(
+    (value: string) => update({ content: value }),
+    [update],
+  );
+  const setImages = useCallback(
+    (value: typeof images) => update({ images: value }),
+    [update],
+  );
+  const setMedia = useCallback(
+    (value: PublishingMediaItem[]) => update({ media: value }),
+    [update],
+  );
 
+  const submissionSessionRef = useRef<number | null>(null);
   const mutation = useMutation({
-    mutationFn: () =>
-      createPin(serializePinText(content), {
+    mutationFn: () => {
+      if (submissionSessionRef.current !== getAuthSessionVersion())
+        throw new Error('登录会话已变化，请重新进入编辑');
+      return createPin(serializePinText(content), {
         title,
         images,
-      }),
-    onSuccess: () => {
+      });
+    },
+    onMutate: () => ({ sessionVersion: submissionSessionRef.current }),
+    onSuccess: async (_result, _variables, context) => {
+      if (context?.sessionVersion !== getAuthSessionVersion()) return;
+      await draft.completePublished();
+      if (context?.sessionVersion !== getAuthSessionVersion()) return;
       Alert.alert('发布成功', '您的想法已发布！');
       queryClient.invalidateQueries({ queryKey: ['feeds'] });
       router.back();
     },
-    onError: (error: unknown) =>
-      Alert.alert('发布失败', getZhihuErrorMessage(error)),
+    onSettled: () => {
+      submissionSessionRef.current = null;
+      setSubmitting(false);
+    },
+    onError: (error: unknown, _variables, context) => {
+      if (context?.sessionVersion === getAuthSessionVersion())
+        Alert.alert('发布失败', getZhihuErrorMessage(error));
+    },
   });
 
   const handlePublish = () => {
+    if (submissionSessionRef.current !== null) return;
     if (!content.trim() && images.length === 0) {
       Alert.alert('提示', '请输入想法内容或添加图片');
       return;
@@ -59,10 +110,14 @@ export default function PublishPinScreen() {
       Alert.alert('图片尚未准备好', '请等待上传完成，或重试、移除失败的图片。');
       return;
     }
+    if (!draft.ready || draft.hasConflict || mutation.isPending) return;
+    submissionSessionRef.current = getAuthSessionVersion();
+    setSubmitting(true);
     mutation.mutate();
   };
 
   const isPublishEnabled =
+    draft.ready &&
     (content.trim().length > 0 || images.length > 0) &&
     !mediaBusy &&
     !mutation.isPending;
@@ -88,11 +143,11 @@ export default function PublishPinScreen() {
           style={{ backgroundColor: isPublishEnabled ? tintColor : borderCol }}
         >
           {mutation.isPending ? (
-            <ActivityIndicator size="small" color="white" />
+            <ActivityIndicator size="small" color={onPrimary} />
           ) : (
             <Text
               className="text-sm font-bold"
-              style={{ color: isPublishEnabled ? 'white' : secondaryColor }}
+              style={{ color: isPublishEnabled ? onPrimary : secondaryColor }}
             >
               发布
             </Text>
@@ -111,7 +166,7 @@ export default function PublishPinScreen() {
           <TextInput
             value={title}
             onChangeText={setTitle}
-            editable={!mutation.isPending}
+            editable={draft.ready && !mutation.isPending}
             placeholder="标题（可选）"
             placeholderTextColor={secondaryColor}
             maxLength={100}
@@ -129,7 +184,7 @@ export default function PublishPinScreen() {
             autoFocus
             value={content}
             onChangeText={setContent}
-            editable={!mutation.isPending}
+            editable={draft.ready && !mutation.isPending}
             multiline
             placeholder="这一刻的想法..."
             placeholderTextColor={secondaryColor}
@@ -143,11 +198,18 @@ export default function PublishPinScreen() {
               paddingTop: 16,
             }}
           />
-          <PublishingMediaPicker
-            disabled={mutation.isPending}
-            onBusyChange={setMediaBusy}
-            onImagesChange={setImages}
-          />
+          <PublishingDraftNotice draft={draft} />
+          {draft.ready && (
+            <PublishingMediaPicker
+              key={draft.scopeKey}
+              draftScope={draft.scope}
+              initialMedia={media}
+              onMediaChange={setMedia}
+              disabled={mutation.isPending || draft.hasConflict}
+              onBusyChange={setMediaBusy}
+              onImagesChange={setImages}
+            />
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

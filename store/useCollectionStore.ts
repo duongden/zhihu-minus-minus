@@ -26,9 +26,10 @@ interface CollectionState {
   closeSelector: () => void;
   setCollectedStatus: (id: string | number, status: boolean) => void;
   updateCollectedCountOffset: (id: string | number, delta: number) => void;
+  resetSession: () => void;
 }
 
-export const useCollectionStore = create<CollectionState>((set) => ({
+const emptySession = () => ({
   toastVisible: false,
   toastMessage: '',
   toastContentId: null,
@@ -40,7 +41,10 @@ export const useCollectionStore = create<CollectionState>((set) => ({
 
   collectedStatusMap: {},
   collectedCountOffsetMap: {},
+});
 
+export const useCollectionStore = create<CollectionState>((set) => ({
+  ...emptySession(),
   showToast: (contentId, contentType, message) =>
     set({
       toastVisible: true,
@@ -80,4 +84,5 @@ export const useCollectionStore = create<CollectionState>((set) => ({
         },
       };
     }),
+  resetSession: () => set(emptySession()),
 }));

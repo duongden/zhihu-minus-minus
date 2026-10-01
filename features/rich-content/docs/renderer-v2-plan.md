@@ -120,7 +120,7 @@ Tiqian可参考Zhihu++的正文实践，但已有Kotlin应用的能力不能直�
 
 Release 数据应覆盖首屏、measure/layout、字号和宽度变化后的 reflow、长距离滚动、native/Java heap 或 iOS 对应内存、attributed-text/layout cache 和 selection 响应，详见 [基准计划](./benchmark-plan.md)。
 
-媒体优先研究 viewport 附近预加载、进入时挂载/解码、远离后释放位图或视频资源，保留可恢复尺寸占位。inline attachment 的尺寸和选择映射也须稳定，不能为回收小附件而先拆开连续文本流。
+原生行内附件已实现 viewport 上下各一屏预取，离屏、卸载或后台时取消本 view 订阅并释放其图像引用，保留已测尺寸；双端纯模型回归已覆盖请求 revision 与 UTF-16 范围。下一步在 Release 验证滚动、重排和资源驻留；块级图片和视频仍按各自宿主管理。inline attachment 的尺寸和选择映射也须稳定，不能为回收小附件而先拆开连续文本流。
 
 只有数据证明文本布局或内存超出目标，才进一步研究 flow segmentation、lazy paragraph layout、分段 surface、Block 虚拟化或其他 backend。实验需同时量化性能收益和 selection/复制/无障碍的代价。
 
@@ -133,6 +133,8 @@ Release 数据应覆盖首屏、measure/layout、字号和宽度变化后的 ref
 - [x] 完成 Android Debug 网络与挂载基线。
 - [x] 定义 `ZhihuDocument` 类型草案、遍历、图片收集及知识点属性验证。
 - [x] 验证现有六类 WebView 消息字段。
+- [x] WebView 正文标签/属性/URL/样式白名单、脚本值转义与导航边界，以及公式失败和 DOM 元素选区边界的合成回归。
+- [x] 与锁定依赖同版的 KaTeX 脚本、CSS/WOFF2 离线资源及可重现生成检查。
 - [ ] 补纯文本上限、复杂 inline、表格/脚注、恶意 HTML 和深层嵌套案例。
 - [ ] 实现完整 HTML normalization / 清洗与语义 fixture 断言。
 - [ ] 建立跨 Android/iOS 的 RNRH 视觉与交互对照矩阵。

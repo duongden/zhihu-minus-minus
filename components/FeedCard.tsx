@@ -117,10 +117,11 @@ const FeedCardComponent = ({ item, tab }: FeedCardProps) => {
   const [voted, setVoted] = useState(item.voted || 0);
   const [voteCount, setVoteCount] = useState(item.voteCount || 0);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: FlashList identity changes must reset local reactions even when initial values match the previous item.
   useEffect(() => {
     setVoted(item.voted || 0);
     setVoteCount(item.voteCount || 0);
-  }, [item.voted, item.voteCount]);
+  }, [item.id, item.type, item.voted, item.voteCount]);
 
   const isCollectable = item.type === 'answers' || item.type === 'articles';
   const itemIdStr = item.id != null ? item.id.toString() : '';

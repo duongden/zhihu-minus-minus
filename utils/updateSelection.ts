@@ -28,10 +28,10 @@ function getAssetAbi(name: string): AndroidAbi | 'universal' | null {
   return match ? normalizeAbi(match[1]) : null;
 }
 
-export function selectAndroidApk(
-  assets: readonly ReleaseAsset[],
+export function selectAndroidApk<T extends ReleaseAsset>(
+  assets: readonly T[],
   supportedCpuArchitectures: readonly string[] | null | undefined,
-): ReleaseAsset | undefined {
+): T | undefined {
   const recognizedAssets = assets.flatMap((asset) => {
     const abi = getAssetAbi(asset.name);
     return abi ? [{ abi, asset }] : [];
@@ -48,8 +48,12 @@ export function selectAndroidApk(
 }
 
 export function isVersionNewer(latest: string, current: string): boolean {
+  if (![latest, current].every((value) => /^\d+(?:\.\d+){0,3}$/.test(value)))
+    return false;
   const latestParts = latest.split('.').map(Number);
   const currentParts = current.split('.').map(Number);
+  if (![...latestParts, ...currentParts].every(Number.isSafeInteger))
+    return false;
 
   for (let i = 0; i < Math.max(latestParts.length, currentParts.length); i++) {
     const latestPart = latestParts[i] || 0;

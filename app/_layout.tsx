@@ -9,6 +9,7 @@ import { type Href, Stack, useRouter } from 'expo-router';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import { vars } from 'nativewind';
 import { useEffect, useRef, useState } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { RootSiblingParent } from 'react-native-root-siblings';
@@ -16,20 +17,19 @@ import { ClipboardLinkModal } from '@/components/ClipboardLinkModal';
 import { CollectionSelectorModal } from '@/components/CollectionSelectorModal';
 import { CollectionToastOverlay } from '@/components/CollectionToastOverlay';
 import { GradientMaskOverlay } from '@/components/GradientMaskOverlay';
+import { useRuntimeThemeColors } from '@/components/Themed';
 import { UpdateChecker } from '@/components/UpdateChecker';
-import { useColorScheme } from '@/components/useColorScheme';
 import { VerificationModal } from '@/components/VerificationModal';
 import {
   useSyncThemeWithNativeWind,
   useThemeStore,
 } from '@/store/useThemeStore';
+import { themeVariables } from '@/utils/themeVariables';
 import { isExpoInternalUrl, parseZhihuUrl } from '@/utils/url';
 import '../global.css';
 import * as Clipboard from 'expo-clipboard';
 import { AppState, type AppStateStatus, Linking } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { resolveThemeColors } from '@/constants/theme';
-import { useSettingsStore } from '@/store/useSettingsStore';
 import { useTelemetryStore } from '@/store/useTelemetryStore';
 import { consumeAppClipboardText } from '@/utils/clipboard';
 import { shouldRetryQuery } from '@/utils/query';
@@ -56,20 +56,11 @@ export const unstable_settings = {
 
 function RootLayout() {
   const router = useRouter();
-  const _colorScheme = useColorScheme();
   const isDark = useThemeStore((state) => state.isDark);
   const hasThemeHydrated = useThemeStore((state) => state.hasHydrated);
   const telemetryEnabled = useTelemetryStore((state) => state.enabled);
   const hasTelemetryHydrated = useTelemetryStore((state) => state.hasHydrated);
-  const { primaryColor, readingBackground, textContrast, surfaceStyle } =
-    useSettingsStore();
-  const appColorScheme = isDark ? 'dark' : 'light';
-  const appThemeColors = resolveThemeColors(appColorScheme, {
-    primaryColor,
-    readingBackground,
-    textContrast,
-    surfaceStyle,
-  });
+  const appThemeColors = useRuntimeThemeColors();
   const currentTint = appThemeColors.primary;
   const baseNavigationTheme = isDark ? DarkTheme : DefaultTheme;
   const theme = {
@@ -100,8 +91,8 @@ function RootLayout() {
         await ScreenOrientation.lockAsync(
           ScreenOrientation.OrientationLock.DEFAULT,
         );
-      } catch (e) {
-        console.warn('Failed to enable default screen auto-rotation:', e);
+      } catch {
+        console.warn('Failed to enable default screen auto-rotation');
       }
     }
     enableAutoRotation();
@@ -168,8 +159,8 @@ function RootLayout() {
               }
             }
           }
-        } catch (e) {
-          console.warn('Failed to read clipboard on app active', e);
+        } catch {
+          console.warn('Failed to read clipboard on app active');
         }
       }
     };
@@ -191,7 +182,9 @@ function RootLayout() {
   }, [hasThemeHydrated]);
   // throw new Error('test')
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView
+      style={[{ flex: 1 }, vars(themeVariables(appThemeColors))]}
+    >
       <QueryClientProvider client={queryClient}>
         <SafeAreaProvider>
           <RootSiblingParent>

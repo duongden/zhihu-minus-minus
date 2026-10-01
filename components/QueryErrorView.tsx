@@ -35,7 +35,7 @@ export function QueryErrorView({
         style={{ backgroundColor: primaryColor }}
         onPress={onRetry}
       >
-        <Text className="text-white font-bold text-sm">重新加载</Text>
+        <Text className="text-on-primary font-bold text-sm">重新加载</Text>
       </BouncyButton>
     </View>
   );

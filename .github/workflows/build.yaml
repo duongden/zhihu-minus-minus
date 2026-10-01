@@ -268,7 +268,7 @@ jobs:
           } >> "$GITHUB_ENV"
 
       - name: Expo prebuild iOS
-        run: npx expo prebuild --platform ios
+        run: npx expo prebuild --platform ios --no-install
 
       - name: Install CocoaPods dependencies
         run: |

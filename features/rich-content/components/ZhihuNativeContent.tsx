@@ -18,7 +18,7 @@ import {
   View,
 } from 'react-native';
 import { SvgUri } from 'react-native-svg';
-import { useThemeColor } from '@/components/Themed';
+import { useRuntimeThemeColors } from '@/components/Themed';
 import {
   isRichTextNativeAvailable,
   RichTextNativeView,
@@ -43,6 +43,7 @@ import {
   getZhihuDocumentPreviewImages,
   walkZhihuDocument,
 } from '../documentTraversal';
+import { flowLayoutIdentity } from '../flowLayout';
 import { DAILY_AVATAR_SIZE, type RichContentVariant } from '../imagePolicy';
 import {
   normalizeZhihuContentSegments,
@@ -211,58 +212,6 @@ function flowMeasureKey(
   return `${flow.id}:${flow.textVersion}:${width}:${configJson}`;
 }
 
-/** Paint/actions may change without changing the native text's measured size. */
-function flowLayoutIdentity(flow: RichTextFlow): string {
-  const metricSpans = flow.spans.filter((span) =>
-    ['strong', 'emphasis', 'subscript', 'superscript', 'code'].includes(
-      span.kind,
-    ),
-  );
-  const boundaries = [
-    ...new Set(metricSpans.flatMap((span) => [span.start, span.end])),
-  ].sort((a, b) => a - b);
-  const styles: { start: number; end: number; kinds: string[] }[] = [];
-  for (let index = 0; index < boundaries.length - 1; index++) {
-    const start = boundaries[index];
-    const end = boundaries[index + 1];
-    const kinds = metricSpans
-      .filter((span) => span.start <= start && span.end >= end)
-      .map((span) => span.kind);
-    if (!kinds.length) continue;
-    const previous = styles[styles.length - 1];
-    // A knowledge mark can split one strong/code run into adjacent identical
-    // styled pieces. Preserve effective metric styles rather than those cuts.
-    if (previous?.end === start && previous.kinds.join(',') === kinds.join(','))
-      previous.end = end;
-    else styles.push({ start, end, kinds });
-  }
-  return JSON.stringify({
-    text: flow.text,
-    paragraphs: flow.paragraphs.map((paragraph) => ({
-      start: paragraph.start,
-      end: paragraph.end,
-      kind: paragraph.kind,
-      level: paragraph.level,
-      fontSize: paragraph.fontSize,
-      lineHeight: paragraph.lineHeight,
-      indent: paragraph.indent,
-      marginTop: paragraph.marginTop,
-      marginBottom: paragraph.marginBottom,
-    })),
-    styles,
-    attachments: flow.attachments.map((attachment) => ({
-      start: attachment.start,
-      end: attachment.end,
-      kind: attachment.kind,
-      url: attachment.url,
-      latex: attachment.latex,
-      width: attachment.width,
-      height: attachment.height,
-      baselineOffset: attachment.baselineOffset,
-    })),
-  });
-}
-
 const NativeFlow = React.memo(function NativeFlow({
   flow,
   contentWidth,
@@ -279,7 +228,13 @@ const NativeFlow = React.memo(function NativeFlow({
   const flowJson = useMemo(
     () =>
       JSON.stringify({
-        ...flow,
+        id: flow.id,
+        textVersion: flow.textVersion,
+        text: flow.text,
+        spans: flow.spans,
+        paragraphs: flow.paragraphs,
+        attachments: flow.attachments,
+        // Source mapping remains in JS; neither native backend consumes it.
         decorations:
           options.decorations === false
             ? []
@@ -1020,11 +975,12 @@ const NativeDocumentContent = React.memo(function NativeDocumentContent({
 }: ZhihuNativeContentProps & { interactive?: boolean }) {
   const dimensions = useWindowDimensions();
   const settings = useSettingsStore();
-  const textColor = useThemeColor({}, 'text');
-  const secondaryColor = useThemeColor({}, 'textSecondary');
-  const linkColor = useThemeColor({}, 'primary');
-  const surfaceColor = useThemeColor({}, 'backgroundSecondary');
-  const borderColor = useThemeColor({}, 'border');
+  const themeColors = useRuntimeThemeColors();
+  const textColor = themeColors.text;
+  const secondaryColor = themeColors.textSecondary;
+  const linkColor = themeColors.link;
+  const surfaceColor = themeColors.backgroundSecondary;
+  const borderColor = themeColors.border;
   const [availableWidth, setAvailableWidth] = useState(dimensions.width - 32);
   const [measuredContainerWidth, setMeasuredContainerWidth] = useState<
     number | null

@@ -1,5 +1,10 @@
 const tokens = require('./constants/designTokens.json');
-const { colors, typography, radii, opacity } = tokens;
+const { typography, radii, opacity } = tokens;
+const runtimeColor = (token) => `rgb(var(--theme-${token}) / <alpha-value>)`;
+const runtimePair = (token) => ({
+  DEFAULT: runtimeColor(token),
+  dark: runtimeColor(token),
+});
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
@@ -13,59 +18,31 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Brand & Status
-        primary: colors.light.primary,
-        danger: colors.light.danger,
-        success: colors.light.success,
-        warning: { DEFAULT: colors.light.warning, dark: colors.dark.warning },
-
-        // Text
-        foreground: { DEFAULT: colors.light.text, dark: colors.dark.text },
-        secondary: {
-          DEFAULT: colors.light.textSecondary,
-          dark: colors.dark.textSecondary,
+        primary: runtimeColor('primary'),
+        'on-primary': runtimeColor('onPrimary'),
+        link: runtimeColor('link'),
+        danger: runtimeColor('danger'),
+        success: runtimeColor('success'),
+        warning: runtimePair('warning'),
+        foreground: runtimePair('text'),
+        secondary: runtimePair('textSecondary'),
+        tertiary: runtimePair('textTertiary'),
+        inverse: runtimePair('textInverse'),
+        muted: runtimePair('iconMuted'),
+        base: runtimePair('background'),
+        surface: runtimePair('backgroundSecondary'),
+        'surface-tertiary': runtimePair('backgroundTertiary'),
+        border: runtimePair('border'),
+        divider: {
+          DEFAULT: 'var(--theme-divider)',
+          dark: 'var(--theme-divider)',
         },
-        tertiary: {
-          DEFAULT: colors.light.textTertiary,
-          dark: colors.dark.textTertiary,
-        },
-        inverse: {
-          DEFAULT: colors.light.textInverse,
-          dark: colors.dark.textInverse,
-        },
-        muted: { DEFAULT: colors.light.iconMuted, dark: colors.dark.iconMuted },
-
-        // Backgrounds & Surface
-        base: {
-          DEFAULT: colors.light.background,
-          dark: colors.dark.background,
-        },
-        surface: {
-          DEFAULT: colors.light.backgroundSecondary,
-          dark: colors.dark.backgroundSecondary,
-        },
-        'surface-tertiary': {
-          DEFAULT: colors.light.backgroundTertiary,
-          dark: colors.dark.backgroundTertiary,
-        },
-
-        // Borders & Dividers
-        border: { DEFAULT: colors.light.border, dark: colors.dark.border },
-        divider: { DEFAULT: colors.light.divider, dark: colors.dark.divider },
         highlight: {
-          DEFAULT: colors.light.highlight,
-          dark: colors.dark.highlight,
+          DEFAULT: 'var(--theme-highlight)',
+          dark: 'var(--theme-highlight)',
         },
-
-        // Legacy tints
-        'tab-icon': {
-          DEFAULT: colors.light.tabIconDefault,
-          dark: colors.dark.tabIconDefault,
-        },
-        'tab-icon-active': {
-          DEFAULT: colors.light.tabIconSelected,
-          dark: colors.dark.tabIconSelected,
-        },
+        'tab-icon': runtimePair('tabIconDefault'),
+        'tab-icon-active': runtimePair('tabIconSelected'),
       },
       fontFamily: {
         sans: [typography.fontFamily.sans],

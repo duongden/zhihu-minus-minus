@@ -28,8 +28,8 @@ export const copyToClipboard = async (
       return true;
     }
     throw new Error('Clipboard module not found');
-  } catch (error) {
-    console.error('Clipboard error:', error);
+  } catch {
+    console.error('Clipboard error');
     // Fallback: If clipboard fails, we can at least offer to share the text
     Alert.alert('复制失败', '无法访问剪贴板喵。是否改为通过系统分享发送？', [
       { text: '取消', style: 'cancel' },

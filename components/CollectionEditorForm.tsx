@@ -111,9 +111,16 @@ export function CollectionEditorForm({
         ]}
       >
         {pending ? (
-          <ActivityIndicator color={Colors[colorScheme].textInverse} />
+          <ActivityIndicator color={Colors[colorScheme].onPrimary} />
         ) : (
-          <Text style={styles.submitLabel}>{submitLabel}</Text>
+          <Text
+            style={[
+              styles.submitLabel,
+              { color: Colors[colorScheme].onPrimary },
+            ]}
+          >
+            {submitLabel}
+          </Text>
         )}
       </BouncyButton>
     </View>
@@ -182,7 +189,6 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   submitLabel: {
-    color: Colors.light.textInverse,
     fontSize: 16,
     lineHeight: 22,
     fontWeight: '700',

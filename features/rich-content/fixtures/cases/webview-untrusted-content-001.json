@@ -1,0 +1,12 @@
+{
+  "type": "answer",
+  "id": "synthetic-webview-safety",
+  "content": "<p data-pid=\"synthetic-paragraph\" style=\"color: red; background-color: url(https://example.com/hidden)\" onclick=\"throw 1\">正文<strong>保留格式</strong><img src=\"https://example.com/image.png\" onerror=\"throw 1\"><a href=\"javascript:throw 1\">危险链接</a><sup data-numero=\"1\" data-text=\"&lt;img src=x onerror=&quot;throw 1&quot;&gt;\">[1]</sup></p><script>throw 1</script><iframe src=\"https://example.com/frame\"></iframe><svg><foreignObject><p>隐藏内容</p></foreignObject></svg>",
+  "link_card_info": {
+    "https://example.com/card": {
+      "display": {
+        "title": "</script><script>throw 1</script>"
+      }
+    }
+  }
+}

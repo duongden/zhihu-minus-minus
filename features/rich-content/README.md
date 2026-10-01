@@ -89,6 +89,8 @@ const document = {
 
 现有 WebView bridge 的 `RichContentBridgeMessage` 覆盖高度、图片点击/长按、链接、知识点和文本选择。消息先解码为 `unknown`，通过 `parseRichContentBridgeMessage` 验证字段后再派发；无效 JSON、未知消息和错误字段被忽略，不记录原始消息。选择范围使用 DOM 文本的 UTF-16 偏移，跨段落时起止 offset 分别属于各自段落。
 
+WebView 正文在 JS 侧经过 HTML 标签、属性、URL 和内联样式白名单；正文和元数据嵌入脚本时另行转义 HTML 分隔符。脚注元数据按文本构造 DOM，卡片描述通过 inert template 提取文本。桥接图片/链接再次验证 URL，页面导航交给宿主处理，避免内容链接替换渲染页。DOM Range 同时处理文字节点与元素子节点边界的选区，跨出真实段落的选区会清除业务选择。KaTeX 脚本、CSS 与 WOFF2 字体由已安装的锁定依赖生成并随应用打包，WebView 公式不再依赖 CDN；公式渲染失败时，正文文字、交互和高度初始化仍继续。正文色和链接色由共享 runtime palette 解析，读取阅读背景与对比度偏好。合成安全回归见 `fixtures/cases/webview-untrusted-content-001.json`，不代表完整浏览器 CSS 或任意嵌入内容支持。
+
 该bridge仍仅服务WebView。独立Android/iOS模块提供带flowId/textVersion的选择、高度和action事件，JS校验当前IR身份后派发；滚动/ready/error协议尚未完整。`ZhihuContent` 默认读取正文后端设置，经典路径仍是RNRH，显式 `renderer` 优先于用户偏好。
 
 Enriched组件、专属dialect normalizer、相关测试、依赖和native patch已于2026-09-30正式移除；[实验01](./docs/renderer-v2-experiment-01-enriched-html.md)仅保留历史研究，不再提供运行入口或fallback。tiqian-super-mini在Android/iOS以外的平台或模块未包含的客户端回退到RNRH。
@@ -150,7 +152,13 @@ npm test -- features/rich-content/tests --runInBand
 1. 先根据Android真机反馈完善选择、装饰线、行内附件、知识点和媒体交互。
 2. 扩充现有 `ZhihuDocument` normalization、Rich Text IR与source map的真实内容覆盖。
 3. 验证并完善tiqian-super-mini的iOS adapter与双端一致性；仅在系统布局存在明确缺口时再评估Tiqian接入。
-4. 后续补齐纯文本、样式密集与混合媒体矩阵，并管理媒体viewport生命周期；文本分段/虚拟化由 [Release 基准](./docs/benchmark-plan.md) 决定。
+4. 已补充密集样式样本及原生附件 viewport 预取/释放实现；后续完成 Release 混合媒体生命周期验收和纯文本上限矩阵，文本分段/虚拟化由 [Release 基准](./docs/benchmark-plan.md) 决定。
 5. 基于双端验收结果选择默认 backend，经 feature flag 逐步接管，达到替换条件后移除 RNRH。
 
 RNRH 保留为当前实现、对照和迁移期 fallback；WebView 保留为 fallback/实验。桌面微基准、已有 Debug 数据和第三方实践不能代替本仓 native backend 的真机验收。
+
+## 2026-10-01 优化与离线资源
+
+`flowLayout.ts` 以端点扫描计算有效度量样式，保持 span 原顺序、重复样式及相邻等价区间的身份；不因 paint/action 更新重复测量。密集合成样本、可复现桌面测量、资源包成本及双端附件生命周期边界见 [专项记录](./docs/optimizations-2026-10-01.md)。
+
+`npm run generate:rich-content:katex` 从安装的 KaTeX 生成 `assets/katex-style.json` 与 `assets/katex-runtime.json`，`postinstall` 自动执行；`node features/rich-content/tools/bundle-katex.mjs --check` 可检查资源是否与当前锁定包一致。资源包含 MIT license，CSS 与 runtime 分包以避免旧 DOM 公式组件重复携带不使用的 auto-render 脚本。更换 KaTeX 时必须同步锁文件与生成资源。

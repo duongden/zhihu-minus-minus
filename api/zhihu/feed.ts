@@ -641,11 +641,11 @@ export const getFeed = async (
       const sections = sectionsRes.data?.data || [];
       const localSection = sections.find(
         (section) =>
-          section.section_name?.includes('同城') || section.section_id,
+          section.section_name?.includes('同城') && section.section_id?.trim(),
       );
 
       if (localSection?.section_id) {
-        finalUrl = `https://api.zhihu.com/feed-root/section/${localSection.section_id}?channelStyle=0`;
+        finalUrl = `https://api.zhihu.com/feed-root/section/${encodeURIComponent(localSection.section_id)}?channelStyle=0`;
         if (localSection.section_name) {
           useSettingsStore
             .getState()

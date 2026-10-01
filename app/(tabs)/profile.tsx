@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { verifyZhihuSession } from '@/api/session';
 import { getMe, getMemberWithFallback } from '@/api/zhihu';
+import { AuthStorageNotice } from '@/components/AuthStorageNotice';
 import { BouncyButton } from '@/components/BouncyButton';
 import { BottomSheet } from '@/components/overlays/BottomSheet';
 import { QueryErrorView } from '@/components/QueryErrorView';
@@ -19,9 +20,10 @@ import { StableAvatar } from '@/components/StableAvatar';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
-import { useAuthStore } from '@/store/useAuthStore';
+import { getAuthSessionVersion, useAuthStore } from '@/store/useAuthStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { useVerificationStore } from '@/store/useVerificationStore';
+import { persistAuthStateWithFeedback } from '@/utils/authPersistenceFeedback';
 import { syncNativeSessionCookies } from '@/utils/authSession';
 import { ImpactFeedbackStyle, impactAsync } from '@/utils/haptics';
 
@@ -61,12 +63,17 @@ export default function ProfileScreen({ isActive = true }: ProfileScreenProps) {
   } = useQuery({
     queryKey: ['me'],
     queryFn: async () => {
+      const sessionVersion = getAuthSessionVersion();
       const fetchedMe = await getMe();
       const authState = useAuthStore.getState();
       // Complete the one-time SecureStore migration as a normal account once
       // the authenticated member payload is available.
-      if (cookies && authState.cookies === cookies && !authState.me) {
-        authState.addAccount(cookies, fetchedMe);
+      if (
+        authState.cookies &&
+        getAuthSessionVersion() === sessionVersion &&
+        !authState.me
+      ) {
+        authState.addAccount(authState.cookies, fetchedMe);
       }
       return fetchedMe;
     },
@@ -142,14 +149,18 @@ export default function ProfileScreen({ isActive = true }: ProfileScreenProps) {
     const nextCookies = remainingAccounts[0]?.cookies ?? null;
 
     logout();
+    const session = getAuthSessionVersion();
     queryClient.clear();
     setAccountModalVisible(false);
-    await syncSessionWithFeedback(nextCookies);
-
-    sessionChangeInFlight.current = false;
-    setSessionChanging(false);
-    if (remainingAccounts.length === 0) {
-      router.replace('/login');
+    try {
+      await persistAuthStateWithFeedback();
+      if (session !== getAuthSessionVersion()) return;
+      await syncSessionWithFeedback(nextCookies);
+      if (remainingAccounts.length === 0 && session === getAuthSessionVersion())
+        router.replace('/login');
+    } finally {
+      sessionChangeInFlight.current = false;
+      setSessionChanging(false);
     }
   }, [
     accounts,
@@ -202,11 +213,17 @@ export default function ProfileScreen({ isActive = true }: ProfileScreenProps) {
     }
 
     switchAccount(index, verifiedSession);
+    const session = getAuthSessionVersion();
     queryClient.clear();
     setAccountModalVisible(false);
-    await syncSessionWithFeedback(verifiedSession?.cookies ?? targetCookies);
-    sessionChangeInFlight.current = false;
-    setSessionChanging(false);
+    try {
+      await persistAuthStateWithFeedback();
+      if (session !== getAuthSessionVersion()) return;
+      await syncSessionWithFeedback(verifiedSession?.cookies ?? targetCookies);
+    } finally {
+      sessionChangeInFlight.current = false;
+      setSessionChanging(false);
+    }
   };
 
   const handleRemoveAccount = (index: number) => {
@@ -220,7 +237,9 @@ export default function ProfileScreen({ isActive = true }: ProfileScreenProps) {
           if (index === activeAccountIndex) {
             void performLogout();
           } else {
+            if (sessionChangeInFlight.current) return;
             removeAccount(index);
+            void persistAuthStateWithFeedback();
           }
         },
       },
@@ -252,6 +271,7 @@ export default function ProfileScreen({ isActive = true }: ProfileScreenProps) {
       }
     >
       {/* 顶部用户信息区 */}
+      <AuthStorageNotice />
       <View
         type="surface"
         className="px-5 pb-5 rounded-b-[24px]"

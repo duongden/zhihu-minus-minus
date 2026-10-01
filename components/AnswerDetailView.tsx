@@ -19,7 +19,7 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { type AnswerDetail, deleteAnswer, getAnswer } from '@/api/zhihu';
-import { getAnswerCollectionStatus } from '@/api/zhihu/collection';
+import { getAllContentCollectionStatus } from '@/api/zhihu/collection';
 import { followMember, unfollowMember } from '@/api/zhihu/member';
 import { BouncyButton } from '@/components/BouncyButton';
 import { DownvoteButton } from '@/components/DownvoteButton';
@@ -95,15 +95,18 @@ export const AnswerDetailView = ({
     refetch,
   } = useQuery({
     queryKey: ['answer-detail', id],
-    queryFn: () => getAnswer(id),
+    queryFn: ({ signal }) => getAnswer(id, undefined, { signal }),
     enabled: isFocused,
     staleTime: RICH_CONTENT_STALE_TIME,
     retry: (failureCount, err) =>
       getZhihuErrorStatus(err) === 404 ? false : failureCount < 2,
   });
 
-  const { richContentRenderer, fontSizeScale, lineHeightScale } =
-    useSettingsStore();
+  const richContentRenderer = useSettingsStore(
+    (state) => state.richContentRenderer,
+  );
+  const fontSizeScale = useSettingsStore((state) => state.fontSizeScale);
+  const lineHeightScale = useSettingsStore((state) => state.lineHeightScale);
   const dimensions = useWindowDimensions();
   const waitForNativeLayout =
     richContentRenderer === 'native-v2' && isRichTextNativeAvailable();
@@ -221,7 +224,7 @@ export const AnswerDetailView = ({
 
   const { data: collectionStatus, isFetchedAfterMount } = useQuery({
     queryKey: ['answer-collection-status', id],
-    queryFn: () => getAnswerCollectionStatus(id),
+    queryFn: () => getAllContentCollectionStatus(id, 'answer'),
     enabled: !!id && hasBeenFocused,
     staleTime: 60 * 1000, // 1 minute
   });

@@ -19,6 +19,8 @@
 
 `EXPO_PUBLIC_FIREBASE_ANALYTICS_ENABLED` 未设为 `true` 时，prebuild 会跳过 Firebase config plugins，Analytics 也会退化为空实现；因此本地无需准备两个 Firebase 配置文件即可开发、安装 CocoaPods 或生成原生项目。Firebase 原生依赖仍由 React Native 自动链接，但 iOS prebuild 会独立写入 `$RNFirebaseDisableSPM = true`，使其与项目的 static linkage 兼容，且运行时不会启用 Analytics。正式构建启用该变量后仍会使用原有插件和配置文件。未配置 Sentry DSN 时，Sentry 也不会初始化，应用仍可开发和运行。
 
+Firebase 已公告自 2026 年 10 月起停止向 CocoaPods 发布新版本，已有版本仍可安装运行。当前项目保留已验证的 CocoaPods/static linkage 路径；后续原生依赖升级应单独评估 React Native Firebase 的 SPM 兼容性，并同时验证 Expo config plugin 和 Scene 初始化，不能只移除 `disableSPM`。依据见 [Firebase 官方迁移说明](https://firebase.google.com/docs/ios/cocoapods-deprecation)。
+
 ## 隐私开关
 
 设置首页的「分享数据（App崩溃报告&匿名数据）」开关使用 SecureStore 持久化。关闭后：
@@ -27,7 +29,15 @@
 - Sentry 不再接受事件，并清理当前用户上下文；
 - 已经发送到服务商的数据不会因为关闭开关而自动删除。
 
-产品代码不应直接导入 Firebase 或 Sentry。需要新增事件时，调用 `utils/telemetry.ts` 的适配方法，并只传递脱敏的事件名、类型和数值。
+业务页面不应直接导入 Firebase 或 Sentry；根布局的 `Sentry.wrap` 是崩溃边界特例，事件仍统一通过适配层并遵守隐私开关。需要新增事件时，调用 `utils/telemetry.ts` 的适配方法，并只传递脱敏的事件名、类型和数值。
+
+## 自动 JS 异常的边界
+
+`beforeSend` 与 `beforeSendTransaction` 重新构造白名单事件。异常正文采用固定分类，保留允许的异常类型、栈帧行列、已知 bundle 文件名和 debug ID；设备/context 只保留枚举及数值，清除 user、request、extra、breadcrumbs、任意 tags、路由名、span description/data 和 hint attachments。截图、视图树、replay、profile、SDK logs、session 与 client reports 均关闭。
+
+当前 `enableNative: false`：Sentry 原生崩溃通道绕过 JS 脱敏及实时隐私开关，因此暂不启用原生 crash/原生离线缓存。`Sentry.wrap` 和 JS 自动异常仍可采集并符号化；这会减少原生层崩溃诊断信息。要恢复原生通道，应先实现并验证等价的原生脱敏与 opt-out，不能直接打开开关。
+
+Firebase 默认自动收集及自动页面上报关闭，collection 只在偏好 hydrate 后启用；手动事件仍须遵守前述脱敏规则。关闭开关会阻止后续事件，不能撤回已发送数据。
 
 ## CI 配置
 
@@ -54,4 +64,8 @@ base64 < GoogleService-Info.plist | tr -d '\n'
 
 ## 移除方式
 
-集成被限制在 `utils/telemetry.ts`、`store/useTelemetryStore.ts`、设置首页的分享数据开关、Expo 配置和两个 Firebase 依赖中。移除这些代码、对应 config plugins、`firebase.json` 以及 `package.json` 中的两个 `@react-native-firebase/*` 依赖后，再从根布局删除 telemetry 初始化和设置页入口即可；业务页面不依赖厂商 SDK。
+仅移除 Firebase Analytics 时，删除适配层中的 Firebase 分支、`package.json` 的两个 `@react-native-firebase/*` 依赖、Firebase config plugins、`firebase.json` 和 `app.config.ts` 的 Firebase 配置；同步删去工作流中的 Firebase 文件还原、校验与环境变量，以及 `.easignore` 的配置文件例外。保留 Sentry 分支和隐私开关。
+
+完全移除 telemetry 时，还需删除 `@sentry/react-native` 依赖及 config plugin、根布局的 Sentry 导入和 `Sentry.wrap`、telemetry 初始化与业务调用、`utils/telemetry.ts`、`store/useTelemetryStore.ts` 及设置页开关。同步清理构建工作流和本地脚本中的 Sentry 上传配置、`.env.example` 与 `app.config.ts` 的 DSN 配置，以及对应 CI Secrets。根布局改为导出未包装的布局组件；业务页面不直接依赖厂商 SDK。
+
+任一原生 SDK 移除后都要同步锁文件、重新 prebuild、安装 Pods 并重新编译两端，不能只依靠 Fast Refresh 验证。

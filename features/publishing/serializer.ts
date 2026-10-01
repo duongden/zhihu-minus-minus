@@ -1,3 +1,4 @@
+import { DomUtils, parseDocument } from 'htmlparser2';
 import type { UploadedImage } from '@/api/zhihu/image';
 
 const SAFE_URL_PROTOCOLS = new Set(['http:', 'https:']);
@@ -20,11 +21,29 @@ function getSafeUrl(value: string): string | null {
   }
 }
 
-function restoreTokens(value: string, tokens: string[]): string {
-  return value.replace(
-    /%%__ZHIHU_PUBLISH_TOKEN_(\d+)__%%/g,
-    (_match, index: string) => tokens[Number(index)] ?? '',
-  );
+function getTokenPrefix(value: string): string {
+  let prefix = '%%__ZHIHU_PUBLISH_TOKEN_';
+  while (value.includes(prefix)) prefix += '_';
+  return prefix;
+}
+
+function restoreTokens(
+  value: string,
+  tokens: string[],
+  prefix: string,
+): string {
+  const pattern = new RegExp(`${prefix}(\\d+)__%%`, 'g');
+  let restored = value;
+  // A link label can contain stashed code; expand nested tokens as well.
+  for (let round = 0; round < tokens.length; round += 1) {
+    const next = restored.replace(
+      pattern,
+      (match, index: string) => tokens[Number(index)] ?? match,
+    );
+    if (next === restored) break;
+    restored = next;
+  }
+  return restored;
 }
 
 function serializeInline(
@@ -32,13 +51,17 @@ function serializeInline(
   uploadedImages: readonly UploadedImage[],
 ): string {
   const tokens: string[] = [];
+  const tokenPrefix = getTokenPrefix(value);
   const stash = (html: string) => {
-    const token = `%%__ZHIHU_PUBLISH_TOKEN_${tokens.length}__%%`;
+    const token = `${tokenPrefix}${tokens.length}__%%`;
     tokens.push(html);
     return token;
   };
 
-  let html = value.replace(
+  let html = value.replace(/`([^`\n]+)`/g, (_match, code: string) =>
+    stash(`<code>${escapeHtml(code)}</code>`),
+  );
+  html = html.replace(
     /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)(?:\s+"(\d+)x(\d+)")?\)/g,
     (
       _match,
@@ -79,10 +102,9 @@ function serializeInline(
 
   html = escapeHtml(html)
     .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
-    .replace(/`([^`\n]+)`/g, '<code>$1</code>');
+    .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>');
 
-  return restoreTokens(html, tokens);
+  return restoreTokens(html, tokens, tokenPrefix);
 }
 
 function isStandaloneImage(value: string): boolean {
@@ -168,7 +190,7 @@ export function serializePublishingMarkdown(
         index += 1;
       }
       blocks.push(
-        `<blockquote>${serializeParagraph(quoteLines, uploadedImages)}</blockquote>`,
+        `<blockquote>${serializePublishingMarkdown(quoteLines.join('\n'), uploadedImages)}</blockquote>`,
       );
       continue;
     }
@@ -208,13 +230,10 @@ export function serializePublishingMarkdown(
 }
 
 function decodeHtmlEntities(value: string): string {
-  return value
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&lt;/gi, '<')
-    .replace(/&gt;/gi, '>')
-    .replace(/&amp;/gi, '&');
+  // Escaping literal `<` keeps this an entity decoder rather than an HTML stripper.
+  return DomUtils.textContent(
+    parseDocument(value.replaceAll('<', '&lt;'), { decodeEntities: true }),
+  ).replaceAll('\u00a0', ' ');
 }
 
 function stripHtmlTags(value: string): string {
@@ -223,14 +242,54 @@ function stripHtmlTags(value: string): string {
 
 /** Convert the editable HTML returned by Zhihu back into the editor's small Markdown subset. */
 export function deserializePublishingHtml(html: string): string {
+  const tokens: string[] = [];
+  const tokenPrefix = getTokenPrefix(decodeHtmlEntities(html));
+  const stash = (markdown: string) => {
+    const token = `${tokenPrefix}${tokens.length}__%%`;
+    tokens.push(markdown);
+    return token;
+  };
   let markdown = html
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(/<(?:script|style)[^>]*>[\s\S]*?<\/(?:script|style)>/gi, '');
 
+  markdown = markdown
+    .replace(
+      /<blockquote\b[^>]*>([\s\S]*?)<\/blockquote>/gi,
+      (_match, body: string) => {
+        const quote = deserializePublishingHtml(body)
+          .split('\n')
+          .map((line) => `> ${line}`)
+          .join('\n');
+        return `\n${stash(quote)}\n`;
+      },
+    )
+    .replace(
+      /<pre\b([^>]*)>([\s\S]*?)<\/pre>/gi,
+      (_match, attributes: string, code: string) => {
+        const language =
+          attributes.match(/\blang=["']([a-zA-Z0-9_-]+)["']/)?.[1] || '';
+        const codeText = decodeHtmlEntities(stripHtmlTags(code));
+        return `\n${stash(`\`\`\`${language}\n${codeText}\n\`\`\``)}\n`;
+      },
+    )
+    .replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, (_match, code: string) =>
+      stash(`\`${decodeHtmlEntities(stripHtmlTags(code))}\``),
+    )
+    .replace(/<ol\b[^>]*>([\s\S]*?)<\/ol>/gi, (_match, list: string) => {
+      let number = 0;
+      return `\n${list.replace(/<li\b[^>]*>/gi, () => `${++number}. `)}\n`;
+    })
+    .replace(
+      /<h([23])\b[^>]*>([\s\S]*?)<\/h\1>/gi,
+      (_match, level: string, body: string) =>
+        `\n${level === '2' ? '#' : '##'} ${body}\n`,
+    );
+
   markdown = markdown.replace(
     /<img\b[^>]*?(?:src|data-original-src)=["']([^"']+)["'][^>]*>/gi,
     (_match, rawUrl: string) => {
-      const safeUrl = getSafeUrl(rawUrl);
+      const safeUrl = getSafeUrl(decodeHtmlEntities(rawUrl));
       return safeUrl ? `![图片](${safeUrl})` : '';
     },
   );
@@ -238,24 +297,27 @@ export function deserializePublishingHtml(html: string): string {
     /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi,
     (_match, rawUrl: string, rawLabel: string) => {
       const label = decodeHtmlEntities(stripHtmlTags(rawLabel)).trim();
-      const safeUrl = getSafeUrl(rawUrl);
+      const safeUrl = getSafeUrl(decodeHtmlEntities(rawUrl));
       return safeUrl && label ? `[${label}](${safeUrl})` : label;
     },
   );
   markdown = markdown
     .replace(/<(?:strong|b)\b[^>]*>([\s\S]*?)<\/(?:strong|b)>/gi, '**$1**')
     .replace(/<(?:em|i)\b[^>]*>([\s\S]*?)<\/(?:em|i)>/gi, '*$1*')
-    .replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, '`$1`')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<li\b[^>]*>/gi, '- ')
     .replace(/<blockquote\b[^>]*>/gi, '> ')
     .replace(/<\/?(?:p|div|h[1-6]|li|blockquote)\b[^>]*>/gi, '\n')
     .replace(/<[^>]+>/g, '');
 
-  return decodeHtmlEntities(markdown)
-    .replace(/[ \t]+\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+  return restoreTokens(
+    decodeHtmlEntities(markdown)
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim(),
+    tokens,
+    tokenPrefix,
+  );
 }
 
 /** Pins use plain paragraph HTML; their images live in `data.media.medias`. */

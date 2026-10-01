@@ -57,6 +57,7 @@ export default function AboutScreen() {
   const canvasColor = useThemeColor({}, 'background');
   const cardColor = useThemeColor({}, 'backgroundSecondary');
   const borderColor = useThemeColor({}, 'controlBorder');
+  const onPrimary = useThemeColor({}, 'onPrimary');
   const primaryColor = useThemeColor({}, 'primary');
   const currentVersion =
     Constants.expoConfig?.version || Constants.nativeAppVersion || '未知';
@@ -127,9 +128,11 @@ export default function AboutScreen() {
             style={[styles.updateButton, { backgroundColor: primaryColor }]}
           >
             {checking ? (
-              <ActivityIndicator size="small" color="#fff" />
+              <ActivityIndicator size="small" color={onPrimary} />
             ) : (
-              <Text style={styles.updateButtonText}>检查更新</Text>
+              <Text style={[styles.updateButtonText, { color: onPrimary }]}>
+                检查更新
+              </Text>
             )}
           </BouncyButton>
         </RNView>
@@ -255,7 +258,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  updateButtonText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  updateButtonText: { fontSize: 13, fontWeight: '700' },
   updateNotes: { width: '100%', maxHeight: 300, marginTop: 16 },
   updateNotesContent: { paddingBottom: 2 },
   feedbackIntro: { paddingHorizontal: 4, marginTop: 28, marginBottom: 12 },

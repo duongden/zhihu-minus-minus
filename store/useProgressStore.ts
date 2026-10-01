@@ -1,15 +1,11 @@
-import * as SecureStore from 'expo-secure-store';
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import {
+  normalizeReadingProgress,
+  READING_PROGRESS_STORE_VERSION,
+  readingProgressStorage,
+} from '@/storage/readingProgressStorage';
 import type { ReadingProgressEntry } from '@/utils/readingProgress';
-
-// 适配器：让 Zustand 能用上 Expo 的安全存储
-const secureStorage = {
-  getItem: (name: string) => SecureStore.getItemAsync(name),
-  setItem: (name: string, value: string) =>
-    SecureStore.setItemAsync(name, value),
-  removeItem: (name: string) => SecureStore.deleteItemAsync(name),
-};
 
 interface ProgressState {
   progress: Record<string, ReadingProgressEntry>;
@@ -19,8 +15,6 @@ interface ProgressState {
   clearProgress: () => void;
 }
 
-const MAX_PROGRESS_ENTRIES = 100;
-
 export const useProgressStore = create<ProgressState>()(
   persist(
     (set, get) => ({
@@ -29,22 +23,10 @@ export const useProgressStore = create<ProgressState>()(
       saveProgress: (id, entry) => {
         if (!id) return;
         const { progress } = get();
-        const newProgress = {
+        const newProgress = normalizeReadingProgress({
           ...progress,
           [id]: entry,
-        };
-
-        // 限制存储条数：保留最近更新的 100 条
-        const keys = Object.keys(newProgress);
-        if (keys.length > MAX_PROGRESS_ENTRIES) {
-          const sortedKeys = keys.sort(
-            (a, b) => newProgress[b].updatedAt - newProgress[a].updatedAt,
-          );
-          const keysToRemove = sortedKeys.slice(MAX_PROGRESS_ENTRIES);
-          for (const key of keysToRemove) {
-            delete newProgress[key];
-          }
-        }
+        });
 
         set({ progress: newProgress });
       },
@@ -65,7 +47,28 @@ export const useProgressStore = create<ProgressState>()(
     }),
     {
       name: 'progress-storage',
-      storage: createJSONStorage(() => secureStorage),
+      version: READING_PROGRESS_STORE_VERSION,
+      storage: createJSONStorage(() => readingProgressStorage),
+      partialize: ({ progress }) => ({ progress }),
+      migrate: (persisted: unknown) => ({
+        progress: normalizeReadingProgress(
+          typeof persisted === 'object' &&
+            persisted !== null &&
+            'progress' in persisted
+            ? persisted.progress
+            : undefined,
+        ),
+      }),
+      merge: (persisted, current) => ({
+        ...current,
+        progress: normalizeReadingProgress(
+          typeof persisted === 'object' &&
+            persisted !== null &&
+            'progress' in persisted
+            ? persisted.progress
+            : undefined,
+        ),
+      }),
     },
   ),
 );

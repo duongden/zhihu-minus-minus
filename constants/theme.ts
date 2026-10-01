@@ -1,3 +1,4 @@
+import { contrastingText, readableColor } from '@/utils/colorContrast';
 import {
   type ColorScheme,
   type ColorToken,
@@ -43,6 +44,10 @@ export const SURFACE_STYLE_OPTIONS: ReadonlyArray<{
 ];
 
 type ThemeColorMap = Record<ColorToken, string>;
+export type RuntimeThemeColors = ThemeColorMap & {
+  onPrimary: string;
+  link: string;
+};
 
 type ThemeAdjustmentTokens = {
   readingBackground: Record<
@@ -70,7 +75,7 @@ const themeAdjustmentTokens: ThemeAdjustmentTokens = {
 export function resolveThemeColors(
   colorScheme: ColorScheme,
   preferences: ThemePreferences,
-): ThemeColorMap {
+): RuntimeThemeColors {
   const resolved: ThemeColorMap = {
     ...themeAdjustmentTokens.readingBackground[preferences.readingBackground][
       colorScheme
@@ -99,5 +104,17 @@ export function resolveThemeColors(
     }
   }
 
-  return resolved;
+  const backgrounds = [
+    resolved.background,
+    resolved.backgroundSecondary,
+    resolved.backgroundTertiary,
+  ];
+  resolved.text = readableColor(resolved.text, backgrounds);
+  resolved.textSecondary = readableColor(resolved.textSecondary, backgrounds);
+  resolved.textTertiary = readableColor(resolved.textTertiary, backgrounds);
+  return {
+    ...resolved,
+    onPrimary: contrastingText(resolved.primary),
+    link: readableColor(resolved.primary, backgrounds),
+  };
 }

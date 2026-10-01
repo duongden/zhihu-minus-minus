@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,18 +12,27 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { createQuestion } from '@/api/zhihu';
-import type { UploadedImage } from '@/api/zhihu/image';
 import { BouncyButton } from '@/components/BouncyButton';
-import { Text, useThemeColor, View } from '@/components/Themed';
+import {
+  Text,
+  useRuntimeThemeColors,
+  useThemeColor,
+  View,
+} from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import {
+  PublishingDraftNotice,
   PublishingEditor,
   serializePublishingMarkdown,
+  usePublishingDraft,
 } from '@/features/publishing';
+import type { PublishingMediaItem } from '@/features/publishing/types';
+import { getAuthSessionVersion } from '@/store/useAuthStore';
 import { getZhihuErrorMessage } from '@/utils/zhihuError';
 
 export default function PublishQuestionScreen() {
+  const { onPrimary } = useRuntimeThemeColors();
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const colorScheme = useColorScheme();
@@ -33,27 +42,67 @@ export default function PublishQuestionScreen() {
   const secondaryColor = Colors[colorScheme].textSecondary;
   const borderCol = Colors[colorScheme].border;
 
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [editorBusy, setEditorBusy] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const draft = usePublishingDraft(
+    'question',
+    'new',
+    undefined,
+    true,
+    editorBusy,
+    submitting,
+  );
+  const { update } = draft;
+  const { title, content, images } = draft.value;
+  const uploadedImages = images;
+  const setTitle = useCallback(
+    (value: string) => update({ title: value }),
+    [update],
+  );
+  const setContent = useCallback(
+    (value: string) => update({ content: value }),
+    [update],
+  );
+  const setUploadedImages = useCallback(
+    (value: typeof images) => update({ images: value }),
+    [update],
+  );
+  const setMedia = useCallback(
+    (value: PublishingMediaItem[]) => update({ media: value }),
+    [update],
+  );
 
+  const submissionSessionRef = useRef<number | null>(null);
   const mutation = useMutation({
-    mutationFn: () =>
-      createQuestion(
+    mutationFn: () => {
+      if (submissionSessionRef.current !== getAuthSessionVersion())
+        throw new Error('登录会话已变化，请重新进入编辑');
+      return createQuestion(
         title.trim(),
         serializePublishingMarkdown(content, uploadedImages),
-      ),
-    onSuccess: () => {
+      );
+    },
+    onMutate: () => ({ sessionVersion: submissionSessionRef.current }),
+    onSuccess: async (_result, _variables, context) => {
+      if (context?.sessionVersion !== getAuthSessionVersion()) return;
+      await draft.completePublished();
+      if (context?.sessionVersion !== getAuthSessionVersion()) return;
       Alert.alert('发布成功', '您的问题已发布！');
       queryClient.invalidateQueries({ queryKey: ['feeds'] });
       router.back();
     },
-    onError: (error: unknown) =>
-      Alert.alert('发布失败', getZhihuErrorMessage(error)),
+    onSettled: () => {
+      submissionSessionRef.current = null;
+      setSubmitting(false);
+    },
+    onError: (error: unknown, _variables, context) => {
+      if (context?.sessionVersion === getAuthSessionVersion())
+        Alert.alert('发布失败', getZhihuErrorMessage(error));
+    },
   });
 
   const handlePublish = () => {
+    if (submissionSessionRef.current !== null) return;
     if (!title.trim()) {
       Alert.alert('提示', '请输入问题标题');
       return;
@@ -62,11 +111,17 @@ export default function PublishQuestionScreen() {
       Alert.alert('图片上传中', '请等待图片上传完成后再发布。');
       return;
     }
+    if (!draft.ready || draft.hasConflict || mutation.isPending) return;
+    submissionSessionRef.current = getAuthSessionVersion();
+    setSubmitting(true);
     mutation.mutate();
   };
 
   const isPublishEnabled =
-    title.trim().length > 5 && !editorBusy && !mutation.isPending;
+    draft.ready &&
+    title.trim().length > 5 &&
+    !editorBusy &&
+    !mutation.isPending;
 
   return (
     <View className="flex-1">
@@ -89,11 +144,11 @@ export default function PublishQuestionScreen() {
           style={{ backgroundColor: isPublishEnabled ? tintColor : borderCol }}
         >
           {mutation.isPending ? (
-            <ActivityIndicator size="small" color="white" />
+            <ActivityIndicator size="small" color={onPrimary} />
           ) : (
             <Text
               className="text-sm font-bold"
-              style={{ color: isPublishEnabled ? 'white' : secondaryColor }}
+              style={{ color: isPublishEnabled ? onPrimary : secondaryColor }}
             >
               发布
             </Text>
@@ -113,19 +168,28 @@ export default function PublishQuestionScreen() {
             placeholderTextColor={secondaryColor}
             multiline
             value={title}
+            editable={draft.ready && !mutation.isPending}
             onChangeText={setTitle}
             autoFocus
           />
-          <PublishingEditor
-            contentType="question"
-            disabled={mutation.isPending}
-            minHeight={300}
-            onBusyChange={setEditorBusy}
-            onChangeText={setContent}
-            onImagesChange={setUploadedImages}
-            placeholder="补充问题背景和细节（可选）"
-            value={content}
-          />
+          <PublishingDraftNotice draft={draft} />
+          {draft.ready && (
+            <PublishingEditor
+              key={draft.scopeKey}
+              draftScope={draft.scope}
+              initialMedia={draft.value.media}
+              initialImages={draft.value.images}
+              onMediaChange={setMedia}
+              contentType="question"
+              disabled={mutation.isPending || draft.hasConflict}
+              minHeight={300}
+              onBusyChange={setEditorBusy}
+              onChangeText={setContent}
+              onImagesChange={setUploadedImages}
+              placeholder="补充问题背景和细节（可选）"
+              value={content}
+            />
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </View>

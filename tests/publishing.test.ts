@@ -74,3 +74,43 @@ test('deserializes editable answer HTML into the publishing Markdown subset', ()
     '普通 **粗体** 和 [链接](https://example.com/)\n- 一\n- 二',
   );
 });
+
+test('preserves literal syntax inside inline code and reserved-looking text', () => {
+  assert.equal(
+    serializePublishingMarkdown(
+      '`**literal** [link](https://example.com)` %%__ZHIHU_PUBLISH_TOKEN_0__%%',
+    ),
+    '<p><code>**literal** [link](https://example.com)</code> %%__ZHIHU_PUBLISH_TOKEN_0__%%</p>',
+  );
+});
+
+test('preserves supported heading, list, quote and code formatting when editing', () => {
+  const markdown =
+    '# 标题\n\n## 小标题\n\n1. 第一项\n2. 第二项\n\n> 引用一\n> 引用二\n\n```ts\nconst text = "<b>&";\n\n// 空行\n```';
+  const html = serializePublishingMarkdown(markdown);
+  assert.equal(
+    serializePublishingMarkdown(deserializePublishingHtml(html)),
+    html,
+  );
+});
+
+test('decodes escaped URL query parameters and numeric text entities', () => {
+  assert.equal(
+    deserializePublishingHtml(
+      '<p>&#x4E2D;&#25991; <a href="https://example.com/?a=1&amp;b=2">链接</a></p>',
+    ),
+    '中文 [链接](https://example.com/?a=1&b=2)',
+  );
+});
+
+test.each([
+  '[`code`](https://example.com)',
+  '> `code`',
+  '> ```ts\n> const text = "<b>&";\n> ```',
+])('restores nested code tokens without publishing placeholders (%s)', (markdown) => {
+  const html = serializePublishingMarkdown(markdown);
+  const restored = deserializePublishingHtml(html);
+  assert.equal(html.includes('ZHIHU_PUBLISH_TOKEN'), false);
+  assert.equal(restored.includes('ZHIHU_PUBLISH_TOKEN'), false);
+  assert.equal(serializePublishingMarkdown(restored), html);
+});

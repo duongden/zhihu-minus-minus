@@ -103,11 +103,11 @@ internal class FlowTextView(context: Context) : TextView(context) {
     canvas.save()
     canvas.translate(totalPaddingLeft.toFloat() - scrollX, totalPaddingTop.toFloat() - scrollY)
     for (decoration in activeFlow.decorations) {
-      val range = decoration.range(activeFlow.text.length) ?: continue
+      val range = decoration.range(activeFlow.text) ?: continue
       val firstLine = textLayout.getLineForOffset(range.start)
       val lastLine = textLayout.getLineForOffset((range.end - 1).coerceAtLeast(range.start))
       decorationPaint.color = parseColor(decoration.optString("color"), config.linkColor)
-      decorationPaint.strokeWidth = (decoration.optDouble("thickness", 1.2).toFloat() * scale).coerceAtLeast(1f)
+      decorationPaint.strokeWidth = (decoration.number("thickness", 1.2).toFloat() * scale).coerceAtLeast(1f)
       decorationPaint.style = Paint.Style.STROKE
       decorationPaint.strokeCap = Paint.Cap.BUTT
       val kind = decoration.optString("kind", "solid")
@@ -126,7 +126,7 @@ internal class FlowTextView(context: Context) : TextView(context) {
         val endX = visualEndHorizontal(end, line)
         val left = min(startX, endX)
         val right = max(startX, endX)
-        val y = textLayout.getLineBaseline(line) + decoration.optDouble("offset", 3.0).toFloat() * scale
+        val y = textLayout.getLineBaseline(line) + decoration.number("offset", 3.0).toFloat() * scale
         if (kind == "wavy") {
           decorationPath.reset()
           decorationPath.moveTo(left, y)
@@ -160,7 +160,8 @@ internal class FlowTextView(context: Context) : TextView(context) {
     val offset = textLayout.getOffsetForHorizontal(line, localX)
     // offset is the closest caret; include the preceding attachment glyph.
     for (item in activeFlow.attachments) {
-      val range = item.range(activeFlow.text.length) ?: continue
+      val range = item.range(activeFlow.text) ?: continue
+      if (range.end - range.start != 1 || activeFlow.text[range.start] != '\ufffc') continue
       val left = textLayout.getPrimaryHorizontal(range.start)
       val right = visualEndHorizontal(range.end, line)
       if (textLayout.getLineForOffset(range.start) == line && localX >= min(left, right) && localX <= max(left, right)) {
@@ -168,11 +169,11 @@ internal class FlowTextView(context: Context) : TextView(context) {
       }
     }
     for (item in activeFlow.spans.asReversed()) {
-      val range = item.range(activeFlow.text.length) ?: continue
+      val range = item.range(activeFlow.text) ?: continue
       if (item.optString("kind") == "link" && offset >= range.start && offset < range.end) return item to "link"
     }
     for (item in activeFlow.decorations.asReversed()) {
-      val range = item.range(activeFlow.text.length) ?: continue
+      val range = item.range(activeFlow.text) ?: continue
       if (item.has("actionId") && offset >= range.start && offset < range.end) return item to "segment"
     }
     return null

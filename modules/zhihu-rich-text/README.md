@@ -13,7 +13,7 @@
 - 不使用 `LinkMovementMethod`。普通点击分发链接、知识点或附件 action；长按仍交给系统选择，附件可附加 `attachmentLongPress` 事件。
 - 公式使用独立Paint，以当前 `textColor` 的SRC_IN滤镜绘制前景；普通图片保持原色。公式若在四个5%内缩角落中至少三个为近白不透明像素，加载时先转为灰度alpha mask去除浅底，避免底板和文字同时被染白。尺寸、基线和分类保持不变。
 - 解码资源按kind、URL、尺寸、字号/系统缩放及容器宽度保留在进程LRU中，以bitmap.byteCount计数，缓存上限24MB。缓存保留未染主题色的glyph/mask，主题切换在绘制时着色；kind防止普通图复用公式mask。重新挂载的文字流可直接使用已缓存几何；资源失败不阻塞正文首测，也不输出资源URL。
-- 附件加载由全进程共享的两个worker执行，空闲30秒后回收线程；相同资源key的进行中请求共享一次下载和解码。缓存检查与请求登记使用同一把锁，避免刚完成的资源再次下载。每个view只取消自己的订阅，最后一个订阅退出才取消底层任务；旧请求的迟到结果不能覆盖同key的新请求，generation仍保护按帧回填。
+- 附件加载由全进程共享的两个worker执行，空闲30秒后回收线程；相同资源key的进行中请求共享一次下载和解码。缓存检查与请求登记使用同一把锁，避免刚完成的资源再次下载。每个view只取消自己的订阅，最后一个订阅退出才取消底层任务；旧请求的迟到结果不能覆盖同key的新请求，generation 与 viewport revision 保护按帧回填，低内存/trim 回调清理进程缓存。
 
 附件并发、去重、取消和重试的纯JVM回归位于 `android/src/test/`，生成工程后在项目 `android/` 目录运行 `./gradlew :zhihu-rich-text:testDebugUnitTest`。这些测试不请求真实图源，不替代Android附件的视觉验收。
 
@@ -36,7 +36,7 @@ iOS完整Simulator app已在iOS27 SDK、deployment target15.1下构建通过；�
 
 ## Props 与事件
 
-`flowJson` 使用 `features/rich-content/richText.ts` 的 `RichTextFlow` 契约。原生会跳过越界 range、非单字符附件或没有 `U+FFFC` 的附件范围。标题优先使用 compiler 输出的 `fontSize`、`lineHeight` 和段落上下边距，与其他后端共享指标；旧 flow 缺少字号/行高时保留基础默认值。
+`flowJson` 使用 `features/rich-content/richText.ts` 的 `RichTextFlow` 布局字段（id、textVersion、text、spans、paragraphs、decorations、attachments）；sourceMap 保留在 JS 中进行业务选区映射，不随每个原生 view 的 JSON 重复传输。双端原生会跳过越界、非整数、字符串/boolean 偏移与拆分 surrogate pair 的 range，以及非单字符或没有 `U+FFFC` 的附件范围。Android 不再使用会强制转换/截断数值的 optInt 解析 range；系统选区与复制使用相同校验。标题优先使用 compiler 输出的 `fontSize`、`lineHeight` 和段落上下边距，与其他后端共享指标；旧 flow 缺少字号/行高时保留基础默认值。
 
 `configJson` 支持 `fontSize`、`lineHeight`、`paragraphSpacing`、`textColor`、`secondaryColor`、`linkColor`、`justify` 和 `textAlign`（left/center/right）。尺寸按React Native布局单位传入：Android为dp，iOS为pt。文本、段距和附件应用各自系统字体缩放；`contentWidth`不乘字体缩放。`selectable` 控制系统选择。
 
@@ -67,4 +67,10 @@ JS 通过 `isRichTextNativeAvailable()` 探测原生模块；`RichTextNativeView
 
 2026-09-30：Android `assembleDebug`及vivo原型功能查看通过。2026-10-01：首载处理与短公式结构修复完成构建和真机确认。公式前景着色的mask边界及65,536组alpha/gray不变量通过纯Kotlin验证，匿名Ax=b图源为currentColor、无rect/image；最终Android prebuild和arm64 Debug构建通过（约10秒），新版APK更新安装后用户明确确认暗色公式修复。普通图片不着色由回归及native kind guard验证，未宣称所有图源已逐项真机检查。全仓检查及完整边界见[本轮记录](../../features/rich-content/docs/renderer-v2-experiment-03-native-flow.md)，未量化首载白闪，未验收Release性能或跨设备一致性；新增iOS实现的编译与平台验证另行记录。
 
-iOS纯Foundation模型可用 `bash modules/zhihu-rich-text/tests/run-model-smoke.sh` 验证，17项实际Swift断言已通过；JS平台可用性回归9项通过。这些检查不代替UIKit编译或模拟器/真机交互。
+iOS纯Foundation模型可用 `bash modules/zhihu-rich-text/tests/run-model-smoke.sh` 验证，28项实际Swift模型/viewport断言已通过；JS平台可用性回归9项通过。这些检查不代替UIKit编译或模拟器/真机交互。
+
+## 附件 viewport 生命周期
+
+双端保留完整连续文字流，通过外层滚动宿主的可见范围，预取 viewport 上下各一屏内的附件。Android 在附着期间监听 ViewTreeObserver pre-draw；iOS 观察祖先 UIScrollView 的 contentOffset/bounds/contentSize，脱离 window 时注销观察。离屏、卸载及进入后台取消本 view 的订阅、释放 span/attachment 图像引用，不改动 text/range/已测尺寸；重入时按原资源 key 从共享缓存或加载器恢复。资源完成时同时核对文档 generation 和可见性 revision，防止离屏后再入场的旧回调回填。
+
+24 MiB 进程缓存仍可保留离屏资源以避免重复解码，Android 遇内存压力显式清缓存，iOS 使用 NSCache。该策略管理行内附件，不虚拟化文字流，也不代替块级视频/图片宿主的生命周期；未知资源第一次加载仍可能必要重排。纯模型与 JVM 测试覆盖数值范围、UTF-16、语义复制及取消重入，UIKit/Android 布局、滚动和资源驻留须另外构建和真机验收。

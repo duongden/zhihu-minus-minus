@@ -9,12 +9,14 @@
  */
 
 import { Ionicons } from '@expo/vector-icons';
+import { useMemo } from 'react';
 import {
   Text as DefaultText,
   View as DefaultView,
   StyleSheet,
   type TextStyle,
 } from 'react-native';
+import { useShallow } from 'zustand/react/shallow';
 import type Colors from '@/constants/Colors';
 import { typography } from '@/constants/designTokens';
 import { resolveThemeColors } from '@/constants/theme';
@@ -29,71 +31,36 @@ type ThemeProps = {
 export type TextProps = ThemeProps & DefaultText['props'];
 export type ViewProps = ThemeProps & DefaultView['props'];
 
+export function useRuntimeThemeColors() {
+  const theme = useColorScheme();
+  const preferences = useSettingsStore(
+    useShallow((state) => ({
+      primaryColor: state.primaryColor,
+      readingBackground: state.readingBackground,
+      textContrast: state.textContrast,
+      surfaceStyle: state.surfaceStyle,
+    })),
+  );
+  return useMemo(
+    () => resolveThemeColors(theme, preferences),
+    [theme, preferences],
+  );
+}
+
 export function useThemeColor(
   props: { light?: string; dark?: string },
   colorName: (keyof typeof Colors.light & keyof typeof Colors.dark) | string,
 ) {
   const theme = useColorScheme();
-  const { primaryColor, readingBackground, textContrast, surfaceStyle } =
-    useSettingsStore();
+  const themeColors = useRuntimeThemeColors();
   const colorFromProps = props[theme];
-  const themeColors = resolveThemeColors(theme, {
-    primaryColor,
-    readingBackground,
-    textContrast,
-    surfaceStyle,
-  });
-
-  if (colorFromProps) {
-    return colorFromProps;
-  }
-
-  // Support dynamic transparent variations of the primaryColor via 'primary_XX' where XX is hex opacity
-  if (primaryColor) {
-    if (
-      colorName === 'primary' ||
-      colorName === 'tint' ||
-      colorName === 'tabIconSelected'
-    ) {
-      return themeColors.primary;
-    }
-    if (colorName === 'primaryTransparent') {
-      return themeColors.primaryTransparent;
-    }
-    if (colorName === 'warning') {
-      return themeColors.warningAccent;
-    }
-    if (typeof colorName === 'string' && colorName.startsWith('primary_')) {
-      const opacityHex = colorName.split('_')[1];
-      if (opacityHex && opacityHex.length === 2) {
-        return `${themeColors.primary}${opacityHex}`;
-      }
-    }
-  } else {
-    // If primaryColor is null, use the default theme primary/tint color from constants
-    if (
-      colorName === 'primary' ||
-      colorName === 'tint' ||
-      colorName === 'tabIconSelected'
-    ) {
-      return themeColors.primary;
-    }
-    if (colorName === 'primaryTransparent') {
-      return themeColors.primaryTransparent;
-    }
-  }
-
-  if (colorName === 'warning') {
-    return themeColors.warningAccent;
-  }
-
-  // Fallback to static mapping
-  const staticKey = colorName as keyof typeof Colors.light &
-    keyof typeof Colors.dark;
-  if (staticKey && themeColors[staticKey]) {
-    return themeColors[staticKey];
-  }
-  return themeColors.primary;
+  if (colorFromProps) return colorFromProps;
+  const opacityHex = /^primary_([0-9a-f]{2})$/i.exec(colorName)?.[1];
+  if (opacityHex) return `${themeColors.primary}${opacityHex}`;
+  if (colorName === 'warning') return themeColors.warningAccent;
+  return (
+    themeColors[colorName as keyof typeof themeColors] ?? themeColors.primary
+  );
 }
 
 export function Text(
@@ -126,7 +93,7 @@ export function Text(
   } else if (type === 'tertiary') {
     colorName = 'textTertiary';
   } else if (type === 'primary') {
-    colorName = 'primary';
+    colorName = 'link';
   } else if (type === 'danger') {
     colorName = 'danger';
   } else if (type === 'title') {
@@ -147,7 +114,12 @@ export function Text(
     colorName,
   );
 
-  const { fontSizeScale, lineHeightScale } = useSettingsStore();
+  const { fontSizeScale, lineHeightScale } = useSettingsStore(
+    useShallow((state) => ({
+      fontSizeScale: state.fontSizeScale,
+      lineHeightScale: state.lineHeightScale,
+    })),
+  );
 
   const flattenedStyle = StyleSheet.flatten(style) || {};
   const currentFontSize = flattenedStyle.fontSize || defaultFontSize;
