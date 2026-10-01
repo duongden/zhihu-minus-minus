@@ -60,6 +60,8 @@ npx expo run:ios --configuration Debug --device
 
 使用 Xcode 27 / iOS 27 SDK 时，UIKit 要求采用 Scene 生命周期，否则应用会在创建界面前退出。当前 SDK 55 由 [`withIosSceneLifecycle`](./plugins/withIosSceneLifecycle.js) 在 prebuild 时迁移窗口启动，并注入 [`ZhihuSceneDelegate.swift`](./plugins/ios/ZhihuSceneDelegate.swift)：以 `UIWindow(windowScene:)` 创建单个主窗口，将冷/热链接与前后台事件转给原有 Expo AppDelegate。生成目录无需手改；插件拒绝覆盖未知模板或已有自定义 Scene 配置，升级 Expo SDK 时须重新核对此适配。平台依据见 [Apple 迁移说明](https://developer.apple.com/documentation/uikit/transitioning-to-the-uikit-scene-based-life-cycle) 与 [Expo Scene 说明](https://github.com/expo/fyi/blob/main/ios-scene-lifecycle.md)。
 
+开启 Firebase 时，其 config plugin 会先在旧窗口和 React 启动代码之间插入初始化块。Scene 迁移保留这个已知生成块及平台条件，让 `FirebaseApp.configure()` 继续在 AppDelegate 的 `didFinishLaunchingWithOptions` 中执行一次，再由 Scene 创建窗口并启动 React。未知初始化仍拒绝自动迁移。修改此适配时运行 `npm test -- tests/ios-scene-lifecycle.test.js --runInBand`，并分别验证开启和关闭 telemetry 的干净 iOS prebuild；只重用本地已迁移的 `ios/` 不足以覆盖 CI。
+
 ### Web
 
 ```bash

@@ -1,4 +1,8 @@
 const withIosSceneLifecycle = require('../plugins/withIosSceneLifecycle');
+// Exercise the actual installed config-plugin transform, including its markers.
+const {
+  modifySwiftAppDelegate,
+} = require('../node_modules/@react-native-firebase/app/plugin/build/ios/appDelegate');
 
 // Keep this fixture independent of the ignored ios/ directory: CI starts from
 // Expo SDK 55's generated app delegate, before the scene migration runs.
@@ -139,6 +143,70 @@ describe('iOS scene lifecycle app delegate migration', () => {
     expect(once).toContain('zhihu-ios-scene-lifecycle');
     expect(migrateAppDelegate(once)).toBe(once);
     expect((once.match(/class ZhihuSceneDelegate\b/g) ?? []).length).toBe(1);
+  });
+
+  test('retains Firebase initialization from the real plugin in didFinish before Scene startup', () => {
+    const configured = modifySwiftAppDelegate(SDK_55_APP_DELEGATE);
+    const firebaseBlock = configured.slice(
+      configured.indexOf(
+        '// @generated begin @react-native-firebase/app-didFinishLaunchingWithOptions',
+      ),
+      configured.indexOf('    factory.startReactNative('),
+    );
+    const migrated = migrateAppDelegate(configured);
+    const appDelegate = migrated.slice(
+      0,
+      migrated.indexOf('class ReactNativeDelegate'),
+    );
+    const sceneDelegate = migrated.slice(
+      migrated.indexOf('// @generated begin zhihu-ios-scene-lifecycle'),
+    );
+
+    expect(appDelegate).toContain('import FirebaseCore');
+    expect(appDelegate).toContain(firebaseBlock.trimEnd());
+    expect(appDelegate).toMatch(
+      /#if os\(iOS\) \|\| os\(tvOS\)[\s\S]*FirebaseApp\.configure\(\)[\s\S]*#endif/,
+    );
+    expect(appDelegate).not.toContain('startReactNative(');
+    expect(sceneDelegate).not.toContain('FirebaseApp.configure()');
+    expect(migrated).not.toContain('UIWindow(frame: UIScreen.main.bounds)');
+    expect((migrated.match(/FirebaseApp\.configure\(\)/g) ?? []).length).toBe(
+      1,
+    );
+    expect((migrated.match(/factory\.startReactNative\(/g) ?? []).length).toBe(
+      1,
+    );
+  });
+
+  test('keeps both Firebase and Scene migrations idempotent with telemetry enabled', () => {
+    const once = migrateAppDelegate(
+      modifySwiftAppDelegate(SDK_55_APP_DELEGATE),
+    );
+
+    expect(modifySwiftAppDelegate(once)).toBe(once);
+    expect(migrateAppDelegate(modifySwiftAppDelegate(once))).toBe(once);
+  });
+
+  test('rejects unknown initialization beside the recognized Firebase block', () => {
+    const configured = modifySwiftAppDelegate(SDK_55_APP_DELEGATE).replace(
+      '    factory.startReactNative(',
+      '    CustomStartup.configure()\n    factory.startReactNative(',
+    );
+
+    expect(() => migrateAppDelegate(configured)).toThrow(
+      'Unrecognized AppDelegate',
+    );
+  });
+
+  test('rejects a generated Firebase block whose initialization was customized', () => {
+    const configured = modifySwiftAppDelegate(SDK_55_APP_DELEGATE).replace(
+      'FirebaseApp.configure()',
+      'FirebaseApp.configure(options: customOptions)',
+    );
+
+    expect(() => migrateAppDelegate(configured)).toThrow(
+      'Unrecognized AppDelegate',
+    );
   });
 
   test('rejects an unrecognized native template instead of partially rewriting it', () => {

@@ -4,8 +4,13 @@ const { withAppDelegate, withInfoPlist } = require('@expo/config-plugins');
 
 const TAG = 'zhihu-ios-scene-lifecycle';
 const SCENE_CLASS = 'ZhihuSceneDelegate';
-const WINDOW_START =
-  /#if os\(iOS\) \|\| os\(tvOS\)\s+window = UIWindow\(frame: UIScreen\.main\.bounds\)\s+factory\.startReactNative\(\s+withModuleName: "main",\s+in: window,\s+launchOptions: launchOptions\)\s+#endif/;
+// RNFirebase's dangerous mod injects this before AppDelegate mods run. Keep
+// its initialization in didFinish; other inserted startup code stays rejected.
+const FIREBASE_INITIALIZATION =
+  /\/\/ @generated begin @react-native-firebase\/app-didFinishLaunchingWithOptions - expo prebuild \(DO NOT MODIFY\) sync-[a-f0-9]{40}\r?\n[ \t]*FirebaseApp\.configure\(\)\r?\n[ \t]*\/\/ @generated end @react-native-firebase\/app-didFinishLaunchingWithOptions/;
+const WINDOW_START = new RegExp(
+  String.raw`#if os\(iOS\) \|\| os\(tvOS\)\s+window = UIWindow\(frame: UIScreen\.main\.bounds\)\s*(${FIREBASE_INITIALIZATION.source})?\s*factory\.startReactNative\(\s+withModuleName: "main",\s+in: window,\s+launchOptions: launchOptions\)\s+#endif`,
+);
 
 function migrateAppDelegate(contents, language = 'swift') {
   if (language !== 'swift') {
@@ -36,9 +41,10 @@ function migrateAppDelegate(contents, language = 'swift') {
       '    let delegate = ReactNativeDelegate()',
       '    zhihuLaunchOptions = launchOptions\n    let delegate = ReactNativeDelegate()',
     )
-    .replace(
-      WINDOW_START,
-      '// The SceneDelegate creates the window and starts React Native.',
+    .replace(WINDOW_START, (_startup, firebaseInitialization) =>
+      firebaseInitialization
+        ? `#if os(iOS) || os(tvOS)\n${firebaseInitialization}\n#endif\n    // The SceneDelegate creates the window and starts React Native.`
+        : '// The SceneDelegate creates the window and starts React Native.',
     )}
 // @generated begin ${TAG}
 ${sceneDelegate}
