@@ -7,7 +7,9 @@ import {
   ActivityIndicator,
   Alert,
   type ScrollView as NativeScrollView,
+  type View as NativeView,
   StyleSheet,
+  useWindowDimensions,
 } from 'react-native';
 import Reanimated, {
   interpolate,
@@ -30,12 +32,18 @@ import { Text, ThemedIcon, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import { VoterListModal } from '@/components/VoterListModal';
 import Colors from '@/constants/Colors';
-import { RICH_CONTENT_STALE_TIME, ZhihuContent } from '@/features/rich-content';
+import {
+  isRichTextNativeAvailable,
+  RICH_CONTENT_STALE_TIME,
+  ZhihuContent,
+} from '@/features/rich-content';
 import { useCollectionAction } from '@/hooks/useCollectionAction';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
+import { useReadingContentMeasurement } from '@/hooks/useReadingContentMeasurement';
 import { useReadingProgress } from '@/hooks/useReadingProgress';
 import { useScrollHeaderAnim } from '@/hooks/useScrollAnimation';
 import { useCollectionStore } from '@/store/useCollectionStore';
+import { useSettingsStore } from '@/store/useSettingsStore';
 import { formatDate } from '@/utils/date';
 import { getZhihuErrorMessage, getZhihuErrorStatus } from '@/utils/zhihuError';
 
@@ -65,6 +73,7 @@ export const AnswerDetailView = ({
   const _textColor = Colors[colorScheme].text;
 
   const scrollViewRef = useRef<NativeScrollView>(null);
+  const contentViewRef = useRef<NativeView>(null);
 
   const [isLiked, setIsLiked] = React.useState(false);
   const [menuVisible, setMenuVisible] = React.useState(false);
@@ -93,11 +102,54 @@ export const AnswerDetailView = ({
       getZhihuErrorStatus(err) === 404 ? false : failureCount < 2,
   });
 
+  const { richContentRenderer, fontSizeScale, lineHeightScale } =
+    useSettingsStore();
+  const dimensions = useWindowDimensions();
+  const waitForNativeLayout =
+    richContentRenderer === 'native-v2' && isRichTextNativeAvailable();
+  const contentLayoutSource = React.useMemo(
+    () => ({
+      id,
+      content: answer?.content,
+      fontSizeScale,
+      lineHeightScale,
+      width: dimensions.width,
+      fontScale: dimensions.fontScale,
+      waitForNativeLayout,
+    }),
+    [
+      id,
+      answer?.content,
+      fontSizeScale,
+      lineHeightScale,
+      dimensions.width,
+      dimensions.fontScale,
+      waitForNativeLayout,
+    ],
+  );
+  const [readyLayoutSource, setReadyLayoutSource] = React.useState<
+    typeof contentLayoutSource | null
+  >(null);
+  const handleContentLayoutReady = React.useCallback(() => {
+    setReadyLayoutSource(contentLayoutSource);
+  }, [contentLayoutSource]);
+  const contentLayoutReady =
+    Boolean(answer) &&
+    (!waitForNativeLayout || readyLayoutSource === contentLayoutSource);
+
   const readingProgress = useReadingProgress({
     contentKey: `answer:${id}`,
     enabled: isFocused,
-    ready: Boolean(answer),
+    ready: contentLayoutReady,
+    layoutSource: waitForNativeLayout ? contentLayoutSource : undefined,
     scrollRef: scrollViewRef,
+  });
+  const handleContentSizeChange = useReadingContentMeasurement({
+    enabled: waitForNativeLayout && isFocused,
+    ready: contentLayoutReady,
+    contentRef: contentViewRef,
+    beginMeasurement: readingProgress.beginContentMeasurement,
+    onContentSizeChange: readingProgress.onContentSizeChange,
   });
   const handleTrackedScroll = React.useCallback(
     (offset: number) => {
@@ -227,6 +279,17 @@ export const AnswerDetailView = ({
   const primaryColor = useThemeColor({}, 'primary');
   const primaryTransparent = useThemeColor({}, 'primaryTransparent');
   const secondaryColor = useThemeColor({}, 'textSecondary');
+  const renderContentPlaceholder = React.useCallback(
+    () => (
+      <View className="h-[200px] justify-center items-center bg-transparent">
+        <ActivityIndicator size="small" color={primaryColor} />
+        <Text type="secondary" className="mt-[15px]">
+          正在斟酌文字...喵
+        </Text>
+      </View>
+    ),
+    [primaryColor],
+  );
   const warningColor = useThemeColor({}, 'warning');
 
   if (!hasBeenFocused) {
@@ -291,6 +354,10 @@ export const AnswerDetailView = ({
 
       <Reanimated.ScrollView
         ref={scrollViewRef}
+        innerViewRef={
+          // RN forwards a nullable React ref, but its public prop type omits null.
+          contentViewRef as React.RefObject<NativeView>
+        }
         className="flex-1"
         style={{
           backgroundColor:
@@ -301,7 +368,7 @@ export const AnswerDetailView = ({
         scrollEventThrottle={16}
         onScroll={handleScroll}
         onLayout={readingProgress.onLayout}
-        onContentSizeChange={readingProgress.onContentSizeChange}
+        onContentSizeChange={handleContentSizeChange}
         onScrollEndDrag={readingProgress.commitProgress}
         onMomentumScrollEnd={readingProgress.commitProgress}
         contentContainerStyle={{
@@ -361,12 +428,7 @@ export const AnswerDetailView = ({
         </View>
 
         {queryLoading && !answer ? (
-          <View className="h-[200px] justify-center items-center bg-transparent">
-            <ActivityIndicator size="small" color={primaryColor} />
-            <Text type="secondary" className="mt-[15px]">
-              正在斟酌文字...喵
-            </Text>
-          </View>
+          renderContentPlaceholder()
         ) : (isError || getZhihuErrorStatus(error) === 404) && !answer ? (
           <View className="h-[300px] justify-center items-center px-6 bg-transparent">
             <Ionicons name="compass-outline" size={48} color={secondaryColor} />
@@ -398,6 +460,8 @@ export const AnswerDetailView = ({
               objectId={id}
               type="answer"
               onRefresh={refetch}
+              renderPlaceholder={renderContentPlaceholder}
+              onLayoutReady={handleContentLayoutReady}
             />
             {/* Meta info */}
             <View

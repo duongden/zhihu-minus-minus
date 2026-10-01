@@ -1,7 +1,7 @@
 import { FontAwesome6, Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import type { ComponentProps } from 'react';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   type LayoutRectangle,
   Modal,
@@ -70,6 +70,7 @@ export function CustomContextMenu({
   const [previewFrame, setPreviewFrame] = useState<LayoutRectangle | null>(
     null,
   );
+  const openingStarted = useRef(false);
   const scale = useSharedValue(0.9);
   const opacity = useSharedValue(0);
   const translateX = useSharedValue(0);
@@ -85,11 +86,15 @@ export function CustomContextMenu({
 
   useEffect(() => {
     if (visible) {
+      // Content measurement can change the frame during this session. Keep the
+      // latest frame for closing without restarting the opening fade/fly-in.
+      if (openingStarted.current) return;
       if (originLayout) {
         if (!previewFrame) {
           opacity.value = 0;
           return;
         }
+        openingStarted.current = true;
         const itemCenterX = originLayout.x + originLayout.width / 2;
         const itemCenterY = originLayout.y + originLayout.height / 2;
 
@@ -105,6 +110,7 @@ export function CustomContextMenu({
           duration: ANIMATION_CONFIG.fadeDuration,
         });
       } else {
+        openingStarted.current = true;
         translateX.value = 0;
         translateY.value = 0;
         scale.value = withSpring(1, ANIMATION_CONFIG.cardSpring);
@@ -113,6 +119,8 @@ export function CustomContextMenu({
         });
       }
     } else {
+      openingStarted.current = false;
+      setPreviewFrame(null);
       translateX.value = 0;
       translateY.value = 0;
       scale.value = 0.9;
@@ -225,7 +233,17 @@ export function CustomContextMenu({
       <View style={styles.overlayContainer} pointerEvents="box-none">
         {/* Scaled Preview Area */}
         <Animated.View
-          onLayout={({ nativeEvent }) => setPreviewFrame(nativeEvent.layout)}
+          onLayout={({ nativeEvent }) => {
+            const next = nativeEvent.layout;
+            setPreviewFrame((previous) =>
+              previous?.x === next.x &&
+              previous.y === next.y &&
+              previous.width === next.width &&
+              previous.height === next.height
+                ? previous
+                : next,
+            );
+          }}
           style={[animatedPreviewStyle, styles.previewContainer]}
         >
           {previewContent}

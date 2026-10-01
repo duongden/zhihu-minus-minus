@@ -64,6 +64,7 @@
     "expo-status-bar": "~55.0.4",
     "expo-symbols": "~55.0.5",
     "expo-web-browser": "~55.0.9",
+    "htmlparser2": "^7.2.0",
     "katex": "^0.16.45",
     "nativewind": "^4.2.2",
     "react": "19.2.8",

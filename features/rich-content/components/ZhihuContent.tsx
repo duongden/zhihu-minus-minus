@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery } from '@tanstack/react-query';
+import * as Clipboard from 'expo-clipboard';
 import { type Href, useRouter } from 'expo-router';
 import React, {
   useCallback,
@@ -37,7 +38,6 @@ import RenderHtml, {
 } from 'react-native-render-html';
 import { SvgUri } from 'react-native-svg';
 import {
-  createSegmentReaction,
   getAnswer,
   reactAnswerSegment,
   unreactAnswerSegment,
@@ -62,15 +62,41 @@ import type {
 import { showToast } from '@/utils/toast';
 import { extractZhihuRedirectTarget, parseZhihuUrl } from '@/utils/url';
 import { getZhihuErrorStatus } from '@/utils/zhihuError';
+import type { ZhihuDocument, ZhihuLinkCardBlock } from '../document';
 import {
   DAILY_AVATAR_SIZE,
   isDailyAvatar,
   type RichContentVariant,
 } from '../imagePolicy';
-import type { LinkCardProps, ZhihuContentProps } from '../types';
+import {
+  getNativeHighlightDisplayText,
+  resolveNativeAnswerSegment,
+  resolveNativeAnswerSelection,
+} from '../nativeInteractions';
+import {
+  createRichContentMetrics,
+  RICH_CONTENT_BLOCK_FORMULA_HEIGHT,
+  RICH_CONTENT_INLINE_FORMULA_HEIGHT,
+  RICH_CONTENT_LIST_INDENT,
+  RICH_CONTENT_LIST_ITEM_SPACING,
+  RICH_CONTENT_PARAGRAPH_SPACING,
+  RICH_CONTENT_UNKNOWN_IMAGE_HEIGHT,
+} from '../presentation';
+import type { RichTextFlow } from '../richText';
+import { createSelectionReactionOptions } from '../selectionReaction';
+import type {
+  LinkCardProps,
+  RichContentRenderer,
+  ZhihuContentProps,
+} from '../types';
 import ZhihuDOMContent, { type TextSelectionInfo } from './ZhihuDOMContent';
+import {
+  ZhihuNativeContent,
+  type ZhihuNativeContentSelection,
+  type ZhihuNativeSegmentAction,
+} from './ZhihuNativeContent';
 
-export type { ZhihuContentProps } from '../types';
+export type { RichContentRenderer, ZhihuContentProps } from '../types';
 
 interface LinkCardDisplay {
   title?: unknown;
@@ -331,6 +357,19 @@ type SegmentInteraction = ZhihuSegmentReaction & {
   mark?: ZhihuSegmentMark;
 };
 
+interface ActiveSegment {
+  pid: string;
+  text: string;
+  reactionText: string;
+  copyText: string;
+  is_like: boolean;
+  like_count: number;
+  comment_count: number;
+  seg_ids?: string[] | string;
+  startIndex: number;
+  endIndex: number;
+}
+
 function sliceParagraphText(
   fullText: string,
   marks: ZhihuSegmentInfo['marks'] | undefined,
@@ -394,8 +433,8 @@ interface ParagraphRendererProps {
     segment: ZhihuSegmentInfo,
     interaction: SegmentInteraction,
   ) => void;
-  fontSizeScale?: number;
-  lineHeightScale?: number;
+  fontSize?: number;
+  lineHeight?: number;
 }
 
 interface ImageRendererProps {
@@ -432,8 +471,8 @@ const P_Renderer: CustomBlockRenderer = ({ TDefaultRenderer, ...props }) => {
   const {
     segmentMap,
     onPress,
-    fontSizeScale = 1.0,
-    lineHeightScale = 1.5,
+    fontSize = typography.fontSize.subtitle,
+    lineHeight = typography.fontSize.subtitle * 1.5,
   } = rendererProps as unknown as ParagraphRendererProps;
   const isBlockquoteParagraph = tnode.parent?.tagName === 'blockquote';
   const paragraphTextColor = isBlockquoteParagraph
@@ -442,8 +481,8 @@ const P_Renderer: CustomBlockRenderer = ({ TDefaultRenderer, ...props }) => {
   const blockquoteParagraphStyle = isBlockquoteParagraph
     ? {
         color: textSecondaryColor,
-        fontSize: 17 * fontSizeScale,
-        lineHeight: 17 * lineHeightScale,
+        fontSize,
+        lineHeight,
       }
     : undefined;
 
@@ -462,8 +501,8 @@ const P_Renderer: CustomBlockRenderer = ({ TDefaultRenderer, ...props }) => {
     );
   }
 
-  const textFontSize = typography.fontSize.subtitle * fontSizeScale;
-  const textLineHeight = typography.fontSize.subtitle * lineHeightScale;
+  const textFontSize = fontSize;
+  const textLineHeight = lineHeight;
 
   return (
     <Text
@@ -633,7 +672,7 @@ const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
     eeimg === '2' ||
     (!eeimg && (alt.includes('\\begin') || alt.includes('\\\\')));
 
-  let displayHeight = 200;
+  let displayHeight = RICH_CONTENT_UNKNOWN_IMAGE_HEIGHT;
   let displayWidth: number | string = contentWidth;
 
   if (originalWidth > 0 && originalHeight > 0) {
@@ -646,7 +685,9 @@ const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
     }
   } else if (isFormula) {
     // 默认高度估计
-    displayHeight = isBlockFormula ? 60 : 22;
+    displayHeight = isBlockFormula
+      ? RICH_CONTENT_BLOCK_FORMULA_HEIGHT
+      : RICH_CONTENT_INLINE_FORMULA_HEIGHT;
     displayWidth = isBlockFormula
       ? contentWidth
       : Math.min(contentWidth, Math.max(40, alt.length * 8));
@@ -842,13 +883,30 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
     objectId,
     type,
     onRefresh,
+    renderer,
+    renderPlaceholder,
+    onLayoutReady,
+    fontSizeScale: fontSizeOverride,
+    lineHeightScale: lineHeightOverride,
+    typographyOptions,
     useNative,
     selectable = true,
     variant = 'default',
   }) => {
     const colorScheme = useColorScheme();
     const { width } = useWindowDimensions();
-    const { useWebView, fontSizeScale, lineHeightScale } = useSettingsStore();
+    const settings = useSettingsStore();
+    const fontSizeScale = fontSizeOverride ?? settings.fontSizeScale;
+    const lineHeightScale = lineHeightOverride ?? settings.lineHeightScale;
+    const metrics = useMemo(
+      () => createRichContentMetrics(fontSizeScale, lineHeightScale),
+      [fontSizeScale, lineHeightScale],
+    );
+    const selectedRenderer: RichContentRenderer =
+      renderer ??
+      (useNative && settings.richContentRenderer === 'webview'
+        ? 'rnrh'
+        : settings.richContentRenderer);
     const textColor = useThemeColor({}, 'text');
     const textSecondaryColor = useThemeColor({}, 'textSecondary');
     const borderColor = useThemeColor({}, 'border');
@@ -857,19 +915,17 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
     const surfaceColor = useThemeColor({}, 'surface');
     const router = useRouter();
 
-    const [activeSegment, setActiveSegment] = useState<{
-      pid: string;
-      text: string;
-      is_like: boolean;
-      like_count: number;
-      comment_count: number;
-      seg_ids?: string[] | string;
-      startIndex?: number;
-      endIndex?: number;
-    } | null>(null);
+    const [activeSegment, setActiveSegment] = useState<ActiveSegment | null>(
+      null,
+    );
     const [modalVisible, setModalVisible] = useState(false);
+    const [nativeHighlight, setNativeHighlight] = useState<{
+      text: string;
+      sourceUrl?: string;
+    } | null>(null);
     const [viewerVisible, setViewerVisible] = useState(false);
     const [viewerImage, setViewerImage] = useState<string | null>(null);
+    const [viewerImages, setViewerImages] = useState<string[]>([]);
     const [actionSheetUrl, setActionSheetUrl] = useState<string | null>(null);
     const [shouldRender, setShouldRender] = useState(true);
     const [domReady, setDomReady] = useState(false);
@@ -882,7 +938,12 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
 
     // 备选方案：如果 DOM 组件加载太慢或失败，回退到原生渲染
     React.useEffect(() => {
-      if (useWebView && !useNative && !contentArray && content && !domReady) {
+      if (
+        selectedRenderer === 'webview' &&
+        !contentArray &&
+        content &&
+        !domReady
+      ) {
         const timer = setTimeout(() => {
           if (!domReady) {
             console.log(
@@ -893,7 +954,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
         }, 3500);
         return () => clearTimeout(timer);
       }
-    }, [content, domReady, contentArray, useWebView, useNative]);
+    }, [content, domReady, contentArray, selectedRenderer]);
 
     const handleInternalLink = useCallback(
       (url: string) => {
@@ -921,40 +982,63 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
     }, [segmentInfos]);
 
     const toggleSegmentLikeMutation = useMutation({
-      mutationFn: async () => {
-        if (!activeSegment) return;
-        const { is_like, seg_ids, text, pid, startIndex, endIndex } =
-          activeSegment;
-        const segId = Array.isArray(seg_ids) ? seg_ids[0] : seg_ids;
-        if (!segId) {
+      mutationFn: async ({
+        answerId,
+        segment,
+      }: {
+        answerId: string;
+        segment: ActiveSegment;
+      }) => {
+        const { is_like, seg_ids, reactionText, pid, startIndex, endIndex } =
+          segment;
+        if (!seg_ids || (Array.isArray(seg_ids) && seg_ids.length === 0)) {
           throw new Error('段落缺少有效的 seg_id');
         }
 
         if (is_like) {
-          return unreactAnswerSegment(objectId, segId);
+          return unreactAnswerSegment(answerId, seg_ids);
         } else {
           return reactAnswerSegment(
-            objectId,
-            segId,
-            text,
+            answerId,
+            seg_ids,
+            reactionText,
             pid,
             startIndex || 0,
             endIndex || 0,
           );
         }
       },
-      onSuccess: () => {
+      onSuccess: (result, { answerId, segment }) => {
+        if (
+          interactionSource.current.objectId !== answerId ||
+          interactionSource.current.type !== 'answer'
+        )
+          return;
         onRefresh?.();
-        if (activeSegment) {
-          setActiveSegment({
-            ...activeSegment,
-            is_like: !activeSegment.is_like,
-            like_count: activeSegment.is_like
-              ? activeSegment.like_count - 1
-              : activeSegment.like_count + 1,
-          });
-          showToast(activeSegment.is_like ? '已取消赞同' : '已赞同');
-        }
+        setActiveSegment((current) => {
+          if (
+            !current ||
+            current.pid !== segment.pid ||
+            current.startIndex !== segment.startIndex ||
+            current.endIndex !== segment.endIndex ||
+            current.seg_ids !== segment.seg_ids
+          )
+            return current;
+          return {
+            ...current,
+            is_like: !segment.is_like,
+            seg_ids: segment.is_like
+              ? segment.seg_ids
+              : result.segmentIds
+                ? [...result.segmentIds]
+                : undefined,
+            like_count: Math.max(
+              0,
+              segment.like_count + (segment.is_like ? -1 : 1),
+            ),
+          };
+        });
+        showToast(segment.is_like ? '已取消赞同' : '已赞同');
       },
       onError: () => {
         showToast('操作失败，请重试');
@@ -984,11 +1068,22 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
         pid: string,
         segment: ZhihuSegmentInfo,
         interaction: SegmentInteraction,
+        copyText?: string,
       ) => {
         const mark = interaction.mark;
+        const startIndex = mark?.start_index ?? 0;
+        const endIndex = mark?.end_index ?? segment.text.length;
+        if (type !== 'answer') {
+          setNativeHighlight({
+            text: copyText ?? segment.text.slice(startIndex, endIndex),
+          });
+          return;
+        }
         setActiveSegment({
           pid,
           text: segment?.text || '',
+          reactionText: segment.text.slice(startIndex, endIndex),
+          copyText: copyText ?? segment.text.slice(startIndex, endIndex),
           is_like: !!interaction.is_like,
           like_count: interaction.like_count || 0,
           comment_count: interaction.comment_count || 0,
@@ -996,12 +1091,12 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
             interaction.seg_ids ||
             mark?.seg_info?.seg_ids ||
             mark?.master_seg_info?.seg_ids,
-          startIndex: mark?.start_index || 0,
-          endIndex: mark?.end_index || segment?.text.length || 0,
+          startIndex,
+          endIndex,
         });
         setModalVisible(true);
       },
-      [],
+      [type],
     );
 
     const domVisitors = useMemo<DomVisitorCallbacks>(
@@ -1061,8 +1156,8 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
         p: {
           segmentMap,
           onPress: handlePress,
-          fontSizeScale,
-          lineHeightScale,
+          fontSize: metrics.body.fontSize,
+          lineHeight: metrics.body.lineHeight,
         },
         a: {
           onPress: (_event: GestureResponderEvent, href: string) =>
@@ -1095,8 +1190,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
         handleInternalLink,
         surfaceColor,
         width,
-        fontSizeScale,
-        lineHeightScale,
+        metrics,
         variant,
       ],
     );
@@ -1153,10 +1247,11 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
       () => ({
         p: {
           color: textColor,
-          fontSize: 17 * fontSizeScale,
-          lineHeight: 17 * lineHeightScale,
-          marginBottom: 14,
+          fontSize: metrics.body.fontSize,
+          lineHeight: metrics.body.lineHeight,
+          marginBottom: RICH_CONTENT_PARAGRAPH_SPACING,
           marginTop: 0,
+          textAlign: typographyOptions?.justify ? 'justify' : 'left',
         },
         b: { color: textColor, fontWeight: 'bold' },
         strong: { color: textColor, fontWeight: 'bold' },
@@ -1164,58 +1259,82 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
         blockquote: {
           borderLeftWidth: 3,
           borderLeftColor: primaryColor,
-          paddingLeft: 14,
+          paddingLeft: RICH_CONTENT_PARAGRAPH_SPACING,
           paddingRight: 10,
           backgroundColor: 'transparent',
           paddingVertical: 10,
           marginVertical: 12,
-          fontSize: 17 * fontSizeScale,
-          lineHeight: 17 * lineHeightScale,
+          fontSize: metrics.body.fontSize,
+          lineHeight: metrics.body.lineHeight,
           color: textSecondaryColor,
         },
         h1: {
           color: textColor,
-          fontSize: 21 * fontSizeScale,
+          fontSize: metrics.headings.h1.fontSize,
           fontWeight: 'bold',
-          marginTop: 24,
-          marginBottom: 10,
-          lineHeight: 21 * lineHeightScale,
+          marginTop: metrics.headings.h1.marginTop,
+          marginBottom: metrics.headings.h1.marginBottom,
+          lineHeight: metrics.headings.h1.lineHeight,
         },
         h2: {
           color: textColor,
-          fontSize: 19 * fontSizeScale,
+          fontSize: metrics.headings.h2.fontSize,
           fontWeight: 'bold',
-          marginTop: 20,
-          marginBottom: 8,
-          lineHeight: 19 * lineHeightScale,
+          marginTop: metrics.headings.h2.marginTop,
+          marginBottom: metrics.headings.h2.marginBottom,
+          lineHeight: metrics.headings.h2.lineHeight,
         },
         h3: {
           color: textColor,
-          fontSize: 17 * fontSizeScale,
+          fontSize: metrics.headings.h3.fontSize,
           fontWeight: 'bold',
-          marginTop: 16,
-          marginBottom: 6,
-          lineHeight: 17 * lineHeightScale,
+          marginTop: metrics.headings.h3.marginTop,
+          marginBottom: metrics.headings.h3.marginBottom,
+          lineHeight: metrics.headings.h3.lineHeight,
+        },
+        h4: {
+          color: textColor,
+          fontSize: metrics.headings.h4.fontSize,
+          fontWeight: 'bold',
+          marginTop: metrics.headings.h4.marginTop,
+          marginBottom: metrics.headings.h4.marginBottom,
+          lineHeight: metrics.headings.h4.lineHeight,
+        },
+        h5: {
+          color: textColor,
+          fontSize: metrics.headings.h5.fontSize,
+          fontWeight: 'bold',
+          marginTop: metrics.headings.h5.marginTop,
+          marginBottom: metrics.headings.h5.marginBottom,
+          lineHeight: metrics.headings.h5.lineHeight,
+        },
+        h6: {
+          color: textColor,
+          fontSize: metrics.headings.h6.fontSize,
+          fontWeight: 'bold',
+          marginTop: metrics.headings.h6.marginTop,
+          marginBottom: metrics.headings.h6.marginBottom,
+          lineHeight: metrics.headings.h6.lineHeight,
         },
         ul: {
-          paddingLeft: 20,
+          paddingLeft: RICH_CONTENT_LIST_INDENT,
           color: textColor,
           marginVertical: 8,
-          fontSize: 17 * fontSizeScale,
-          lineHeight: 17 * lineHeightScale,
+          fontSize: metrics.body.fontSize,
+          lineHeight: metrics.body.lineHeight,
         },
         ol: {
-          paddingLeft: 20,
+          paddingLeft: RICH_CONTENT_LIST_INDENT,
           color: textColor,
           marginVertical: 8,
-          fontSize: 17 * fontSizeScale,
-          lineHeight: 17 * lineHeightScale,
+          fontSize: metrics.body.fontSize,
+          lineHeight: metrics.body.lineHeight,
         },
         li: {
-          marginBottom: 6,
+          marginBottom: RICH_CONTENT_LIST_ITEM_SPACING,
           color: textColor,
-          fontSize: 17 * fontSizeScale,
-          lineHeight: 17 * lineHeightScale,
+          fontSize: metrics.body.fontSize,
+          lineHeight: metrics.body.lineHeight,
         },
         hr: {
           height: 1,
@@ -1225,7 +1344,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
         figure: { marginVertical: 12, alignItems: 'center' },
         figcaption: {
           color: textSecondaryColor,
-          fontSize: 13 * fontSizeScale,
+          fontSize: metrics.captionFontSize,
           marginTop: 6,
           textAlign: 'center',
           opacity: 0.7,
@@ -1239,7 +1358,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
           paddingHorizontal: 5,
           paddingVertical: 2,
           fontFamily: 'monospace',
-          fontSize: 14 * fontSizeScale,
+          fontSize: metrics.codeFontSize,
         },
       }),
       [
@@ -1247,13 +1366,16 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
         textSecondaryColor,
         borderColor,
         contentBorderColor,
-        fontSizeScale,
-        lineHeightScale,
+        metrics,
         primaryColor,
+        typographyOptions?.justify,
       ],
     );
 
-    const defaultTextProps = useMemo(() => ({ selectable }), [selectable]);
+    const defaultTextProps = useMemo(
+      () => ({ selectable, lineBreakStrategyIOS: 'standard' as const }),
+      [selectable],
+    );
 
     const renderPinContent = () => {
       if (!contentArray) return null;
@@ -1322,10 +1444,14 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
     };
 
     const onReadyCallback = useCallback(() => setDomReady(true), []);
-    const onImagePressCallback = useCallback((src: string) => {
-      setViewerImage(src);
-      setViewerVisible(true);
-    }, []);
+    const onImagePressCallback = useCallback(
+      (src: string, gallery?: readonly string[]) => {
+        setViewerImage(src);
+        setViewerImages(gallery?.includes(src) ? [...gallery] : [src]);
+        setViewerVisible(true);
+      },
+      [],
+    );
     const onImageLongPressCallback = useCallback((src: string) => {
       setActionSheetUrl(src);
     }, []);
@@ -1341,10 +1467,95 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
       },
       [segmentMap, findActiveInteraction, handlePress],
     );
+    const onNativeSegmentPressCallback = useCallback(
+      (action: ZhihuNativeSegmentAction, document: ZhihuDocument) => {
+        if (document.id !== `${type}:${objectId}`) return;
+        const resolved = resolveNativeAnswerSegment(action, {
+          objectId,
+          type,
+          segmentInfos,
+          document,
+        });
+        if (resolved) {
+          setNativeHighlight(null);
+          handlePress(
+            resolved.pid,
+            resolved.segment,
+            resolved.interaction,
+            getNativeHighlightDisplayText(action, document) ?? action.text,
+          );
+        } else if (action.segment) {
+          const text =
+            getNativeHighlightDisplayText(action, document) ?? action.text;
+          if (text.trim())
+            setNativeHighlight({
+              text,
+              sourceUrl:
+                action.segment.type === 'segmentHighlight'
+                  ? action.segment.highlight?.sourceUrl
+                  : undefined,
+            });
+        }
+      },
+      [objectId, type, segmentInfos, handlePress],
+    );
+    const renderNativeLinkCard = useCallback(
+      (card: ZhihuLinkCardBlock) => (
+        <LinkCard
+          url={card.url}
+          title={card.title}
+          image={card.image?.url}
+          cardInfo={{
+            display: {
+              ...(!isLikelyUrl(card.title) && { title: card.title }),
+              card_open_url: card.url,
+              desc: card.description,
+              image: { image_url: card.image?.url },
+            },
+          }}
+          onPress={handleInternalLink}
+          surfaceColor={surfaceColor}
+          colorScheme={colorScheme}
+        />
+      ),
+      [handleInternalLink, surfaceColor, colorScheme],
+    );
 
     // --- Segment reaction from text selection ---
     const [textSelection, setTextSelection] =
       useState<TextSelectionInfo | null>(null);
+    const interactionSource = useRef({
+      content,
+      contentArray,
+      objectId,
+      type,
+      selectedRenderer,
+    });
+
+    useEffect(() => {
+      const previous = interactionSource.current;
+      if (
+        previous.content === content &&
+        previous.contentArray === contentArray &&
+        previous.objectId === objectId &&
+        previous.type === type &&
+        previous.selectedRenderer === selectedRenderer
+      )
+        return;
+      interactionSource.current = {
+        content,
+        contentArray,
+        objectId,
+        type,
+        selectedRenderer,
+      };
+      setDomReady(false);
+      setUseNativeFallback(false);
+      setTextSelection(null);
+      setModalVisible(false);
+      setActiveSegment(null);
+      setNativeHighlight(null);
+    }, [content, contentArray, objectId, type, selectedRenderer]);
 
     const onTextSelectedCallback = useCallback(
       (info: TextSelectionInfo | null) => {
@@ -1352,28 +1563,37 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
       },
       [],
     );
-
-    const createReactionMutation = useMutation({
-      mutationFn: async () => {
-        if (!textSelection) return;
-        return createSegmentReaction(
-          objectId,
-          textSelection.text,
-          textSelection.startParagraphId,
-          textSelection.startOffset,
-          textSelection.endParagraphId,
-          textSelection.endOffset,
+    const onNativeTextSelectedCallback = useCallback(
+      (
+        selection: ZhihuNativeContentSelection,
+        flow: RichTextFlow,
+        document: ZhihuDocument,
+      ) => {
+        if (document.id !== `${type}:${objectId}`) return;
+        setTextSelection(
+          resolveNativeAnswerSelection(selection, flow, {
+            objectId,
+            type,
+            document,
+            segmentInfos,
+          }),
         );
       },
-      onSuccess: () => {
-        showToast('已赞同此段落');
-        setTextSelection(null);
-        onRefresh?.();
-      },
-      onError: () => {
-        showToast('操作失败，请重试');
-      },
-    });
+      [objectId, type, segmentInfos],
+    );
+
+    const currentTextSelection = useRef(textSelection);
+    currentTextSelection.current = textSelection;
+    const createReactionMutation = useMutation(
+      createSelectionReactionOptions({
+        getSource: () => interactionSource.current,
+        getSelection: () => currentTextSelection.current,
+        clearSelection: () => setTextSelection(null),
+        refresh: onRefresh,
+        notifySuccess: () => showToast('已赞同此段落'),
+        notifyError: () => showToast('操作失败，请重试'),
+      }),
+    );
     const domStyle = useMemo(
       () => ({ backgroundColor: 'transparent', minHeight: 400 }),
       [],
@@ -1381,6 +1601,22 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
     const nativeContentSource = useMemo(
       () => ({ html: `<div>${content || ''}</div>` }),
       [content],
+    );
+    const renderRnrhContent = () => (
+      <View>
+        <RenderHtml
+          contentWidth={width - 40}
+          source={nativeContentSource}
+          renderers={renderers}
+          tagsStyles={tagsStyles as unknown as MixedStyleRecord}
+          classesStyles={classesStyles as unknown as MixedStyleRecord}
+          domVisitors={domVisitors}
+          systemFonts={SYSTEM_FONTS}
+          renderersProps={renderersProps as unknown as Partial<RenderersProps>}
+          ignoredDomTags={IGNORED_DOM_TAGS}
+          defaultTextProps={defaultTextProps}
+        />
+      </View>
     );
 
     if (!shouldRender && !contentArray) {
@@ -1393,25 +1629,33 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
 
     return (
       <View className="bg-transparent">
-        {contentArray ? (
+        {selectedRenderer === 'native-v2' ? (
+          <ZhihuNativeContent
+            content={content || ''}
+            contentArray={contentArray}
+            objectId={objectId}
+            type={type}
+            segmentInfos={segmentInfos}
+            linkCardInfo={linkCardInfo}
+            variant={variant}
+            fontSizeScale={fontSizeScale}
+            lineHeightScale={lineHeightScale}
+            options={typographyOptions}
+            onLinkPress={handleInternalLink}
+            onImagePress={onImagePressCallback}
+            onImageLongPress={onImageLongPressCallback}
+            onSegmentPress={onNativeSegmentPressCallback}
+            onSelectionChange={onNativeTextSelectedCallback}
+            renderLinkCard={renderNativeLinkCard}
+            selectable={selectable}
+            renderFallback={contentArray ? renderPinContent : renderRnrhContent}
+            renderPlaceholder={renderPlaceholder}
+            onLayoutReady={onLayoutReady}
+          />
+        ) : contentArray ? (
           renderPinContent()
-        ) : !useWebView || useNativeFallback || useNative ? (
-          <View>
-            <RenderHtml
-              contentWidth={width - 40}
-              source={nativeContentSource}
-              renderers={renderers}
-              tagsStyles={tagsStyles as unknown as MixedStyleRecord}
-              classesStyles={classesStyles as unknown as MixedStyleRecord}
-              domVisitors={domVisitors}
-              systemFonts={SYSTEM_FONTS}
-              renderersProps={
-                renderersProps as unknown as Partial<RenderersProps>
-              }
-              ignoredDomTags={IGNORED_DOM_TAGS}
-              defaultTextProps={defaultTextProps}
-            />
-          </View>
+        ) : selectedRenderer === 'rnrh' || useNativeFallback ? (
+          renderRnrhContent()
         ) : (
           <View style={{ minHeight: 400 }}>
             {!domReady && !useNativeFallback && (
@@ -1436,6 +1680,9 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
                 type === 'answer' ? onTextSelectedCallback : undefined
               }
               variant={variant}
+              fontSizeScale={fontSizeScale}
+              lineHeightScale={lineHeightScale}
+              typographyOptions={typographyOptions}
               style={domStyle}
             />
           </View>
@@ -1466,25 +1713,37 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
                     color: activeSegment.is_like
                       ? Colors[colorScheme].danger
                       : undefined,
-                    disabled: toggleSegmentLikeMutation.isPending,
-                    onPress: () => toggleSegmentLikeMutation.mutate(),
+                    disabled:
+                      toggleSegmentLikeMutation.isPending ||
+                      !activeSegment.seg_ids,
+                    onPress: () => {
+                      if (activeSegment)
+                        toggleSegmentLikeMutation.mutate({
+                          answerId: objectId,
+                          segment: activeSegment,
+                        });
+                    },
                   },
                   {
                     key: 'comments',
                     icon: 'chatbubble-outline' as const,
                     label: `${activeSegment.comment_count || 0} 评论`,
+                    disabled: !activeSegment.seg_ids,
                     onPress: () => {
                       const { seg_ids, text, startIndex, endIndex } =
                         activeSegment;
                       const segmentId = Array.isArray(seg_ids)
-                        ? seg_ids[0]
+                        ? seg_ids.join(',')
                         : seg_ids;
-                      const selected = text
-                        .slice(startIndex || 0, endIndex || text.length)
-                        .trim();
+                      const selected = text.slice(startIndex, endIndex);
                       const queryParams = [
                         `type=${type}`,
-                        segmentId ? `segmentId=${segmentId}` : null,
+                        segmentId
+                          ? `segmentId=${encodeURIComponent(segmentId)}`
+                          : null,
+                        `pid=${encodeURIComponent(activeSegment.pid)}`,
+                        `startOffset=${startIndex}`,
+                        `endOffset=${endIndex}`,
                         selected
                           ? `text=${encodeURIComponent(selected)}`
                           : null,
@@ -1492,6 +1751,15 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
                         .filter(Boolean)
                         .join('&');
                       router.push(`/comments/${objectId}?${queryParams}`);
+                    },
+                  },
+                  {
+                    key: 'copy',
+                    icon: 'copy-outline' as const,
+                    label: '复制',
+                    onPress: async () => {
+                      await Clipboard.setStringAsync(activeSegment.copyText);
+                      showToast('已复制');
                     },
                   },
                   {
@@ -1519,9 +1787,51 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
           }
         />
 
+        <ActionSheet
+          visible={Boolean(nativeHighlight)}
+          onClose={() => setNativeHighlight(null)}
+          title="知识点"
+          subtitle={nativeHighlight?.text}
+          options={
+            nativeHighlight
+              ? [
+                  {
+                    key: 'copy',
+                    icon: 'copy-outline' as const,
+                    label: '复制',
+                    onPress: async () => {
+                      await Clipboard.setStringAsync(nativeHighlight.text);
+                      showToast('已复制');
+                    },
+                  },
+                  ...(nativeHighlight.sourceUrl
+                    ? [
+                        {
+                          key: 'source',
+                          icon: 'open-outline' as const,
+                          label: '查看来源',
+                          onPress: () =>
+                            handleInternalLink(nativeHighlight.sourceUrl || ''),
+                        },
+                      ]
+                    : []),
+                ]
+              : []
+          }
+        />
+
         <ImagePreviewModal
           visible={viewerVisible && Boolean(viewerImage)}
-          imageUrls={viewerImage ? [viewerImage] : []}
+          imageUrls={
+            viewerImage
+              ? viewerImages.includes(viewerImage)
+                ? viewerImages
+                : [viewerImage]
+              : []
+          }
+          initialIndex={
+            viewerImage ? Math.max(0, viewerImages.indexOf(viewerImage)) : 0
+          }
           onClose={() => setViewerVisible(false)}
         />
 
@@ -1579,7 +1889,13 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
                 style={{
                   backgroundColor: primaryColor,
                 }}
-                onPress={() => createReactionMutation.mutate()}
+                onPress={() => {
+                  if (textSelection)
+                    createReactionMutation.mutate({
+                      source: interactionSource.current,
+                      selection: textSelection,
+                    });
+                }}
                 disabled={createReactionMutation.isPending}
               >
                 {createReactionMutation.isPending ? (

@@ -223,6 +223,9 @@ function RootLayout() {
                   headerBackButtonDisplayMode: 'minimal',
                 }}
               >
+                {/* 开发工具自带嵌套导航；生产环境会由 dev layout 重定向 */}
+                <Stack.Screen name="dev" options={{ headerShown: false }} />
+
                 {/* 底部 Tab 主框架 */}
                 <Stack.Screen
                   name="(tabs)"

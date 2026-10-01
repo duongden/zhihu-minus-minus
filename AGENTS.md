@@ -64,7 +64,7 @@ Cookie、`z_c0`、`d_c0`、`_xsrf`、X-ZSE 请求头、完整 Axios config、Sen
 
 - 统一使用 `import { ZhihuContent } from '@/features/rich-content'`。`components/ZhihuContent.tsx` 和 `components/ZhihuDOMContent.tsx` 仅是兼容转发。
 - 修复正文解析或渲染问题时，将脱敏样本放入 `fixtures/inbox/`；确认结构后登记到 `fixtures/cases/` 与 manifest。
-- 至少运行 `npm run analyze:rich-content` 和 `npm run test:rich-content`；完整变更运行 `npm run check`。
+- 至少运行 `npm run analyze:rich-content` 和 `npm test -- features/rich-content/tests --runInBand`；完整变更运行 `npm run check`。
 - RNRH 当前是迁移期实现与 fallback，目标架构见 `features/rich-content/docs/renderer-v2-plan.md`；不要重新扩大旧实现的公共边界。
 
 ### 路由、存储与原生配置

@@ -58,6 +58,8 @@ npx expo run:ios --configuration Debug --device
 
 需要真机 Release 验证时，在 Xcode 打开生成的 `ios/*.xcworkspace`，选择自己的 Team 后构建。Release IPA 是未签名的，不能替代签名流程。
 
+使用 Xcode 27 / iOS 27 SDK 时，UIKit 要求采用 Scene 生命周期，否则应用会在创建界面前退出。当前 SDK 55 由 [`withIosSceneLifecycle`](./plugins/withIosSceneLifecycle.js) 在 prebuild 时迁移窗口启动，并注入 [`ZhihuSceneDelegate.swift`](./plugins/ios/ZhihuSceneDelegate.swift)：以 `UIWindow(windowScene:)` 创建单个主窗口，将冷/热链接与前后台事件转给原有 Expo AppDelegate。生成目录无需手改；插件拒绝覆盖未知模板或已有自定义 Scene 配置，升级 Expo SDK 时须重新核对此适配。平台依据见 [Apple 迁移说明](https://developer.apple.com/documentation/uikit/transitioning-to-the-uikit-scene-based-life-cycle) 与 [Expo Scene 说明](https://github.com/expo/fyi/blob/main/ios-scene-lifecycle.md)。
+
 ### Web
 
 ```bash
@@ -85,7 +87,7 @@ Web 适合检查路由和不依赖原生模块的页面，不代表 Android/iOS 
 npm run check
 ```
 
-它依次执行类型检查、只读 Biome 检查、全部 Jest 测试和富文本 fixture 分析。测试运行在 `jest-expo` preset 下；逻辑测试使用 `.test.ts`，React Native 组件测试使用 `.test.tsx`，交互断言使用 React Native Testing Library。常用命令如下：
+它依次执行类型检查、只读 Biome 检查、全部 Jest 测试和富文本 fixture 分析。测试运行在 `jest-expo` preset 下；当前 `testMatch` 收集 `tests/` 下的 `.test.ts` / `.test.js`，以及 `features/rich-content/tests/` 下的 `.test.ts` / `.test.tsx`。组件交互断言可使用 React Native Testing Library；其他目录或扩展名需要同步调整 `jest.config.js`。常用命令如下：
 
 ```bash
 npm run typecheck
@@ -99,9 +101,31 @@ npm run analyze:rich-content
 npm run analyze:rich-content:inbox
 ```
 
+本地macOS具备Swift工具链时，可运行 `bash modules/zhihu-rich-text/tests/run-model-smoke.sh`，直接编译并检查iOS纯Foundation模型的UTF-16范围、非法输入和附件语义复制。它不加载UIKit，不替代iOS app编译、装饰/附件视觉及系统手势验收。
+
 `npm run lint` 不修改文件；需要自动修复时使用 `npm run lint:fix` 或 `npm run format`，然后逐项检查 diff。富文本专项的 fixture 投递、脱敏和 manifest 规则见 [`features/rich-content/README.md`](./features/rich-content/README.md)。
 
-富文本后续路线按 [Issue #40](https://github.com/huamurui/zhihu-minus-minus/issues/40) 更新为原生 attributed text / Text Flow Island，候选 backend 与未完成项见 [Renderer V2 计划](./features/rich-content/docs/renderer-v2-plan.md)，Release 指标见 [基准计划](./features/rich-content/docs/benchmark-plan.md)。当前 `ZhihuDocument` 和局部验证工具尚未接入新 backend；现有 `useNative` 分支仍是 RNRH。将来验证 enriched-html 或 Tiqian 的原生依赖/模块时，应核验锁定工具链并按原生改动流程重新 prebuild。
+富文本后续路线按 [Issue #40](https://github.com/huamurui/zhihu-minus-minus/issues/40) 更新为原生 attributed text / Text Flow Island，实施进度与未完成项见 [Renderer V2 计划](./features/rich-content/docs/renderer-v2-plan.md)，Release指标见 [基准计划](./features/rich-content/docs/benchmark-plan.md)。“设置 → 外观与阅读 → 正文排版”提供经典排版、tiqian-super-mini、网页排版三选项；“功能开关 → 正文排版”也会进入同一页面。业务 `ZhihuContent` 默认读取持久偏好，也可显式传 `renderer` 覆盖。从“我的 → 富文本测试案例（开发）”进入功能原型或稳定fixture，可对照这三个后端；案例内切换仅保留于该页面，不写生产偏好。生产构建隐藏开发入口并重定向 `/dev/*`，但真实正文仍可通过设置选择tiqian-super-mini。
+
+新增的 [tiqian-super-mini 功能原型](./features/rich-content/docs/renderer-v2-experiment-03-native-flow.md) 经过 HTML → `ZhihuDocument` → Rich Text IR → 本地 `modules/zhihu-rich-text`，初步支持同一流跨段选择、source map、装饰和行内附件。入口为上述案例列表的“tiqian-super-mini 原型”，也可在开发构建打开 `zhihu--:///dev/rich-content/prototype`。Android使用TextView/Spannable，iOS新增UIKit/TextKit adapter，两端共享Document、IR与JS交互宿主。未包含该模块或不支持的平台回退到RNRH。新增或变更模块后，对目标平台运行 `npx expo prebuild --platform android --no-install` 或 `npx expo prebuild --platform ios --no-install`，并重新编译/安装development build；Fast Refresh不能添加原生模块，Expo Go不支持此能力。iOS SVG解码依赖由本地podspec声明，prebuild后需安装Pods。
+
+iOS最低版本继续为15.1。[expo-router补丁](./patches/expo-router+55.0.18.patch)为原有 `UIAction.subtitle` 赋值增加iOS16可用性守卫，避免当前SDK在默认target下编译失败；15.x仅省略此action副标题。补丁由现有postinstall的patch-package应用，无需改生成Pods工程或提高全局最低系统版本。
+
+已安装development build并连接Metro的iOS模拟器可直接打开合成案例：
+
+```bash
+xcrun simctl openurl booted 'zhihu--:///dev/rich-content/prototype?caseId=attachments'
+```
+
+`caseId`限页面内的selection、decorations、attachments、segments、media、typography六个合成案例；忽略无效值，初次打开默认selection，其他query不注入正文。开发URL解析只保留合法且不超过64字符的caseId，生产构建继续隐藏和重定向开发页面。CLI可用于启动和截图，不能据此宣称系统选区拖柄、附件长按或父滚动手势已人工验收。
+
+公共推荐入口为 `ZhihuContent`，默认采用用户正文偏好，需要固定后端时可传 `renderer="native-v2"`；该外壳已封装完整RNRH fallback。直接使用 `ZhihuNativeContent` 必须提供 `renderFallback` callback，由宿主返回RNRH正文与原有图片/链接交互；V2选区和知识点事件仅在native模块可用时生效。
+
+正文后端偏好保存为 `richContentRenderer`，默认 `rnrh`。settings持久化版本递增到13，并从旧 `useWebView` 迁移：原值为true时保留网页排版，否则使用经典排版，不静默替用户开启tiqian-super-mini。原生模块缺失或平台不是Android/iOS时，只对本次渲染回退RNRH，保留用户选择供可用客户端继续使用。
+
+2026-09-30按用户决定正式移除Enriched：组件、专属normalizer与测试、依赖、native patch和开发入口均已删除，研发集中到本地tiqian-super-mini。[Enriched 实验记录](./features/rich-content/docs/renderer-v2-experiment-01-enriched-html.md)仅保留研究与历史构建依据。原生依赖移除后需用锁文件安装依赖，重新prebuild、编译和真机检查，以免旧生成工程继续链接已移除的库。2026-10-01开始增加iOS原生adapter、Expo Apple模块注册和共享JS入口，构建与平台验证以实验03新增iOS记录为准；双端Release验收仍未完成。Tiqian保留为[历史集成草案](./features/rich-content/docs/renderer-v2-experiment-02-tiqian.md)，未接入本轮Android原型。
+
+2026-09-30初始main同步的 `npm ci`、Android / iOS prebuild和质量检查属于移除Enriched之前的记录。本轮tiqian-super-mini实现、Android Debug真机查看与Enriched移除后的验证结果以 [实验03](./features/rich-content/docs/renderer-v2-experiment-03-native-flow.md) 为准；prebuild和逻辑测试通过不代表双端原生排版、选择或Release性能已验收。
 
 ## 代码结构与数据边界
 

@@ -38,13 +38,16 @@
     {
       "id": "long-image-heavy-001",
       "file": "./cases/pig.json",
-      "contentPath": "content",
-      "sourceType": "answer",
-      "collectedAt": "2026-08-30",
+      "contentPath": "target.content",
+      "sourceType": "question_feed_card",
+      "collectedAt": "2026-09-07",
       "traits": [
+        "feed-card",
+        "answer-target",
         "long-form",
         "image",
         "figcaption",
+        "segment-interaction",
         "json-envelope",
         "metadata"
       ],
@@ -58,18 +61,22 @@
         "formulaImages": 0,
         "noscripts": 16,
         "videoBoxes": 0,
-        "linkCards": 0
+        "linkCards": 0,
+        "segmentInfos": 35
       },
       "expectedMetadata": {
-        "type": "answer",
-        "content_need_truncated": true,
-        "is_labeled": true,
-        "question.title": "为什么猪没在进化中灭绝？",
-        "endorsements.length": 2,
-        "reward_info.is_rewardable": true,
-        "relationship.voting": 1,
-        "reaction.relation.liked": false,
-        "can_comment.status": true
+        "type": "question_feed_card",
+        "target_type": "answer",
+        "target.type": "answer",
+        "target.content_need_truncated": false,
+        "target.allow_segment_interaction": 1,
+        "target.segment_infos.length": 35,
+        "target.question.title": "为什么猪没在进化中灭绝？",
+        "target.endorsements.length": 2,
+        "target.reward_info.is_rewardable": true,
+        "target.relationship.voting": 1,
+        "target.reaction.relation.liked": false,
+        "target.can_comment.status": true
       }
     },
     {
@@ -136,7 +143,8 @@
         "formulaImages": 0,
         "noscripts": 130,
         "videoBoxes": 0,
-        "linkCards": 1
+        "linkCards": 1,
+        "segmentInfos": 18
       },
       "expectedMetadata": {
         "type": "question_feed_card",
@@ -147,6 +155,59 @@
         "target.hot_comment.length": 1,
         "target.thumbnail_info.count": 3,
         "target.relationship.voting": 0,
+        "target.can_comment.status": true
+      }
+    },
+    {
+      "id": "question-feed-card-formula-table-001",
+      "file": "./cases/question-feed-card-formula-table-001.json",
+      "contentPath": "target.content",
+      "sourceType": "question_feed_card",
+      "collectedAt": "2026-09-14",
+      "traits": [
+        "feed-card",
+        "answer-target",
+        "long-form",
+        "formula",
+        "heading",
+        "image",
+        "gif",
+        "list",
+        "table",
+        "reference",
+        "segment-interaction",
+        "json-envelope",
+        "metadata"
+      ],
+      "expected": {
+        "paragraphs": 85,
+        "headings": 7,
+        "figures": 14,
+        "figcaptions": 7,
+        "lists": 11,
+        "totalImages": 106,
+        "activeImages": 92,
+        "formulaImages": 78,
+        "noscripts": 14,
+        "videoBoxes": 0,
+        "linkCards": 0,
+        "memberMentions": 0,
+        "topicTags": 0,
+        "segmentInfos": 1
+      },
+      "expectedMetadata": {
+        "type": "question_feed_card",
+        "target_type": "answer",
+        "target.type": "answer",
+        "target.answer_type": "normal",
+        "target.content_need_truncated": false,
+        "target.allow_segment_interaction": 1,
+        "target.segment_infos.length": 1,
+        "target.settings.table_of_contents.enabled": true,
+        "target.endorsements.length": 1,
+        "target.thumbnail_info.count": 3,
+        "target.relationship.voting": 0,
+        "target.reward_info.is_rewardable": true,
         "target.can_comment.status": true
       }
     },

@@ -4,18 +4,18 @@
 
 基准用于区分 HTML normalization、文档/adapter 构造、React reconciliation、原生文本布局、媒体请求和图片/SVG 解码的成本。当前目标是 **native attributed text + Text Flow Island + 独立媒体/复杂 block**：连续文本在同一原生 flow 内排版和选择，图片、视频、复杂卡片等按能力和生命周期独立处理。RNRH 保留为现有基线与 fallback，DOM/WebView 保留为 fallback/实验，不再预设“单 WebView + FlashList”是终态，也不先假定必须虚拟化所有段落。
 
-路线依据 [Issue #40](https://github.com/huamurui/zhihu-minus-minus/issues/40) 及其[候选后端补充](https://github.com/huamurui/zhihu-minus-minus/issues/40#issuecomment-5595047992)。所有正式对比都在 Release 构建完成，Debug 结果只用于定位问题。目前只有 [Android Debug 网络与挂载基线](./android-device-baseline-2026-08-30.md)，native backend PoC、Release 性能对照和 iOS 真机数据均未完成。
+路线依据 [Issue #40](https://github.com/huamurui/zhihu-minus-minus/issues/40) 及其[候选后端补充](https://github.com/huamurui/zhihu-minus-minus/issues/40#issuecomment-5595047992)。所有正式对比都在 Release 构建完成，Debug结果只用于定位问题。目前性能数据只有 [Android Debug 网络与挂载基线](./android-device-baseline-2026-08-30.md)。2026-09-30按用户要求先开展[本地Native V2功能原型](./renderer-v2-experiment-03-native-flow.md)，已初步实现Document/IR/source map与原生范围事件；本计划作为后续验收参考，不阻塞当前功能试用。Enriched组件、依赖和patch已正式删除，[实验01](./renderer-v2-experiment-01-enriched-html.md)仅保留历史依据。Tiqian未接入，双端Release性能对照和iOS真机数据均未完成。
 
-## 候选后端与比较边界
+## 当前后端与保留研究的比较边界
 
 | 后端 | 验证方向 | 需要先确认的边界 |
 | --- | --- | --- |
-| `react-native-enriched-html` | 较轻量的双端 native text flow；普通文本、段落、链接和行内对象进入 attributed text surface，知乎特殊节点先 normalization | HTML/CSS 支持范围；自定义 decoration、selection event 和 attachment metrics 所需 patch；平台 text engine 的限制；公式密集内容的布局与性能 |
+| Native V2 | 本地原生模块直接消费Rich Text IR；Android TextView/Spannable初步实现，iOS新增UIKit/TextKit adapter | 连续flow的布局/选择/装饰/附件、异步reflow、系统排版边界与媒体生命周期 |
 | Tiqian | Android local native module 接入 article renderer，由中立 document model 经 adapter 转换；验证 CJK 排版、Tiqian Math、inline object 和 article-level selection | RN 宿主的 measurement、scroll、gesture 和 lifecycle；API、Kotlin/AGP/Compose 与项目锁定工具链的兼容性；最低 Android 版本；iOS 能力差异与独立路径 |
 | RNRH | 当前行为、网络和挂载成本的对照，覆盖迁移期 fallback | Text/View 数量、跨段选择、公式和媒体行为 |
 | DOM/WebView | 复杂内容 fallback 或实验对照 | DOM 布局、bridge 成本、选择和宿主滚动边界 |
 
-两条 native 路线仍是未验证候选。Zhihu++ 的 Tiqian 排版和选择能力可作为参考，但不代表本项目已完成接入；工具链兼容性须以实际锁文件、候选依赖要求和 PoC 构建结果确认，不能把 Issue 中的版本判断当作已兼容结论。
+本地Native V2尚未完成双端完整验收，Android/iOS以外的平台或缺模块客户端回退RNRH。Tiqian只保留为系统布局能力不足时的研究选项；Zhihu++的排版与选择能力不代表本项目已接入。若重新开展Tiqian PoC，工具链兼容性须以实际锁文件、依赖要求和构建结果确认。
 
 ## 测试矩阵
 
@@ -72,8 +72,8 @@
 | Selection 范围 | 向 JS 发出带 flow 标识和文本版本的稳定 UTF-16 range，经 source map 还原原节点/段内位置；复制内容与原节点对应，reflow 后范围仍正确；跨 flow 或媒体边界的文章级选择单独验证 |
 | 自定义 decoration | 至少一种自定义装饰跨多视觉行，线型、颜色、粗细、offset、geometry、点击范围与文本选择保持正确 |
 | 行内 attachment | 以 `U+FFFC` 占位，具有 size、baselineOffset、alignment；点击/长按/无障碍回到原节点，异步尺寸有 placeholder 并正确 reflow |
-| 行内公式 | `eeimg=1` 默认保留 inline 语义，参与相邻文字排版，baseline、行高和换行稳定；已确认的 display 语义按 fixture 例外处理；分别验证 SVG attachment 与 native math 候选 |
-| 块级公式 | `eeimg=2` 居中、缩放与横向溢出行为明确 |
+| 行内公式 | eeimg与LaTeX语义共同判断；短纯公式段、无标记公式、figure和宽图不会仅凭容器或宽度强制display；bare li/quote/div/root中的前后文字不被错误拆段；参与相邻文字排版，baseline、行高和自然换行稳定；分别验证SVG attachment与native math候选 |
+| 块级公式 | `eeimg=2`及有效tag、顶层行分隔符/align环境形成display；深层格式包装可正确提取，matrix/group/comment反例不误升；居中、缩放与横向溢出行为明确 |
 | 知识点片段 | Android/iOS 的线型、颜色、点击范围与文本选择 |
 | 图片/视频/卡片 | 尺寸稳定、点击/长按、链接和 fallback |
 | 排版 | 段落、列表、引用、代码、粗斜体、暗色模式和字号缩放 |

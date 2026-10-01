@@ -1,10 +1,10 @@
 # Zhihu++ Markdown 参考记录
 
-本轮根据用户提供的本地 Zhihu++ 仓库补充 Renderer V2 内容模型。参考路径为 `shared/src/commonMain/kotlin/com/github/zly2006/zhihu/markdown/`，其中 `MdAst.kt` 负责 HTML/Markdown 转 AST，`RenderMarkdown.kt` 负责渲染与图片画廊，`MarkdownRuntime.kt` 负责平台字体和资源加载。知识点高亮另参考 `util/SegmentHighlightUtils.kt` 与 `ui/components/SegmentHighlight.kt`。
+本轮根据用户提供的本地 Zhihu++ 仓库补充 Renderer V2 内容模型。参考路径为 `shared/src/commonMain/kotlin/com/github/zly2006/zhihu/markdown/`，其中 `MdAst.kt` 负责 HTML/Markdown 转 AST，`RenderMarkdown.kt` 负责渲染与图片画廊，`MarkdownRuntime.kt` 负责平台字体和资源加载。知识点高亮另参考 `util/SegmentHighlightUtils.kt` 与 `ui/components/SegmentHighlight.kt`。2026-09-30再次核对本地HEAD `5d12475b`，相关参考目录无未提交修改，并补查 `shared/src/tiqianMarkdownMain/kotlin/com/github/zly2006/zhihu/markdown/TiqianMarkdownRenderer.kt`。
 
-本模块的实际进度仍是类型草案、文档遍历和知识点属性的局部规范化；完整 HTML parser、Markdown parser、HTML 清洗、渲染后端和编辑器序列化尚未接入。
+2026-09-30已初步实现HTML → `ZhihuDocument`、Text Flow Island / Rich Text IR编译与Android原生adapter；2026-10-01新增iOS UIKit/TextKit初步adapter，两端共享语义模型与编译器。完整知乎dialect、Markdown parser和编辑器序列化尚未接入，双端平台验收仍待完成。Enriched运行链路已正式移除，下面的模型参考继续供[本地Native V2](./renderer-v2-experiment-03-native-flow.md)使用。
 
-根据 [Issue #40 当前方向](https://github.com/huamurui/zhihu-minus-minus/issues/40) 和 [enriched-html / Tiqian 候选讨论](https://github.com/huamurui/zhihu-minus-minus/issues/40#issuecomment-5595047992)，这些参考用于中立语义层与后续 adapter。`ZhihuDocument` 不规定 WebView 或逐块虚拟化；native Text Flow Island / Rich Text IR 编译仍待实现。Zhihu++ 的 Tiqian 实践可帮助验证排版语义，本仓 RN/Expo 宿主、工具链与 iOS 路径还需独立 PoC。
+根据 [Issue #40 当前方向](https://github.com/huamurui/zhihu-minus-minus/issues/40) 和 [早期候选讨论](https://github.com/huamurui/zhihu-minus-minus/issues/40#issuecomment-5595047992)，这些参考用于中立语义层与adapter。`ZhihuDocument` 不规定WebView或逐块虚拟化；现有native IR将连续段落合成flow，把复杂媒体保留为独立block。Zhihu++的Tiqian实践继续帮助研究排版语义；Tiqian本身未接入，其iOS集成路径也未验证，现有UIKit/TextKit模块属于独立系统后端。
 
 ## 结构映射
 
@@ -27,7 +27,19 @@
 - `getZhihuDocumentPreviewImages` 收集正文块图和行内图，以去掉首尾空白、补全协议后的 URL 去重，保留首次出现顺序。头像、公式、视频封面、卡片缩略图和非 HTTP(S) 图片不进入画廊；输出投影资源模型允许的字段。
 - `parseZhihuSegmentHighlight` 从不确定属性对象中识别完整的 `highlight-wrap` class token，投影有效元数据。有效 wrapper 没有业务属性时仍返回空元数据，后续规范化器仍可生成视觉划线 run。
 
-上述函数从模块公共入口导出，测试不依赖 React Native 或 WebView。它们目前供后续规范化链路使用，现有 RNRH/DOM 组件仍接收原始 HTML。
+上述函数从模块公共入口导出，测试不依赖React Native或WebView。Native V2的初步规范化与adapter已使用这些语义；现有RNRH/DOM组件仍接收HTML。
+
+## 媒体宿主与首载稳定性补充
+
+| 参考行为与源码位置 | 本仓当前对应与差异 |
+| --- | --- |
+| `MdAst.kt:101–110`递归收集整篇Figure/Image并去重；`RenderMarkdown.kt:100–114`从整篇画廊定位当前图 | 本仓已有文档图片收集能力；Native宿主已从单图预览扩展为整篇正文画廊，并按当前图传入initialIndex；不属于画廊的资源仍单独预览 |
+| `RenderMarkdown.kt:139–184`长按提供查看、浏览器打开、保存、分享；菜单从选择宿主中隔离 | 本仓复用既有图片预览及保存/复制链接面板；分享和浏览器入口属于共享图片交互的后续增强，不能视作仅V2的回归 |
+| `RenderMarkdown.kt:191–236`视频为16:9封面和中心播放按钮，跳转本地视频页面 | 本仓已有知乎zvideo WebView播放页；V2应保留正确业务路由和视频封面，并区分页面播放与独立原生播放器 |
+| `TiqianMarkdownRenderer.kt:265–332`按URL保留图片自然尺寸及最终Success/Error，重进视口时不退回Loading | 本仓的文字流首载包含JS估算高度、native精确测量与SVG附件几何更新；图片结果缓存可减少重复进入后的高度翻转，不能单独证明首次测量已稳定 |
+| `TiqianMarkdownRenderer.kt:213–228`行内图片具有明确占位尺寸与底边基线；`:167–172`配置数学字体和display滚动宿主 | 本仓有ReplacementSpan/SVG图源与基线，未知图源尺寸仍需异步校准；尚无参考实现的本地LaTeX排版与数学字体工具链 |
+
+用户已经报告Native V2首次加载抖动。本轮把它作为阅读显示问题追查，不等待Release性能基准：优先核对估算高度切换、附件尺寸重排和独立表格的自然高度更新。是否修复须以具体代码及真机结果为准，参考实现本身不能证明本仓已经稳定。
 
 ## 后续 normalization 约定
 
@@ -41,9 +53,15 @@
 
 ### 公式
 
-原始 LaTeX 保持原样，包括空白、注释和转义；取 tex、识别排版和渲染是不同步骤。`eeimg=1` 默认保持 inline attachment，`eeimg=2` 保持块级公式；不能仅因旧 renderer 的能力限制把行内公式提升为 block。参考实现还识别 `\tag`、顶层 `align` 或顶层换行等真正的 display 语义，后续应通过 fixture 明确这些例外。矩阵环境内的换行不能一概升级为块公式。
+原始 LaTeX 保持原样，包括空白、注释和转义；取tex、识别排版和渲染是不同步骤。`eeimg`是识别和显式display提示，不足以单独决定排版：`eeimg=2`保留独立公式，`eeimg=1`或缺少标记的公式还会检查LaTeX语义。有效的 `\tag`（不要求顶层）、顶层 `\\` 行分隔符或顶层 `align/align*` 环境会提升为display；matrix等环境、花括号组和注释中的行分隔符不会因此提升。
 
-参考实现另有超长公式提升为独立可滚动块的策略。阈值和段落拆分应在本项目 fixture 与真机基线上确定。本轮仅补充约定，尚未实现公式语义扫描或改变当前渲染行为。
+知乎图片公式先验证资源URL，以有效图片上的eeimg=1/2或equation URL识别公式；只有非标准emimg但URL可识别的短公式仍按默认行内处理。短的纯公式段落、figure容器或较宽的图源本身不构成display语义。行内附件在当前视觉行放不下时，系统仍可自然换行，这与独立公式block是不同层次。深层strong/span/link等包装中的display公式也要提取到独立block，同时保留前后文字格式、段落身份和源offset；仅紧邻display的br被吸收以免多一个空行，其他br保留。
+
+这次补齐新增6项合成测试，覆盖10种HTML结构输入；8个稳定fixture分析通过，345/78处行内公式数量保持。没有运行参考app或引入本地TeX。
+
+随后真机反馈暴露了宿主结构问题：article的公式类型全部inline，但裸列表项中的img被通用blocks分组单独切成paragraph，仍会让短公式另起一行。修复后，列表项内前后文字与公式共同编入一个段落；bare li/quote/div/root、display与普通图边界及真实article原句均有回归。该案例10个列表项的内部段落从25恢复10，全篇paragraph从95恢复80，单公式段从8变0。用户已确认短公式行内修复。WebView使用KaTeX且对矩阵采用更宽的display策略，Native继续保留源数学语义，不能把公式类型数量相同当作完整视觉一致。
+
+参考 `MdAst.kt:548–680` 除上述规则外，还将LaTeX源长度大于4096的公式提升为独立可滚动块，服务于其本地TeX与超长图源容错。本仓没有照搬该阈值，也没有实现完整显示数学横滚：当前以SVG/图片资源显示公式，独立公式仍缩放到可用宽度，没有本地LaTeX排版工具链。超长URL或失败图源的完整数学呈现仍是差异，语义扫描不能替代数学引擎。
 
 ### 知识点高亮
 

@@ -1,0 +1,452 @@
+import type { ZhihuBlock, ZhihuDocument, ZhihuInlineRun } from './document';
+import {
+  createRichContentMetrics,
+  RICH_CONTENT_BODY_FONT_SIZE,
+  RICH_CONTENT_PARAGRAPH_SPACING,
+} from './presentation';
+import type {
+  RichTextAttachment,
+  RichTextCompilation,
+  RichTextDecoration,
+  RichTextDiagnostic,
+  RichTextFlow,
+  RichTextParagraph,
+  RichTextPart,
+  RichTextSelectionEndpoint,
+  RichTextSelectionMapping,
+  RichTextSourceRange,
+  RichTextSpan,
+} from './richText';
+
+export interface RichTextCompilationOptions {
+  fontSize: number;
+  lineHeight: number;
+  paragraphSpacing?: number;
+}
+
+interface FlowBuilder {
+  text: string;
+  spans: RichTextSpan[];
+  paragraphs: RichTextParagraph[];
+  decorations: RichTextDecoration[];
+  attachments: RichTextAttachment[];
+  sourceMap: RichTextSourceRange[];
+}
+
+interface ParagraphContext {
+  kind?: 'quote' | 'listItem';
+  indent?: number;
+  prefix?: string;
+}
+
+const INLINE_SPANS = {
+  strong: 'strong',
+  emphasis: 'emphasis',
+  underline: 'underline',
+  strikethrough: 'strikethrough',
+  highlight: 'highlight',
+  subscript: 'subscript',
+  superscript: 'superscript',
+  inlineCode: 'code',
+  keyboardInput: 'code',
+  link: 'link',
+} as const;
+
+function newBuilder(): FlowBuilder {
+  return {
+    text: '',
+    spans: [],
+    paragraphs: [],
+    decorations: [],
+    attachments: [],
+    sourceMap: [],
+  };
+}
+
+function contentVersion(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `v1:${value.length}:${(hash >>> 0).toString(16)}`;
+}
+
+/**
+ * Compile semantic content directly to native ranges. Layout spacing is never
+ * represented by extra spaces/newlines in the selectable text buffer.
+ */
+export function compileZhihuDocument(
+  document: ZhihuDocument,
+  options: RichTextCompilationOptions,
+): RichTextCompilation {
+  const parts: RichTextPart[] = [];
+  const diagnostics: RichTextDiagnostic[] = [];
+  const paragraphOffsets = new Map<string, number>();
+  const fontSize =
+    Number.isFinite(options.fontSize) && options.fontSize > 0
+      ? options.fontSize
+      : 17;
+  const lineHeight =
+    Number.isFinite(options.lineHeight) && options.lineHeight > 0
+      ? options.lineHeight
+      : fontSize * 1.5;
+  const paragraphSpacing =
+    options.paragraphSpacing ?? RICH_CONTENT_PARAGRAPH_SPACING;
+  const metrics = createRichContentMetrics(
+    fontSize / RICH_CONTENT_BODY_FONT_SIZE,
+    lineHeight / fontSize,
+  );
+  let builder = newBuilder();
+  let flowSerial = 0;
+
+  function flush(): void {
+    if (builder.text.length) {
+      const identity = JSON.stringify({
+        text: builder.text,
+        spans: builder.spans,
+        paragraphs: builder.paragraphs,
+        decorations: builder.decorations,
+        attachments: builder.attachments,
+      });
+      parts.push({
+        type: 'flow',
+        flow: {
+          id: `${document.id}:flow:${++flowSerial}`,
+          textVersion: contentVersion(identity),
+          ...builder,
+        },
+      });
+    }
+    builder = newBuilder();
+  }
+
+  function append(
+    value: string,
+    nodeId: string,
+    paragraphId: string | undefined,
+    sourceOffset: number,
+    kind: RichTextSourceRange['kind'],
+  ): number {
+    const start = builder.text.length;
+    builder.text += value;
+    const sourceEnd = sourceOffset + (kind === 'text' ? value.length : 0);
+    if (value.length)
+      builder.sourceMap.push({
+        start,
+        end: builder.text.length,
+        nodeId,
+        ...(paragraphId && { paragraphId }),
+        sourceStart: sourceOffset,
+        sourceEnd,
+        kind,
+      });
+    return sourceEnd;
+  }
+
+  function compileInline(
+    runs: readonly ZhihuInlineRun[],
+    paragraphId: string | undefined,
+    initialOffset: number,
+  ): number {
+    let sourceOffset = initialOffset;
+    for (const run of runs) {
+      const start = builder.text.length;
+      if ('children' in run)
+        sourceOffset = compileInline(run.children, paragraphId, sourceOffset);
+      else if ('text' in run)
+        sourceOffset = append(
+          run.text,
+          run.id,
+          paragraphId,
+          sourceOffset,
+          'text',
+        );
+      else if (run.type === 'lineBreak')
+        append('\n', run.id, paragraphId, sourceOffset, 'synthetic');
+      else if (run.type === 'unsupported')
+        sourceOffset = append(
+          run.fallbackText,
+          run.id,
+          paragraphId,
+          sourceOffset,
+          'text',
+        );
+      else if (run.type === 'footnoteReference') {
+        sourceOffset = append(
+          run.label,
+          run.id,
+          paragraphId,
+          sourceOffset,
+          'text',
+        );
+        builder.spans.push({
+          start,
+          end: builder.text.length,
+          nodeId: run.id,
+          kind: 'superscript',
+        });
+        builder.spans.push({
+          start,
+          end: builder.text.length,
+          nodeId: run.id,
+          kind: 'link',
+          url: `zhihu-rich-footnote:${encodeURIComponent(run.definitionId)}`,
+        });
+      } else if (run.type === 'inlineImage' || run.type === 'inlineFormula') {
+        append('\uFFFC', run.id, paragraphId, sourceOffset, 'attachment');
+        const formula = run.type === 'inlineFormula' ? run.formula : undefined;
+        const resource =
+          run.type === 'inlineImage' ? run.resource : formula?.image;
+        const height =
+          resource?.height ??
+          (run.type === 'inlineImage' ? fontSize * 1.3 : lineHeight * 0.85);
+        const latex = formula?.latex;
+        const alt = run.type === 'inlineImage' ? run.alt : latex;
+        const attachment: RichTextAttachment = {
+          id: run.id,
+          nodeId: run.id,
+          start,
+          end: start + 1,
+          kind: run.type === 'inlineImage' ? 'image' : 'formula',
+          ...(resource && { url: resource.url }),
+          ...(latex && { latex }),
+          ...(alt && { alt }),
+          ...(resource?.width !== undefined
+            ? { width: resource.width }
+            : run.type === 'inlineImage' || !resource
+              ? {
+                  width:
+                    run.type === 'inlineImage'
+                      ? height
+                      : Math.max(
+                          fontSize * 1.5,
+                          Math.min(
+                            fontSize * 12,
+                            (latex?.length ?? 5) * fontSize * 0.45,
+                          ),
+                        ),
+                }
+              : {}),
+          ...(resource?.height !== undefined
+            ? { height: resource.height }
+            : run.type === 'inlineImage' || !resource
+              ? { height }
+              : {}),
+          // SVG intrinsic vertical-align is resolved by the native attachment
+          // loader; leave the baseline unspecified when it is not in the model.
+          copyText: latex ?? alt ?? '[图片]',
+        };
+        builder.attachments.push(attachment);
+      }
+      const end = builder.text.length;
+      if (start === end) continue;
+      if (Object.hasOwn(INLINE_SPANS, run.type)) {
+        const kind = INLINE_SPANS[run.type as keyof typeof INLINE_SPANS];
+        builder.spans.push({
+          start,
+          end,
+          nodeId: run.id,
+          kind,
+          ...(run.type === 'link' && { url: run.url }),
+        });
+      }
+      if (run.type === 'segment' || run.type === 'segmentHighlight') {
+        builder.decorations.push({
+          id: `${run.id}:decoration`,
+          nodeId: run.id,
+          start,
+          end,
+          kind: 'dashed',
+          thickness: 1.2,
+          offset: 3,
+          actionId: run.id,
+        });
+      }
+    }
+    return sourceOffset;
+  }
+
+  function compileParagraph(
+    block: Extract<ZhihuBlock, { type: 'paragraph' | 'heading' }>,
+    context: ParagraphContext,
+  ): void {
+    const paragraphId = 'paragraphId' in block ? block.paragraphId : undefined;
+    const offsetKey = paragraphId ?? block.id;
+    let sourceOffset = paragraphOffsets.get(offsetKey) ?? 0;
+    if (builder.text.length) {
+      const previous = builder.paragraphs[builder.paragraphs.length - 1];
+      append(
+        '\n',
+        previous?.nodeId ?? block.id,
+        previous?.paragraphId,
+        previous?.paragraphId
+          ? (paragraphOffsets.get(previous.paragraphId) ?? 0)
+          : 0,
+        'synthetic',
+      );
+      if (previous)
+        builder.paragraphs[builder.paragraphs.length - 1] = {
+          ...previous,
+          end: builder.text.length,
+        };
+    }
+    const start = builder.text.length;
+    if (context.prefix)
+      append(context.prefix, block.id, paragraphId, sourceOffset, 'synthetic');
+    sourceOffset = compileInline(block.children, paragraphId, sourceOffset);
+    paragraphOffsets.set(offsetKey, sourceOffset);
+    const kind =
+      block.type === 'heading' ? 'heading' : (context.kind ?? 'paragraph');
+    const heading =
+      block.type === 'heading'
+        ? metrics.headings[`h${block.level}`]
+        : undefined;
+    builder.paragraphs.push({
+      start,
+      end: builder.text.length,
+      nodeId: block.id,
+      ...(paragraphId && { paragraphId }),
+      kind,
+      ...(block.type === 'heading' && { level: block.level }),
+      ...(heading && {
+        fontSize: heading.fontSize,
+        lineHeight: heading.lineHeight,
+      }),
+      ...(context.indent && { indent: context.indent }),
+      marginTop: heading?.marginTop ?? 0,
+      marginBottom: heading?.marginBottom ?? paragraphSpacing,
+    });
+  }
+
+  function compileBlocks(
+    blocks: readonly ZhihuBlock[],
+    context: ParagraphContext = {},
+  ): void {
+    for (const block of blocks) {
+      if (block.type === 'paragraph' || block.type === 'heading')
+        compileParagraph(block, context);
+      else if (block.type === 'quote')
+        compileBlocks(block.blocks, {
+          kind: 'quote',
+          indent: (context.indent ?? 0) + fontSize,
+          prefix: context.prefix,
+        });
+      else if (block.type === 'list') {
+        block.items.forEach((item, index) => {
+          let prefix = block.ordered ? `${(block.start ?? 1) + index}. ` : '• ';
+          for (const itemBlock of item.blocks) {
+            compileBlocks([itemBlock], {
+              kind: 'listItem',
+              indent: (context.indent ?? 0) + fontSize * 1.2,
+              prefix,
+            });
+            prefix = '';
+          }
+        });
+      } else {
+        flush();
+        parts.push({ type: 'block', block });
+      }
+    }
+  }
+
+  compileBlocks(document.blocks);
+  if (document.footnotes?.length) {
+    for (const definition of document.footnotes)
+      compileBlocks(definition.blocks, { prefix: `[${definition.label}] ` });
+  }
+  flush();
+  return { documentId: document.id, parts, diagnostics };
+}
+
+function validSelection(
+  flow: RichTextFlow,
+  start: number,
+  end: number,
+): boolean {
+  if (
+    !Number.isSafeInteger(start) ||
+    !Number.isSafeInteger(end) ||
+    start < 0 ||
+    start >= end ||
+    end > flow.text.length
+  )
+    return false;
+  const splitsSurrogate = (offset: number) =>
+    offset > 0 &&
+    offset < flow.text.length &&
+    /[\uD800-\uDBFF]/.test(flow.text[offset - 1]) &&
+    /[\uDC00-\uDFFF]/.test(flow.text[offset]);
+  return !splitsSurrogate(start) && !splitsSurrogate(end);
+}
+
+/** Native U+FFFC slots copy as semantic alt/LaTeX, without changing offsets. */
+export function getRichTextSelectionText(
+  flow: RichTextFlow,
+  start: number,
+  end: number,
+): string {
+  if (!validSelection(flow, start, end)) return '';
+  let result = '';
+  let cursor = start;
+  for (const attachment of flow.attachments) {
+    if (attachment.start < start || attachment.end > end) continue;
+    result += flow.text.slice(cursor, attachment.start) + attachment.copyText;
+    cursor = attachment.end;
+  }
+  return result + flow.text.slice(cursor, end);
+}
+
+/** Map a native selection back to source paragraph UTF-16 coordinates. */
+export function mapRichTextSelection(
+  flow: RichTextFlow,
+  start: number,
+  end: number,
+): RichTextSelectionMapping | null {
+  if (!validSelection(flow, start, end)) return null;
+  const selectedSource = flow.sourceMap.filter(
+    (range) =>
+      range.kind !== 'synthetic' && range.start < end && range.end > start,
+  );
+  if (!selectedSource.length) return null;
+  const endpoint = (
+    position: number,
+    ending: boolean,
+  ): RichTextSelectionEndpoint | null => {
+    // At boundaries, the start belongs to the next source run and the end to
+    // the previous run. Generated paragraph/list separators have no source text.
+    const entries = ending ? [...selectedSource].reverse() : selectedSource;
+    const entry =
+      entries.find(
+        (range) =>
+          range.kind !== 'synthetic' &&
+          (ending
+            ? position > range.start && position <= range.end
+            : position >= range.start && position < range.end),
+      ) ??
+      entries.find(
+        (range) =>
+          range.kind !== 'synthetic' &&
+          (ending ? range.end <= position : range.start >= position),
+      );
+    if (!entry) return null;
+    const displacement = Math.min(
+      Math.max(position - entry.start, 0),
+      entry.sourceEnd - entry.sourceStart,
+    );
+    return {
+      nodeId: entry.nodeId,
+      ...(entry.paragraphId && { paragraphId: entry.paragraphId }),
+      offset: entry.sourceStart + displacement,
+    };
+  };
+  const mappedStart = endpoint(start, false);
+  const mappedEnd = endpoint(end, true);
+  if (!mappedStart || !mappedEnd) return null;
+  return {
+    text: getRichTextSelectionText(flow, start, end),
+    start: mappedStart,
+    end: mappedEnd,
+  };
+}

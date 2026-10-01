@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useCallback } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet } from 'react-native';
 import { hasAuthenticationCookie } from '@/api/client';
 import {
@@ -17,6 +18,7 @@ import {
   ZhihuContent,
 } from '@/features/rich-content';
 import { useAuthStore } from '@/store/useAuthStore';
+import { FeedExcerpt } from './FeedExcerpt';
 import { StableAvatar } from './StableAvatar';
 import { Text, useThemeColor, View } from './Themed';
 
@@ -87,6 +89,19 @@ export function FeedCardPreview({ item }: FeedCardPreviewProps) {
     staleTime: RICH_CONTENT_STALE_TIME,
     retry: false,
   });
+  const renderPlaceholder = useCallback(
+    () => (
+      <View className="bg-transparent mb-2">
+        <FeedExcerpt html={item.excerpt} numberOfLines={0} />
+        <View className="flex-row items-center mt-3 bg-transparent">
+          <ActivityIndicator size="small" color={primaryColor} />
+          <Text className="ml-2 text-xs opacity-60">正在准备完整内容...</Text>
+        </View>
+      </View>
+    ),
+    [item.excerpt, primaryColor],
+  );
+  const hasFullContent = hasInlineRichContent(fullData?.content);
 
   return (
     <View
@@ -138,10 +153,9 @@ export function FeedCardPreview({ item }: FeedCardPreviewProps) {
             {item.excerpt || '点击卡片打开视频'}
           </Text>
         ) : isLoading ? (
-          <View className="py-10 justify-center items-center bg-transparent">
-            <ActivityIndicator size="small" color={primaryColor} />
-            <Text className="mt-2 text-xs opacity-60">正在获取完整内容...</Text>
-          </View>
+          renderPlaceholder()
+        ) : !hasFullContent ? (
+          <FeedExcerpt html={item.excerpt} numberOfLines={0} />
         ) : (
           <View className="bg-transparent mb-2">
             <ZhihuContent
@@ -159,6 +173,7 @@ export function FeedCardPreview({ item }: FeedCardPreviewProps) {
               objectId={item.id}
               type={typeKey}
               useNative={true}
+              renderPlaceholder={renderPlaceholder}
             />
           </View>
         )}

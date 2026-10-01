@@ -13,5 +13,6 @@ module.exports = {
     '<rootDir>/tests/**/*.test.ts',
     '<rootDir>/tests/**/*.test.js',
     '<rootDir>/features/rich-content/tests/**/*.test.ts',
+    '<rootDir>/features/rich-content/tests/**/*.test.tsx',
   ],
 };

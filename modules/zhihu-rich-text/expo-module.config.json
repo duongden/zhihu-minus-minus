@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["ZhihuRichTextModule"]
+  },
+  "android": {
+    "modules": ["com.zhihuminus.richtext.RichTextModule"]
+  }
+}

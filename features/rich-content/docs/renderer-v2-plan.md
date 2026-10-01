@@ -23,26 +23,42 @@
             └─ RNRH、WebView 或其他 backend
 ```
 
-具体 backend 尚未选定。当前优先验证 `react-native-enriched-html` 与 Tiqian 两条候选路线；两者在本仓库都没有完成接入或真机验收。
+本分支新增直接消费IR的Android系统TextView后端，2026-10-01开始增加iOS UIKit/TextKit adapter，先逐项展示V2能力，再通过正文排版设置开放真实内容试用；[本轮实现与边界](./renderer-v2-experiment-03-native-flow.md)另行记录。新安装默认仍为经典排版。Enriched已正式移除，Tiqian尚未接入，双端完整验收和全量默认迁移仍待推进。
+
+2026-09-30真机试用后，当前开发主线确定为本地tiqian-super-mini。用户关注的跨段选择、装饰线和行内附件已获得较好的初步效果，并明确要求正式删除Enriched：组件、专属normalizer与测试、依赖、native patch和开发入口均移除，实验记录仅作历史参考。RNRH继续承载现有正文和迁移fallback。此选择针对功能原型的后续投入，不代表已经完成双端生产替换或性能比较。
 
 ## 当前实现与能力缺口
 
-现有 `ZhihuContent` 仍使用 RNRH，另有自动增高、关闭内部滚动的 `ZhihuDOMContent` 实验路径。组件的 `useNative` / native fallback 分支实际调用 `RenderHtml`，不能据此认定已接入新的原生 attributed-text backend。
+本地原生后端现名 `tiqian-super-mini`，早期记录中的Native V2指同一实现。对外名字更新，`renderer="native-v2"`及已保存偏好保持兼容；Android/iOS仍以系统文字布局消费IR。
+
+业务 `ZhihuContent` 默认读取 `richContentRenderer` 偏好，“设置 → 外观与阅读 → 正文排版”可选经典排版、tiqian-super-mini、网页排版；“功能开关 → 正文排版”进入同一设置页。显式 `renderer` 可覆盖偏好，Android/iOS以外的平台或未包含新模块的客户端按本次渲染回退完整RNRH。开发案例独立切换后端，不写生产偏好；生产构建隐藏开发案例，保留正常设置入口。
+
+settings version 13迁移旧 `useWebView`：true对应网页，其余旧值对应经典。新安装默认 `rnrh`，升级也不会静默启用tiqian-super-mini；模块不可用时不改写用户保存的选择。
 
 目前已经完成：
 
 - runtime、脱敏 API JSON fixtures、分析工具、测试和文档集中维护。
 - 完整免费回答正文复用、长按预览复用、Pager 相邻预取及未聚焦正文延迟挂载。
 - [Android Debug 网络与挂载基线](./android-device-baseline-2026-08-30.md)。
-- [`ZhihuDocument` 类型草案](../document.ts)，包括表格、脚注、行内图片/公式与知识点结构。
+- [`ZhihuDocument` 语义类型](../document.ts)，包括表格、脚注、行内图片/公式与知识点结构。
 - [`documentTraversal.ts`](../documentTraversal.ts) 的文档遍历和正文图片收集，以及 [`segmentHighlight.ts`](../segmentHighlight.ts) 的属性局部规范化。
 - [`bridge.ts`](../bridge.ts) 对现有六类 WebView 消息的字段验证。
+- 共享链接/图片预览外壳与排版指标；fixture工具支持 `question_feed_card` 与 `segment_infos` 范围/元数据校验。
+- HTML → Document初步规范化、连续UTF-16 flow与IR编译、选择source map和语义复制。
+- 独立Android Expo模块：同一流跨段选择事件、四种视觉行装饰、图片/SVG行内附件，以及JS独立媒体/表格/脚注adapter。
+- 初步iOS UIKit/TextKit adapter与Expo Apple注册，共享既有IR、JS正文宿主及fallback；平台验证单独记录。
+- 六组合成内容的V2原型入口，tiqian-super-mini / RNRH / WebView三后端对照与本地排版/交互调节；共享字号/行高比例修正。
+- 正式删除Enriched运行链路、依赖及native patch，将V2缺模块/不支持平台的fallback改为RNRH。
+- 正文设置开放tiqian-super-mini真实内容试用，并迁移旧后端偏好；开发案例切换保持页面局部状态。
+- 存量知乎卡片/脚注dialect、结构化想法分段、富文本图注/表格/脚注面板、合并格布局及自然图片比例；回答的知识点和源选区菜单先做精确范围验证。
 
-完整 HTML → Document 转换、HTML 清洗、Rich Text IR、Text Flow Island 编译、原生 adapter 和 V2 事件协议仍待实现。现有 WebView 的高度/图片/链接/知识点/选择消息验证，也不代表原生选择、滚动、ready/error 协议已完成。
+上述新链路是初步实现，完整知乎dialect、双端完整平台验收、跨媒体选择、复杂公式/双向文字几何、媒体生命周期以及滚动/ready/error协议仍待补齐。现有WebView消息验证也不代表V2协议已完整。
+
+[Enriched 实验记录](./renderer-v2-experiment-01-enriched-html.md)保留已删除候选的历史双端编译结果；新Android模块的构建、真机结果与删除验证记在[实验03](./renderer-v2-experiment-03-native-flow.md)。新原型不能替代双端Release验收。[Tiqian 手册](./renderer-v2-experiment-02-tiqian.md)仅为历史集成草案，是否重新开展PoC由系统布局的实际缺口决定。
 
 ### 自定义文字装饰
 
-当前知识点样式最终受 RN `Text` 暴露的能力限制。V2 需要以 source range 定义颜色、粗细、baseline 下方偏移和 solid/dashed/dotted/wavy 线型，并与链接、粗体、背景等样式独立组合。
+经典RNRH的知识点样式受 RN `Text` 暴露的能力限制。当前V2以source range定义颜色、粗细、baseline下方偏移和solid/dashed/dotted/wavy线型，并与链接、粗体、背景等样式独立组合。
 
 native backend 的 PoC 应验证能否利用 Android Layout / iOS TextKit 的视觉行几何绘制跨行装饰；精确命中、字号变化与重新布局也必须覆盖。不能仅凭库支持普通 underline 就视为满足要求。
 
@@ -56,7 +72,7 @@ Text Flow Island 是一段共享文本 buffer、范围坐标和选择上下文�
 
 ### 真正的行内 attachment
 
-`eeimg=1` 优先保持行内公式语义；`eeimg=2` 保持块级公式。小图片、emoji/icon 等行内对象也应参与同一个文本布局，不能用横向 `View` 拼接模拟。
+公式结合标记和LaTeX语义判定：`eeimg=2`显式使用块级公式，`eeimg=1`或缺值遇到有效tag、顶层行分隔符或顶层align环境时仍可提升。短的纯公式段和图片宽度不单独决定display。小图片、emoji/icon等行内对象也应参与同一个文本布局，不能用横向 `View` 拼接模拟。
 
 Rich Text IR 可用 `U+FFFC` replacement character 表达 attachment，并保留尺寸、baseline offset、alignment、资源和原始节点身份。PoC 应验证 Android replacement span 或 iOS text attachment 路径的实际测量、换行和交互能力。
 
@@ -66,7 +82,7 @@ Rich Text IR 可用 `U+FFFC` replacement character 表达 attachment，并保留
 
 `ZhihuDocument` 保留知乎语义、原始节点 ID、`paragraphId`、局部知识点范围、资源、脚注和 fallback。它的 Block 数组既可编译成连续文本流，也可驱动独立媒体；存在 Block AST 本身不意味着必须使用 FlashList。
 
-Rich Text IR 是下一层待实现的布局输入，至少需要：
+Rich Text IR的初步布局输入已定义于 `richText.ts`，包含：
 
 | 结构 | 责任 |
 | --- | --- |
@@ -83,16 +99,16 @@ Rich Text IR 是下一层待实现的布局输入，至少需要：
 
 本项目负责 HTML/CSS 语义、range/paragraph 样式、装饰、attachment 和交互映射。基础 shaping、断行、Bidi、字体 fallback 和选择宿主由所选 backend 承担；不另行实现完整排版引擎。
 
-## 两条候选路线
+## 当前实施路线与保留研究
 
-以下定位与风险来自 [Issue 路线补充](https://github.com/huamurui/zhihu-minus-minus/issues/40#issuecomment-5595047992)，属于待验证方案。
+早期候选讨论来自 [Issue 路线补充](https://github.com/huamurui/zhihu-minus-minus/issues/40#issuecomment-5595047992)。当前实施聚焦本地系统原生后端；Enriched已删除，其方案与代价仅保留在实验01。Tiqian作为排版研究来源，未纳入当前模块。
 
 | 候选 | PoC 接入方式 | 重点待验证项 |
 | --- | --- | --- |
-| `react-native-enriched-html` | 用其原生 attributed-text surface 表达 text flow，知乎特殊节点先规范化，复杂内容保留独立 block/fallback | HTML/CSS 覆盖、跨段选择事件、公式密集内容、attachment/baseline metrics、自定义 decoration，以及必要 patch 的维护成本 |
+| 本地系统TextView / TextKit | Android直接接收Rich Text IR，iOS新增UIKit/TextKit初步adapter；无需后端再次解析HTML | 系统排版能力边界、双端选择/装饰/附件一致性、复杂公式与维护成本 |
 | Tiqian | Android 正文经本地原生模块接入；中立模型由 adapter 转成其 article/paragraph 输入，RN 负责页面状态和导航 | RN 宿主的测量/滚动/手势/生命周期、CJK 与公式排版、文章级选择、工具链和最低系统要求、iOS 对应路径 |
 
-`react-native-enriched-html` 是较轻量的双端候选，不能直接视为 RNRH 的完整替代。Tiqian 可参考 Zhihu++ 的正文实践，但已有 Kotlin 应用的能力不能直接证明 RN/Expo 宿主集成成立。
+Tiqian可参考Zhihu++的正文实践，但已有Kotlin应用的能力不能直接证明RN/Expo宿主集成成立。系统TextView已经展示V2初步能力，后续优先验证并完善此链路及iOS TextKit adapter。
 
 本仓库当前为 Expo SDK 55 / RN 0.83。Issue 提醒 Tiqian 工具链与后续 RN/Expo 基座的关系，正式接入前应对照本仓锁文件和所选上游版本要求逐项核验 Kotlin、AGP、Compose、JDK 与最低系统版本。该讨论不构成本仓已兼容或需要立即升级 SDK 的结论。
 
@@ -121,12 +137,15 @@ Release 数据应覆盖首屏、measure/layout、字号和宽度变化后的 ref
 - [ ] 实现完整 HTML normalization / 清洗与语义 fixture 断言。
 - [ ] 建立跨 Android/iOS 的 RNRH 视觉与交互对照矩阵。
 
-### Phase B：Rich Text IR 与候选 PoC
+### Phase B：Rich Text IR 与本地原生 PoC
 
-- [ ] 定义 text/paragraph spans、decorations、attachments 和 source map。
-- [ ] 实现 Text Flow Island 分组与连续 UTF-16 buffer 编译。
-- [ ] 验证 `react-native-enriched-html` 双端 PoC。
-- [ ] 核验 Tiqian 工具链并验证 Android 宿主/adapter PoC，记录 iOS 路径。
+- [x] Enriched候选完成阶段研究后正式移除运行链路、依赖和patch，保留实验记录。
+- [x] 定义 text/paragraph spans、decorations、attachments 和 source map。
+- [x] 初步实现 Text Flow Island 分组与连续 UTF-16 buffer 编译。
+- [x] 实现Android独立模块与V2合成功能原型入口。
+- [x] 提供真实正文的用户可选入口、settings version 13迁移和完整RNRH fallback。
+- [ ] 完善Android与初步iOS TextKit adapter，并完成两端布局、选择、装饰及附件的验收。
+- [ ] 若系统布局能力不足，再核验Tiqian工具链与宿主/adapter；当前不作为功能原型前置条件。
 - [ ] 验证同一 flow 跨段选择、原生事件映射、自定义装饰及 attachment baseline/reflow。
 - [ ] 与详情 header/Pager/底栏验证测量、滚动、手势和生命周期。
 
@@ -147,7 +166,7 @@ Release 数据应覆盖首屏、measure/layout、字号和宽度变化后的 ref
 
 ## 第一阶段验收
 
-- `eeimg=1` 默认保持 text flow 内行内语义，已确认的 display 语义按 fixture 例外处理；`eeimg=2` 保持块级语义。附件排版、baseline、换行和异步尺寸变化正确。
+- 结合eeimg标记与LaTeX语义识别行内/display公式，覆盖深层格式包装、无标记短公式和matrix/group/comment反例。附件排版、baseline、换行和异步尺寸变化正确；图源较宽导致自然换行不等同于display。
 - Android/iOS 原生正文在同一 flow 内支持跨段选择，并向 JS 暴露可映射的稳定范围。
 - 装饰支持颜色、粗细、offset 与至少一种自定义线型，能够跨视觉行绘制并与其他 span 组合。
 - 普通段落、标题、链接、粗斜体、颜色、背景和段落样式可组合，复杂媒体/block 有明确边界。

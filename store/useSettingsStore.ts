@@ -7,7 +7,10 @@ import type {
   SurfaceStyle,
   TextContrast,
 } from '@/constants/theme';
+import type { RichContentRenderer } from '@/features/rich-content';
 import type { FilterMode, FilterQualityLevel } from '@/utils/feedFilter';
+
+export type { RichContentRenderer } from '@/features/rich-content';
 
 const settingsStorage = {
   getItem: (name: string) => SecureStore.getItemAsync(name),
@@ -79,6 +82,10 @@ function isValidSurfaceStyle(v: unknown): v is SurfaceStyle {
   );
 }
 
+function isValidRichContentRenderer(v: unknown): v is RichContentRenderer {
+  return v === 'rnrh' || v === 'webview' || v === 'native-v2';
+}
+
 function sanitizeRecommendAdInterval(value: unknown): number {
   return typeof value === 'number' && Number.isSafeInteger(value)
     ? value
@@ -105,7 +112,7 @@ export interface AppSettings {
   defaultTab: TabKey;
   localCityName: string | null;
   borderRadius: number;
-  useWebView: boolean;
+  richContentRenderer: RichContentRenderer;
   enablePrivateMessaging: boolean;
   /** iOS 按压时的不透明度 (0.5 ~ 1.0) */
   pressOpacity: number;
@@ -180,7 +187,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultTab: 'recommend',
   localCityName: null,
   borderRadius: 12,
-  useWebView: false,
+  richContentRenderer: 'rnrh',
   enablePrivateMessaging: false,
   pressOpacity: 0.82,
   pressScale: 0.98,
@@ -242,6 +249,9 @@ export const useSettingsStore = create<SettingsState>()(
           if (!isValidSurfaceStyle(nextSettings.surfaceStyle)) {
             nextSettings.surfaceStyle = 'layered';
           }
+          if (!isValidRichContentRenderer(nextSettings.richContentRenderer)) {
+            nextSettings.richContentRenderer = 'rnrh';
+          }
           if (
             typeof nextSettings.recommendRequestIncludeDesktop !== 'boolean'
           ) {
@@ -269,7 +279,7 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'zhihu-settings-storage',
       storage: createJSONStorage(() => settingsStorage),
-      version: 12,
+      version: 13,
       migrate: (rawPersistedState: unknown, version: number) => {
         const persistedState =
           normalizePersistedSettingsState(rawPersistedState);
@@ -388,6 +398,17 @@ export const useSettingsStore = create<SettingsState>()(
         persistedState.recommendRequestAdInterval = sanitizeRecommendAdInterval(
           persistedState.recommendRequestAdInterval,
         );
+
+        // v13 replaces the WebView toggle with an explicit renderer choice.
+        // Preserve valid new values when a backup contains both formats.
+        persistedState.richContentRenderer = isValidRichContentRenderer(
+          persistedState.richContentRenderer,
+        )
+          ? persistedState.richContentRenderer
+          : persistedState.useWebView === true
+            ? 'webview'
+            : 'rnrh';
+        delete persistedState.useWebView;
 
         return persistedState as unknown as SettingsState;
       },

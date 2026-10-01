@@ -4,6 +4,38 @@ export function isExpoInternalUrl(url: string): boolean {
   );
 }
 
+/** Only the development entry point calls this; production Zhihu links are separate. */
+export function parseRichContentDevelopmentUrl(value: string): string | null {
+  let candidate = value;
+  if (value.includes('://')) {
+    try {
+      const parsed = new URL(value);
+      if (parsed.protocol !== 'zhihu--:') return null;
+      candidate = `${parsed.hostname ? `/${parsed.hostname}` : ''}${parsed.pathname}`;
+    } catch {
+      return null;
+    }
+  }
+  const path = candidate.split(/[?#]/, 1)[0];
+  if (!/^\/dev\/rich-content(?:\/[a-zA-Z0-9_-]+)?$/.test(path)) return null;
+  // Synthetic cases can be opened directly for simulator checks. Ignore other
+  // query fields; production URL routing never uses this development parser.
+  if (path === '/dev/rich-content/prototype') {
+    const rawCase = value.split('#', 1)[0].match(/[?&]caseId=([^&]*)/)?.[1];
+    if (rawCase) {
+      try {
+        const caseId = decodeURIComponent(rawCase);
+        if (/^[a-zA-Z0-9_-]{1,64}$/.test(caseId)) {
+          return `${path}?caseId=${caseId}`;
+        }
+      } catch {
+        // Malformed development queries still open the default synthetic case.
+      }
+    }
+  }
+  return path;
+}
+
 const ZHIHU_WEB_HOSTS = new Set([
   'zhihu.com',
   'www.zhihu.com',

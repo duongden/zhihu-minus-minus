@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet } from 'react-native';
 import PagerView from 'react-native-pager-view';
 import Reanimated, {
@@ -95,8 +95,21 @@ export default function AnswerDetailScreen() {
     enabled: !!questionId,
   });
 
+  // 列表从缓存的单条答案扩展时保持 Pager 和正文实例；真实问题/排序变化才重置。
+  const pagerKey = JSON.stringify([
+    questionId == null ? null : String(questionId),
+    sortBy,
+  ]);
+  const [selection, setSelection] = useState({
+    pagerKey,
+    answerId: initialId,
+  });
+  const selectedId =
+    selection.pagerKey === pagerKey ? selection.answerId : initialId;
+  const pagerRef = useRef<PagerView>(null);
+
   // 3. 构建 ID 列表
-  const answerIds = useMemo(() => {
+  const latestAnswerIds = useMemo(() => {
     const listIds: string[] =
       answersData?.pages
         .flatMap((page) => page.data)
@@ -107,17 +120,86 @@ export default function AnswerDetailScreen() {
     if (initialId && !listIds.includes(initialId)) {
       combined = [initialId, ...listIds];
     }
+    // 列表刷新暂时未返回正在阅读的答案时，继续保留该页与它的正文。
+    if (selectedId && !combined.includes(selectedId)) {
+      combined = [...combined, selectedId];
+    }
 
     // 使用 Set 去重
     return Array.from(new Set(combined));
-  }, [answersData, initialId]);
+  }, [answersData, initialId, selectedId]);
+
+  type PageMotion = 'idle' | 'dragging' | 'settling';
+  const [pageMotion, setPageMotion] = useState<{
+    pagerKey: string;
+    state: PageMotion;
+  }>({ pagerKey, state: 'idle' });
+  const motion =
+    pageMotion.pagerKey === pagerKey
+      ? pageMotion
+      : { pagerKey, state: 'idle' as const };
+  const currentMotion = useRef(motion);
+  currentMotion.current = motion;
+  const committedPages = useRef({ pagerKey, ids: latestAnswerIds });
+  // 手势期间不改变 native position 对应的答案；结束后再应用最新 API 顺序。
+  const answerIds =
+    motion.state !== 'idle' && committedPages.current.pagerKey === pagerKey
+      ? committedPages.current.ids
+      : latestAnswerIds;
+  useLayoutEffect(() => {
+    if (motion.state === 'idle')
+      committedPages.current = { pagerKey, ids: answerIds };
+  }, [answerIds, motion.state, pagerKey]);
 
   const initialPage = useMemo(() => {
     const index = answerIds.indexOf(initialId);
     return index >= 0 ? index : 0;
   }, [answerIds, initialId]);
 
-  const [currentPage, setCurrentPage] = useState(initialPage);
+  const currentPage = Math.max(0, answerIds.indexOf(selectedId));
+  const currentId = answerIds[currentPage];
+  const pageListKey = JSON.stringify(answerIds);
+  const currentPager = useRef({ pagerKey, pageListKey });
+  currentPager.current = { pagerKey, pageListKey };
+  const synchronizedPager = useRef<{
+    pagerKey: string;
+    pageListKey: string;
+    index: number;
+  } | null>(null);
+  const nativePage = useRef({ pagerKey, pageListKey, index: currentPage });
+  const pendingPage = useRef<{
+    pagerKey: string;
+    pageListKey: string;
+    index: number;
+  } | null>(null);
+
+  useLayoutEffect(() => {
+    const previous = synchronizedPager.current;
+    synchronizedPager.current = { pagerKey, pageListKey, index: currentPage };
+    if (previous?.pagerKey !== pagerKey) {
+      pendingPage.current = null;
+      nativePage.current = { pagerKey, pageListKey, index: currentPage };
+      setPageMotion((current) =>
+        current.pagerKey === pagerKey ? current : { pagerKey, state: 'idle' },
+      );
+      setSelection((current) =>
+        current.pagerKey === pagerKey
+          ? current
+          : { pagerKey, answerId: initialId },
+      );
+      return;
+    }
+    if (previous.pageListKey === pageListKey) return;
+
+    // API 顺序可以改变；按答案 ID 重新定位，不能把旧 index 解释为另一答案。
+    pendingPage.current =
+      previous.index === currentPage
+        ? null
+        : { pagerKey, pageListKey, index: currentPage };
+    nativePage.current = { pagerKey, pageListKey, index: currentPage };
+    pagerRef.current?.setPageWithoutAnimation(currentPage);
+  }, [currentPage, initialId, pageListKey, pagerKey]);
+
   const [isSharing, setIsSharing] = useState(false);
   const [shareData, setShareData] = useState<{
     id: string;
@@ -141,20 +223,7 @@ export default function AnswerDetailScreen() {
     opacity: interpolate(scrollY.value, [0, 80], [1, 0], Extrapolate.CLAMP),
   }));
 
-  // 4. 这里的关键是：PagerView 在 Android 下如果动态改变 children 且没有重置 key，可能会导致页面错乱。
-  // 但重置 key 又会导致 WebView 重新加载。
-  // 我们使用一个更稳定的 key，仅在数据从“单条”变为“多条”时重置一次。
-  const [pagerReady, setPagerReady] = useState(false);
-  useEffect(() => {
-    if (answerIds.length > 1 && !pagerReady) {
-      setCurrentPage(initialPage);
-      setPagerReady(true);
-    }
-  }, [answerIds.length, initialPage, pagerReady]);
-
-  const pagerKey = `pager-${questionId}-${pagerReady ? 'ready' : 'pending'}`;
-
-  const currentId = answerIds[currentPage];
+  const pagerReady = answerIds.length > 1;
 
   useEffect(() => {
     if (!pagerReady) return;
@@ -187,6 +256,16 @@ export default function AnswerDetailScreen() {
       recordedIds.current.add(currentId);
     }
   }, [enableBrowseHistory, currentId]);
+
+  const selectAnswer = (answerId: string) => {
+    setSelection({ pagerKey, answerId });
+    if (answerId !== currentId) router.setParams({ id: answerId });
+    const lastY = scrollPositions.current[answerId] || 0;
+    scrollY.value = lastY;
+    const shouldCollapse = lastY > 80;
+    isCollapsedRef.current = shouldCollapse;
+    setIsHeaderCollapsed(shouldCollapse);
+  };
 
   const handleShareClick = () => {
     if (!currentId) return;
@@ -300,24 +379,83 @@ export default function AnswerDetailScreen() {
       </View>
 
       <PagerView
+        ref={pagerRef}
         key={pagerKey}
         style={{ flex: 1 }}
         initialPage={initialPage}
         offscreenPageLimit={1}
+        onPageScrollStateChanged={(event) => {
+          if (
+            currentPager.current.pagerKey !== pagerKey ||
+            currentPager.current.pageListKey !== pageListKey
+          )
+            return;
+          const state = event.nativeEvent.pageScrollState;
+          if (state !== 'idle' && state !== 'dragging' && state !== 'settling')
+            return;
+          if (state !== 'idle') {
+            // settling 也涵盖未经过 dragging 的辅助功能翻页。
+            pendingPage.current = null;
+          } else if (currentMotion.current.state !== 'idle') {
+            const page = nativePage.current;
+            if (
+              page.pagerKey === pagerKey &&
+              page.pageListKey === pageListKey
+            ) {
+              const settledId = answerIds[page.index];
+              if (settledId) selectAnswer(settledId);
+            }
+          }
+          currentMotion.current = { pagerKey, state };
+          setPageMotion({ pagerKey, state });
+        }}
+        onPageScroll={(event) => {
+          if (
+            currentPager.current.pagerKey !== pagerKey ||
+            currentPager.current.pageListKey !== pageListKey
+          )
+            return;
+          const { position, offset } = event.nativeEvent;
+          if (!Number.isInteger(position) || !Number.isFinite(offset)) return;
+          if (Math.abs(offset) > 0.001) {
+            // 实际移动证明一次新导航已开始；无动画定位不会产生中间 offset。
+            pendingPage.current = null;
+            if (currentMotion.current.state === 'idle') {
+              currentMotion.current = { pagerKey, state: 'settling' };
+              setPageMotion({ pagerKey, state: 'settling' });
+            }
+          } else if (answerIds[position]) {
+            const pending = pendingPage.current;
+            if (
+              pending?.pagerKey === pagerKey &&
+              pending.pageListKey === pageListKey
+            ) {
+              if (position !== pending.index) return;
+              pendingPage.current = null;
+            }
+            nativePage.current = { pagerKey, pageListKey, index: position };
+          }
+        }}
         onPageSelected={(e) => {
+          if (
+            currentPager.current.pagerKey !== pagerKey ||
+            currentPager.current.pageListKey !== pageListKey
+          )
+            return;
           const newIndex = e.nativeEvent.position;
-          setCurrentPage(newIndex);
+          if (!Number.isInteger(newIndex) || !answerIds[newIndex]) return;
+          const pending = pendingPage.current;
+          if (
+            pending?.pagerKey === pagerKey &&
+            pending.pageListKey === pageListKey
+          ) {
+            if (newIndex !== pending.index) return;
+            pendingPage.current = null;
+          }
           const newId = answerIds[newIndex];
           if (newId) {
-            router.setParams({ id: newId });
-
-            // Sync scroll position
-            const lastY = scrollPositions.current[newId] || 0;
-            scrollY.value = lastY;
-
-            const shouldCollapse = lastY > 80;
-            isCollapsedRef.current = shouldCollapse;
-            setIsHeaderCollapsed(shouldCollapse);
+            nativePage.current = { pagerKey, pageListKey, index: newIndex };
+            selectAnswer(newId);
           }
 
           // 如果滑到了最后几个，预加载下一页 ID

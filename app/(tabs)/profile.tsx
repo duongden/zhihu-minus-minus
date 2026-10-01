@@ -439,6 +439,14 @@ export default function ProfileScreen({ isActive = true }: ProfileScreenProps) {
           color={accentColor}
           onPress={() => router.push('/settings' as Href)}
         />
+        {__DEV__ && (
+          <MenuItem
+            icon="bug-outline"
+            title="富文本测试案例（开发）"
+            color={accentColor}
+            onPress={() => router.push('/dev/rich-content' as Href)}
+          />
+        )}
       </MenuSection>
 
       {/* 退出登录按钮 */}

@@ -1,22 +1,22 @@
-import { Stack } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { Stack, useRouter } from 'expo-router';
 import { View as RNView, ScrollView, StyleSheet, Switch } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BouncyButton } from '@/components/BouncyButton';
 import { Section, SettingItem } from '@/components/SettingItem';
 import { Text, useThemeColor } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import { useSettingsStore } from '@/store/useSettingsStore';
 
 export default function FeatureSettings() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme() ?? 'light';
   const canvasColor = useThemeColor({}, 'background');
   const tintColor = useThemeColor({}, 'primary');
-  const {
-    enableBrowseHistory,
-    enablePrivateMessaging,
-    updateSettings,
-    useWebView,
-  } = useSettingsStore();
+  const mutedColor = useThemeColor({}, 'textSecondary');
+  const { enableBrowseHistory, enablePrivateMessaging, updateSettings } =
+    useSettingsStore();
 
   return (
     <RNView style={[styles.container, { backgroundColor: canvasColor }]}>
@@ -50,17 +50,18 @@ export default function FeatureSettings() {
               trackColor={{ true: tintColor }}
             />
           </SettingItem>
-          <SettingItem
-            label="WebView 渲染正文（不建议）"
-            icon="globe-outline"
-            colorScheme={colorScheme}
+          <BouncyButton
+            onPress={() => router.push('/settings/appearance')}
+            accessibilityRole="button"
           >
-            <Switch
-              value={useWebView}
-              onValueChange={(value) => updateSettings({ useWebView: value })}
-              trackColor={{ true: tintColor }}
-            />
-          </SettingItem>
+            <SettingItem
+              label="正文排版"
+              icon="text-outline"
+              colorScheme={colorScheme}
+            >
+              <Ionicons name="chevron-forward" size={18} color={mutedColor} />
+            </SettingItem>
+          </BouncyButton>
         </Section>
 
         <Section title="沟通" colorScheme={colorScheme}>
