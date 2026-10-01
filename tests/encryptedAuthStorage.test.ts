@@ -1,5 +1,27 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
+import { AESSealedData, aesDecryptAsync } from 'expo-crypto';
+import {
+  createAuthSealedDataFromBase64,
+  decryptAuthState,
+} from '../storage/authEncryption';
 import { createEncryptedAuthStorage } from '../storage/encryptedAuthStorage';
+
+jest.mock('expo-crypto', () => ({
+  AESEncryptionKey: { import: jest.fn(async () => ({})) },
+  AESSealedData: {
+    fromCombined: jest.fn((combined: unknown) => {
+      if (!(combined instanceof Uint8Array) || combined.length < 28) {
+        throw new Error('synthetic Android ByteArray boundary');
+      }
+      return { combined };
+    }),
+  },
+  aesDecryptAsync: jest.fn(),
+}));
+jest.mock('expo-secure-store', () => ({
+  AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 'synthetic-key-policy',
+  getItemAsync: jest.fn(async () => Buffer.alloc(32, 7).toString('base64')),
+}));
 
 // Only synthetic credentials and an ephemeral test key are used here.
 const snapshot = (cookie: string | null, version = 2) =>
@@ -17,6 +39,65 @@ const snapshot = (cookie: string | null, version = 2) =>
 const A = snapshot('z_c0=synthetic-a');
 const B = snapshot('z_c0=synthetic-b');
 const EMPTY = snapshot(null);
+
+test('production decryption preserves saved AES-GCM bytes across the Android boundary', async () => {
+  const key = Buffer.alloc(32, 7);
+  const iv = Buffer.from(Array.from({ length: 12 }, (_, index) => index));
+  const plaintext = '合成账号 🙂 é';
+  const aad = Buffer.from('zhihu-auth-file:v1');
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  cipher.setAAD(aad);
+  const combined = Buffer.concat([
+    iv,
+    cipher.update(plaintext, 'utf8'),
+    cipher.final(),
+    cipher.getAuthTag(),
+  ]);
+  const encoded = combined.toString('base64');
+  const nativeBoundary = jest.mocked(AESSealedData.fromCombined);
+  // Model the installed Android native signature, despite the JS string type.
+  expect(() => AESSealedData.fromCombined(encoded)).toThrow('ByteArray');
+  nativeBoundary.mockClear();
+  jest
+    .mocked(aesDecryptAsync)
+    .mockResolvedValue(new Uint8Array(Buffer.from(plaintext)));
+
+  await expect(decryptAuthState(encoded)).resolves.toBe(plaintext);
+  expect(nativeBoundary).toHaveBeenCalledWith(new Uint8Array(combined));
+  expect(aesDecryptAsync).toHaveBeenCalledWith(
+    { combined: new Uint8Array(combined) },
+    {},
+    { additionalData: new Uint8Array(aad) },
+  );
+  const decipher = createDecipheriv(
+    'aes-256-gcm',
+    key,
+    combined.subarray(0, 12),
+  );
+  decipher.setAAD(aad);
+  decipher.setAuthTag(combined.subarray(-16));
+  expect(
+    Buffer.concat([
+      decipher.update(combined.subarray(12, -16)),
+      decipher.final(),
+    ]).toString('utf8'),
+  ).toBe(plaintext);
+});
+
+test('malformed combined encoding fails with a fixed message before decryption', () => {
+  const nativeBoundary = jest.mocked(AESSealedData.fromCombined);
+  nativeBoundary.mockClear();
+  jest.mocked(aesDecryptAsync).mockClear();
+  expect(() => createAuthSealedDataFromBase64('%synthetic-invalid%')).toThrow(
+    '账号密文格式无效',
+  );
+  expect(nativeBoundary).not.toHaveBeenCalled();
+  // Valid base64 can still encode an incomplete IV/tag layout.
+  expect(() => createAuthSealedDataFromBase64('AA==')).toThrow(
+    '账号密文格式无效',
+  );
+  expect(aesDecryptAsync).not.toHaveBeenCalled();
+});
 
 function harness(initial: Partial<Record<'primary' | 'backup', string>> = {}) {
   const files = new Map<'primary' | 'backup', string>(

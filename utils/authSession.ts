@@ -6,9 +6,8 @@ import { createNativeSessionSynchronizer } from './nativeSessionSync';
 export const LEGACY_COOKIE_STORAGE_KEY = 'user_cookies';
 const SECURE_STORE_SAFE_COOKIE_LENGTH = 2000;
 const synchronize = createNativeSessionSynchronizer({
-  isCurrent: (cookies, version) =>
-    getAuthSessionVersion() === version &&
-    useAuthStore.getState().cookies === cookies,
+  isCurrent: (version) => getAuthSessionVersion() === version,
+  getCookies: () => useAuthStore.getState().cookies,
   clear: () => CookieManager.clearAllStores(),
   setCookie: (name, value) =>
     CookieManager.set(
@@ -24,7 +23,9 @@ const synchronize = createNativeSessionSynchronizer({
 
 /** Zustand is authoritative; obsolete native writes stop at each async boundary. */
 export function syncNativeSessionCookies(
-  cookies: string | null,
+  _cookies: string | null,
 ): Promise<void> {
-  return synchronize(cookies, getAuthSessionVersion());
+  // The caller's snapshot may rotate while it awaits account persistence.
+  // Always mirror the selected session, including its latest response cookies.
+  return synchronize(getAuthSessionVersion());
 }

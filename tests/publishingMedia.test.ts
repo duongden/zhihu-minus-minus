@@ -70,14 +70,17 @@ test('failed media persists and a double retry starts only one upload', async ()
   const failed = host.result.current.items[0];
   expect(failed.asset.uri).toContain('synthetic-draft');
   expect(host.result.current.isBusy).toBe(true);
+  expect(host.result.current.isWorking).toBe(false);
   await act(() => {
     host.result.current.retry(failed.id);
     host.result.current.retry(failed.id);
   });
   expect(uploadImage).toHaveBeenCalledTimes(2);
+  expect(host.result.current.isWorking).toBe(true);
   await act(() => finish(image));
   expect(host.result.current.items[0].uploaded).toEqual(image);
   expect(host.result.current.isBusy).toBe(false);
+  expect(host.result.current.isWorking).toBe(false);
   expect(onChange).toHaveBeenLastCalledWith([
     expect.objectContaining({ status: 'uploaded' }),
   ]);

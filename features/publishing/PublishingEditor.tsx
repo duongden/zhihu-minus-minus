@@ -112,6 +112,7 @@ export function PublishingEditor({
     [initialImages, media.items],
   );
   const isBusy = media.isBusy;
+  const isWorking = media.isWorking;
   const uploadingCount = media.uploadingCount;
   useEffect(() => {
     onBusyChange?.(isBusy);
@@ -239,12 +240,14 @@ export function PublishingEditor({
           {toolbarActions.map((action) => (
             <BouncyButton
               key={action.key}
-              disabled={disabled || isBusy || isPreviewing}
+              disabled={disabled || isWorking || isPreviewing}
               onPress={action.onPress}
               className="items-center justify-center mr-1 px-2.5 py-1.5 rounded-lg"
-              style={{ opacity: disabled || isBusy || isPreviewing ? 0.4 : 1 }}
+              style={{
+                opacity: disabled || isWorking || isPreviewing ? 0.4 : 1,
+              }}
             >
-              {action.key === 'image' && isBusy ? (
+              {action.key === 'image' && isWorking ? (
                 <ActivityIndicator size="small" color={colors.link} />
               ) : (
                 <Ionicons name={action.icon} size={20} color={colors.link} />

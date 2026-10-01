@@ -1,7 +1,6 @@
 import * as Clipboard from 'expo-clipboard';
 import {
   AESEncryptionKey,
-  AESSealedData,
   aesDecryptAsync,
   aesEncryptAsync,
 } from 'expo-crypto';
@@ -23,6 +22,7 @@ import {
   readAtomically,
   writeAtomically,
 } from '@/modules/zhihu-persistence';
+import { createAuthSealedDataFromBase64 } from '@/storage/authEncryption';
 import { createEncryptedAuthStorage } from '@/storage/encryptedAuthStorage';
 
 // This developer-only route uses isolated synthetic files and an ephemeral key.
@@ -91,7 +91,7 @@ async function runStorageValidation() {
       ).combined('base64');
     const decrypt = async (value: string) =>
       new TextDecoder('utf-8', { fatal: true }).decode(
-        await aesDecryptAsync(AESSealedData.fromCombined(value), imported, {
+        await aesDecryptAsync(createAuthSealedDataFromBase64(value), imported, {
           additionalData: aad,
         }),
       );

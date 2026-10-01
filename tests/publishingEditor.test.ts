@@ -88,6 +88,9 @@ test('keeps failed images retryable while inserting other successful uploads', a
   expect(onChangeText).toHaveBeenLastCalledWith(
     '草稿\n\n![图片](https://pic.example/success.jpg "20x20")',
   );
+  await fireEvent.press(host.getByText('粗体'));
+  expect(onChangeText).toHaveBeenLastCalledWith(expect.stringContaining('**'));
+  expect(onBusyChange).toHaveBeenLastCalledWith(true);
   jest.mocked(uploadImage).mockResolvedValueOnce({
     ...image,
     imageId: 'retry',

@@ -216,6 +216,7 @@ export function usePublishingMedia(options: Options) {
     isPicking,
     uploadingCount,
     failedCount,
+    isWorking: isPicking || uploadingCount > 0,
     isBusy: isPicking || uploadingCount > 0 || failedCount > 0,
     chooseImages,
     retry: upload,

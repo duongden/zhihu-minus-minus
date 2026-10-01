@@ -154,7 +154,10 @@ export default function WriteAnswerScreen() {
       return;
     }
     if (editorBusy) {
-      Alert.alert('图片上传中', '请等待图片上传完成后再发布。');
+      Alert.alert(
+        '图片尚未就绪',
+        '请等待上传完成，或重试、移除失败的图片后再发布。',
+      );
       return;
     }
     if (!draft.ready || draft.hasConflict || mutation.isPending) return;

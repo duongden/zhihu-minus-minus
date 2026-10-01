@@ -44,9 +44,21 @@ export async function encryptAuthState(value: string): Promise<string> {
   return sealed.combined('base64');
 }
 
+/** Android's combined-data bridge requires bytes rather than base64 text. */
+export function createAuthSealedDataFromBase64(value: string): AESSealedData {
+  try {
+    const bytes = Uint8Array.from(atob(value), (character) =>
+      character.charCodeAt(0),
+    );
+    return AESSealedData.fromCombined(bytes);
+  } catch {
+    throw new Error('账号密文格式无效');
+  }
+}
+
 export async function decryptAuthState(value: string): Promise<string> {
   const bytes = await aesDecryptAsync(
-    AESSealedData.fromCombined(value),
+    createAuthSealedDataFromBase64(value),
     await getKey(false),
     { additionalData: additionalData() },
   );
