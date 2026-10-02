@@ -44,6 +44,7 @@ import {
 import { addReadHistory } from '@/api/zhihu/history';
 import { BouncyButton } from '@/components/BouncyButton';
 import { FeedCard } from '@/components/FeedCard';
+import { FollowButton } from '@/components/FollowButton';
 import { ProfileHeader } from '@/components/profile/ProfileHeader';
 import {
   ProfileTabList,
@@ -363,7 +364,6 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
   const borderColor = Colors[colorScheme].border;
   const primaryColor = useThemeColor({}, 'primary');
   const linkColor = useThemeColor({}, 'link');
-  const onPrimary = useThemeColor({}, 'onPrimary');
 
   const { cookies, me: storedMe } = useAuthStore();
   const { data: fetchedMe } = useQuery({
@@ -1327,40 +1327,12 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
             </View>
           </Reanimated.View>
           {compactHeader && user && !isMe && (
-            <BouncyButton
-              accessibilityRole="button"
+            <FollowButton
+              following={Boolean(user.is_following)}
+              loading={followLoading}
               accessibilityLabel={user.is_following ? '取消关注' : '关注用户'}
-              disabled={followLoading}
               onPress={() => void handleFollow()}
-              style={{
-                paddingHorizontal: 13,
-                minHeight: 34,
-                justifyContent: 'center',
-                borderRadius: 20,
-                borderWidth: 1,
-                borderColor: user.is_following ? borderColor : primaryColor,
-                backgroundColor: user.is_following
-                  ? Colors[colorScheme].background
-                  : primaryColor,
-              }}
-            >
-              <Text
-                style={{
-                  fontSize: 12,
-                  lineHeight: 18 * fontSizeScale,
-                  fontWeight: '700',
-                  color: user.is_following
-                    ? Colors[colorScheme].text
-                    : onPrimary,
-                }}
-              >
-                {followLoading
-                  ? '处理中'
-                  : user.is_following
-                    ? '已关注'
-                    : '关注'}
-              </Text>
-            </BouncyButton>
+            />
           )}
           <BouncyButton
             accessibilityRole="button"

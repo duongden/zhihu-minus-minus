@@ -10,6 +10,7 @@ import { followMember, unfollowMember } from '@/api/zhihu/member';
 import { getPin } from '@/api/zhihu/pin';
 import { getContentVoteCount, getContentVoteState } from '@/api/zhihu/voters';
 import { BouncyButton } from '@/components/BouncyButton';
+import { FollowButton } from '@/components/FollowButton';
 import { LikeButton } from '@/components/LikeButton';
 import { PinPollCard } from '@/components/PinPollCard';
 import { QueryErrorView } from '@/components/QueryErrorView';
@@ -34,7 +35,6 @@ export default function PinDetailScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const textColor = Colors[colorScheme].text;
-  const borderColor = Colors[colorScheme].border;
   const backgroundColor = Colors[colorScheme].background;
 
   const primaryColor = useThemeColor({}, 'primary');
@@ -215,31 +215,11 @@ export default function PinDetailScreen() {
               ) : null}
             </View>
           </BouncyButton>
-          <BouncyButton
-            className="px-[15px] py-1.5 rounded-[20px]"
-            style={[
-              !pin?.author?.is_following
-                ? { backgroundColor: primaryTransparent }
-                : {
-                    backgroundColor: 'transparent',
-                    borderWidth: 1,
-                    borderColor: borderColor,
-                  },
-            ]}
+          <FollowButton
+            following={Boolean(pin?.author?.is_following)}
+            loading={followMutation.isPending}
             onPress={() => followMutation.mutate()}
-            disabled={followMutation.isPending}
-          >
-            <Text
-              className="text-sm font-bold"
-              style={[
-                pin?.author?.is_following
-                  ? { color: Colors[colorScheme].textSecondary }
-                  : { color: primaryColor },
-              ]}
-            >
-              {pin?.author?.is_following ? '已关注' : '关注'}
-            </Text>
-          </BouncyButton>
+          />
         </View>
 
         {/* 想法内容 */}

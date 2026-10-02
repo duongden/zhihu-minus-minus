@@ -18,6 +18,7 @@ import {
 import { getContentVoteCount, getContentVoteState } from '@/api/zhihu/voters';
 import { BouncyButton } from '@/components/BouncyButton';
 import { FeedCard } from '@/components/FeedCard';
+import { FollowButton } from '@/components/FollowButton';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { StableAvatar } from '@/components/StableAvatar';
 import { Text, useThemeColor, View } from '@/components/Themed';
@@ -41,7 +42,6 @@ export default function TopicDetail() {
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const tintColor = useThemeColor({}, 'primary');
-  const onPrimary = useThemeColor({}, 'onPrimary');
   const textColor = useThemeColor({}, 'text');
   const backgroundColor = useThemeColor({}, 'background');
 
@@ -175,32 +175,11 @@ export default function TopicDetail() {
               {topic.followers_count} 关注 · {topic.best_answers_count} 精华
             </Text>
           </View>
-          <BouncyButton
+          <FollowButton
+            following={Boolean(topic.is_following)}
+            loading={followMutation.isPending}
             onPress={() => followMutation.mutate()}
-            disabled={followMutation.isPending}
-            accessibilityState={{ busy: followMutation.isPending }}
-            className="px-4 py-1.5 rounded-full"
-            style={[
-              {
-                backgroundColor: topic.is_following ? 'transparent' : tintColor,
-              },
-              topic.is_following && {
-                borderWidth: 1,
-                borderColor: Colors[colorScheme].border,
-              },
-            ]}
-          >
-            <Text
-              style={{
-                color: topic.is_following
-                  ? Colors[colorScheme].textSecondary
-                  : onPrimary,
-              }}
-              className="font-bold text-sm"
-            >
-              {topic.is_following ? '已关注' : '关注'}
-            </Text>
-          </BouncyButton>
+          />
         </View>
 
         {topic.introduction ? (
@@ -259,7 +238,6 @@ export default function TopicDetail() {
     topicError,
     activeTab,
     tintColor,
-    onPrimary,
     colorScheme,
     followMutation.mutate,
     followMutation.isPending,

@@ -24,6 +24,7 @@ import { recordReadHistory } from '@/api/zhihu/history';
 import { followMember, unfollowMember } from '@/api/zhihu/member';
 import { BouncyButton } from '@/components/BouncyButton';
 import { DownvoteButton } from '@/components/DownvoteButton';
+import { FollowButton } from '@/components/FollowButton';
 import { LikeButton } from '@/components/LikeButton';
 import { ActionSheet } from '@/components/overlays/ActionSheet';
 import { QueryErrorView } from '@/components/QueryErrorView';
@@ -48,7 +49,6 @@ export default function ArticleDetail() {
   const primaryColor = useThemeColor({}, 'primary');
   const warningColor = useThemeColor({}, 'warning');
   const linkColor = useThemeColor({}, 'link');
-  const onPrimaryColor = useThemeColor({}, 'onPrimary');
   const { id, source } = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -182,7 +182,6 @@ export default function ArticleDetail() {
     enabled: !!id && !isDaily,
   });
 
-  const tintColor = useThemeColor({}, 'primary');
   const primaryTransparent = useThemeColor({}, 'primaryTransparent');
 
   const columnFollowMutation = useOptimisticToggle<
@@ -404,31 +403,11 @@ export default function ArticleDetail() {
                   ) : null}
                 </View>
               </BouncyButton>
-              <BouncyButton
-                className="px-[15px] py-1.5 rounded-[20px]"
-                style={[
-                  !data.author?.is_following
-                    ? { backgroundColor: primaryTransparent }
-                    : {
-                        backgroundColor: 'transparent',
-                        borderWidth: 1,
-                        borderColor: Colors[colorScheme].border,
-                      },
-                ]}
+              <FollowButton
+                following={Boolean(data.author?.is_following)}
+                loading={followMutation.isPending}
                 onPress={() => followMutation.mutate()}
-                disabled={followMutation.isPending}
-              >
-                <Text
-                  className="text-sm font-bold"
-                  style={[
-                    data.author?.is_following
-                      ? { color: Colors[colorScheme].textSecondary }
-                      : { color: linkColor },
-                  ]}
-                >
-                  {data.author?.is_following ? '已关注' : '关注'}
-                </Text>
-              </BouncyButton>
+              />
             </View>
           </View>
         )}
@@ -471,37 +450,14 @@ export default function ArticleDetail() {
                   {columnCard.extra || `${columnCard.intro || '知乎专栏'}`}
                 </Text>
               </View>
-              <BouncyButton
-                onPress={(e) => {
-                  e.stopPropagation();
+              <FollowButton
+                following={Boolean(columnCard.is_following)}
+                loading={columnFollowMutation.isPending}
+                onPress={(event) => {
+                  event.stopPropagation();
                   columnFollowMutation.mutate();
                 }}
-                disabled={columnFollowMutation.isPending}
-                accessibilityState={{ busy: columnFollowMutation.isPending }}
-                className="px-4 py-1.5 rounded-full"
-                style={[
-                  {
-                    backgroundColor: columnCard.is_following
-                      ? 'transparent'
-                      : tintColor,
-                  },
-                  columnCard.is_following && {
-                    borderWidth: 1,
-                    borderColor: Colors[colorScheme].border,
-                  },
-                ]}
-              >
-                <Text
-                  style={{
-                    color: columnCard.is_following
-                      ? Colors[colorScheme].textSecondary
-                      : onPrimaryColor,
-                  }}
-                  className="font-bold text-sm"
-                >
-                  {columnCard.is_following ? '已关注' : '关注'}
-                </Text>
-              </BouncyButton>
+              />
             </BouncyButton>
           </View>
         )}

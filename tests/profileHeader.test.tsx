@@ -1,6 +1,7 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
 import type { ZhihuMember } from '../api/zhihu';
 import { ProfileHeader } from '../components/profile/ProfileHeader';
+import { resolveThemeColors } from '../constants/theme';
 import { useSettingsStore } from '../store/useSettingsStore';
 
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
@@ -100,11 +101,17 @@ test('custom primary colors and large type update the open profile', async () =>
   await act(() => {
     useSettingsStore.setState({ primaryColor: '#ffffff', fontSizeScale: 1.6 });
   });
+  const palette = resolveThemeColors('light', {
+    primaryColor: '#ffffff',
+    readingBackground: 'default',
+    textContrast: 'standard',
+    surfaceStyle: 'layered',
+  });
   expect(host.getByRole('button', { name: '关注测试作者' })).toHaveStyle({
-    backgroundColor: '#ffffff',
+    backgroundColor: palette.primaryTransparent,
   });
   expect(host.getByText('关注', { exact: true })).toHaveStyle({
-    color: '#000000',
+    color: palette.link,
   });
   expect(host.getByText('测试作者')).toHaveStyle({
     fontSize: 24 * 1.6,

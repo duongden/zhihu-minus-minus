@@ -63,6 +63,7 @@ import {
   type ZhihuQuestionDetail,
 } from '@/api/zhihu/question';
 import { BouncyButton } from '@/components/BouncyButton';
+import { FollowButton } from '@/components/FollowButton';
 import { LikeButton } from '@/components/LikeButton';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { ShareMenu } from '@/components/ShareMenu';
@@ -156,7 +157,6 @@ const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
     const { toggleCollect } = useCollectionAction();
 
     const primaryColor = useThemeColor({}, 'primary');
-    const primaryTransparent = useThemeColor({}, 'primaryTransparent');
     const warningColor = useThemeColor({}, 'warning');
 
     const isFirstMount = useRef(true);
@@ -435,33 +435,11 @@ const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
               </View>
             </BouncyButton>
             {!item.relationship?.is_author && (
-              <BouncyButton
-                className="px-3 py-1.5 rounded-[15px]"
-                style={[
-                  !item.author?.is_following && {
-                    backgroundColor: primaryTransparent,
-                  },
-                  item.author?.is_following && {
-                    backgroundColor: 'transparent',
-                    borderColor: Colors[colorScheme].border,
-                    borderWidth: 1,
-                  },
-                ]}
+              <FollowButton
+                following={Boolean(item.author?.is_following)}
+                loading={followMutation.isPending}
                 onPress={() => followMutation.mutate()}
-                disabled={followMutation.isPending}
-                accessibilityState={{ disabled: followMutation.isPending }}
-              >
-                <Text
-                  className="text-[13px] font-bold"
-                  style={[
-                    item.author?.is_following
-                      ? { color: Colors[colorScheme].textSecondary }
-                      : { color: primaryColor },
-                  ]}
-                >
-                  {item.author?.is_following ? '已关注' : '关注'}
-                </Text>
-              </BouncyButton>
+              />
             )}
           </View>
 
@@ -1162,31 +1140,13 @@ export default function QuestionDetail() {
               </Text>
             </View>
             <View className="flex-row mt-[15px] gap-2.5 bg-transparent">
-              <BouncyButton
-                className="flex-1 flex-row items-center justify-center py-2 rounded-md"
-                style={[
-                  { backgroundColor: primaryTransparent },
-                  question?.relationship?.is_following && {
-                    backgroundColor: 'transparent',
-                    borderWidth: 1,
-                    borderColor: Colors[colorScheme].border,
-                  },
-                ]}
+              <FollowButton
+                following={Boolean(question?.relationship?.is_following)}
+                loading={followMutation.isPending}
+                label="关注问题"
                 onPress={() => followMutation.mutate()}
-                disabled={followMutation.isPending}
-                accessibilityState={{ disabled: followMutation.isPending }}
-              >
-                <Text
-                  className="text-sm font-medium"
-                  style={[
-                    question?.relationship?.is_following
-                      ? { color: Colors[colorScheme].textSecondary }
-                      : { color: primaryColor },
-                  ]}
-                >
-                  {question?.relationship?.is_following ? '已关注' : '关注问题'}
-                </Text>
-              </BouncyButton>
+                style={{ flex: 1 }}
+              />
               <BouncyButton
                 className="flex-1 flex-row items-center justify-center py-2 rounded-md"
                 style={{ backgroundColor: primaryTransparent }}
@@ -1277,7 +1237,6 @@ export default function QuestionDetail() {
       sortBy,
       followMutation.mutate,
       followMutation.isPending,
-      colorScheme,
       detailExpanded,
       primaryColor,
       primaryTransparent,

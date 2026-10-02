@@ -1,7 +1,6 @@
 import { type QueryKey, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator } from 'react-native';
 import {
   followMember,
   unfollowMember,
@@ -9,13 +8,14 @@ import {
   type ZhihuMemberListItem,
 } from '@/api/zhihu';
 import { BouncyButton } from '@/components/BouncyButton';
+import { FollowButton } from '@/components/FollowButton';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useAuthStore } from '@/store/useAuthStore';
 import type { ZhihuBadge } from '@/types/zhihu';
 import { showToast } from '@/utils/toast';
 import { StableAvatar } from './StableAvatar';
-import { Text, useThemeColor, View } from './Themed';
+import { Text, View } from './Themed';
 
 export type UserCardMember = Omit<
   ZhihuMemberListItem,
@@ -49,10 +49,6 @@ const UserCardComponent = ({
   const colorScheme = useColorScheme();
 
   const borderColor = Colors[colorScheme].border;
-  const bgSecondary = Colors[colorScheme].backgroundSecondary;
-  const tint = useThemeColor({}, 'primary');
-  const textSecondaryColor = Colors[colorScheme].textSecondary;
-  const bgColor = Colors[colorScheme].background;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: FlashList recycles the component; identity changes must reset derived state even when the visible counts happen to match.
   useEffect(() => {
@@ -156,39 +152,14 @@ const UserCardComponent = ({
           </Text>
         </View>
       </View>
-      <BouncyButton
-        accessibilityRole="button"
-        accessibilityState={{ busy: loading, selected: isFollowing }}
-        disabled={loading}
+      <FollowButton
+        following={isFollowing}
+        loading={loading}
         onPress={(event) => {
           event.stopPropagation();
           void handleFollow();
         }}
-        className="px-4 py-1.5 rounded-2xl justify-center items-center"
-        style={
-          isFollowing
-            ? { backgroundColor: bgSecondary, borderColor, borderWidth: 1 }
-            : { backgroundColor: tint }
-        }
-      >
-        {loading ? (
-          <ActivityIndicator
-            size="small"
-            color={isFollowing ? textSecondaryColor : bgColor}
-          />
-        ) : (
-          <Text
-            className="text-[13px] font-bold"
-            style={{
-              color: isFollowing
-                ? textSecondaryColor
-                : Colors[colorScheme].textInverse,
-            }}
-          >
-            {isFollowing ? '已关注' : '关注'}
-          </Text>
-        )}
-      </BouncyButton>
+      />
     </BouncyButton>
   );
 };

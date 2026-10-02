@@ -13,11 +13,10 @@ import {
 } from '@/api/zhihu/column';
 import { recordReadHistory } from '@/api/zhihu/history';
 import { BouncyButton } from '@/components/BouncyButton';
+import { FollowButton } from '@/components/FollowButton';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { StableAvatar } from '@/components/StableAvatar';
 import { Text, useThemeColor, View } from '@/components/Themed';
-import { useColorScheme } from '@/components/useColorScheme';
-import Colors from '@/constants/Colors';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
 import { useRefreshAction } from '@/hooks/useRefreshAction';
 import { useZhihuInfiniteQuery } from '@/hooks/useZhihuInfiniteQuery';
@@ -31,10 +30,8 @@ export default function ColumnDetail() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
-  const colorScheme = useColorScheme();
 
   const tintColor = useThemeColor({}, 'primary');
-  const onPrimary = useThemeColor({}, 'onPrimary');
   const textColor = useThemeColor({}, 'text');
   const backgroundColor = useThemeColor({}, 'background');
   const borderColor = useThemeColor({}, 'border');
@@ -135,34 +132,11 @@ export default function ColumnDetail() {
               {column.items_count || column.articles_count || 0} 文章
             </Text>
           </View>
-          <BouncyButton
+          <FollowButton
+            following={Boolean(column.is_following)}
+            loading={followMutation.isPending}
             onPress={() => followMutation.mutate()}
-            disabled={followMutation.isPending}
-            accessibilityState={{ busy: followMutation.isPending }}
-            className="px-4 py-1.5 rounded-full"
-            style={[
-              {
-                backgroundColor: column.is_following
-                  ? 'transparent'
-                  : tintColor,
-              },
-              column.is_following && {
-                borderWidth: 1,
-                borderColor: borderColor,
-              },
-            ]}
-          >
-            <Text
-              style={{
-                color: column.is_following
-                  ? Colors[colorScheme].textSecondary
-                  : onPrimary,
-              }}
-              className="font-bold text-sm"
-            >
-              {column.is_following ? '已关注' : '关注'}
-            </Text>
-          </BouncyButton>
+          />
         </View>
 
         {column.intro || column.excerpt ? (

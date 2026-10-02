@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, Text, View } from 'react-native';
 import type { ZhihuMember } from '@/api/zhihu';
 import { BouncyButton } from '@/components/BouncyButton';
+import { FollowButton } from '@/components/FollowButton';
 import { StableAvatar } from '@/components/StableAvatar';
 import { useRuntimeThemeColors } from '@/components/Themed';
 import { useSettingsStore } from '@/store/useSettingsStore';
@@ -67,7 +68,6 @@ export function ProfileHeader({
   );
   const showCover = !!coverUrl && failedCover !== coverUrl;
   const avatarUri = user.avatar_url || initialAvatar;
-  const followForeground = user.is_following ? colors.text : colors.onPrimary;
 
   return (
     <View
@@ -137,44 +137,17 @@ export function ProfileHeader({
             )}
           </View>
           {!isMe && (
-            <BouncyButton
-              accessibilityRole="button"
+            <FollowButton
+              following={Boolean(user.is_following)}
+              loading={followLoading}
               accessibilityLabel={
                 user.is_following
                   ? `取消关注${user.name || '用户'}`
                   : `关注${user.name || '用户'}`
               }
-              accessibilityState={{
-                disabled: followLoading,
-                busy: followLoading,
-              }}
-              disabled={followLoading}
               onPress={onFollow}
-              style={[
-                styles.followButton,
-                {
-                  backgroundColor: user.is_following
-                    ? colors.background
-                    : colors.primary,
-                  borderColor: user.is_following
-                    ? colors.border
-                    : colors.primary,
-                },
-              ]}
-            >
-              {followLoading ? (
-                <ActivityIndicator size="small" color={followForeground} />
-              ) : (
-                <Ionicons
-                  name={user.is_following ? 'checkmark' : 'add'}
-                  size={17}
-                  color={followForeground}
-                />
-              )}
-              <Text style={[styles.followText, { color: followForeground }]}>
-                {user.is_following ? '已关注' : '关注'}
-              </Text>
-            </BouncyButton>
+              style={{ minHeight: 40, marginBottom: 2 }}
+            />
           )}
         </View>
 
@@ -352,21 +325,6 @@ function createStyles(fontScale: number, lineHeightScale: number) {
       flexShrink: 0,
     },
     avatar: { width: 80, height: 80, borderRadius: 40 },
-    followButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 4,
-      borderWidth: 1,
-      borderRadius: 24,
-      minHeight: 40,
-      minWidth: 96,
-      paddingHorizontal: 17,
-      paddingVertical: 7,
-      marginBottom: 2,
-      flexShrink: 1,
-    },
-    followText: { ...type(14, 20), fontWeight: '700', flexShrink: 1 },
     name: { ...type(24, 30), fontWeight: '800', letterSpacing: -0.4 },
     handle: { ...type(13, 18), marginTop: 2 },
     headline: { ...type(14, 22), marginTop: 10 },

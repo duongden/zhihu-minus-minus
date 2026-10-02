@@ -23,6 +23,7 @@ import { getAllContentCollectionStatus } from '@/api/zhihu/collection';
 import { followMember, unfollowMember } from '@/api/zhihu/member';
 import { BouncyButton } from '@/components/BouncyButton';
 import { DownvoteButton } from '@/components/DownvoteButton';
+import { FollowButton } from '@/components/FollowButton';
 import { LikeButton } from '@/components/LikeButton';
 import { ActionSheet } from '@/components/overlays/ActionSheet';
 import { QueryErrorView } from '@/components/QueryErrorView';
@@ -404,31 +405,11 @@ export const AnswerDetailView = ({
               ) : null}
             </View>
           </BouncyButton>
-          <BouncyButton
-            className="px-[15px] py-1.5 rounded-[20px]"
-            style={[
-              !answer?.author?.is_following
-                ? { backgroundColor: primaryTransparent }
-                : {
-                    backgroundColor: 'transparent',
-                    borderWidth: 1,
-                    borderColor: Colors[colorScheme].border,
-                  },
-            ]}
+          <FollowButton
+            following={Boolean(answer?.author?.is_following)}
+            loading={followMutation.isPending}
             onPress={() => followMutation.mutate()}
-            disabled={followMutation.isPending}
-          >
-            <Text
-              className="text-sm font-bold"
-              style={[
-                answer?.author?.is_following
-                  ? { color: Colors[colorScheme].textSecondary }
-                  : { color: linkColor },
-              ]}
-            >
-              {answer?.author?.is_following ? '已关注' : '关注'}
-            </Text>
-          </BouncyButton>
+          />
         </View>
 
         {queryLoading && !answer ? (
