@@ -273,6 +273,7 @@ export default function LoginScreen() {
 
       {loading && (
         <View
+          pointerEvents="none"
           className="justify-center items-center"
           style={{
             ...StyleSheet.absoluteFillObject,

@@ -128,8 +128,18 @@ export default function AppearanceSettings() {
                 { backgroundColor: Colors.light.primary },
               ]}
             >
-              <RNView style={styles.appIconMinus} />
-              <RNView style={styles.appIconMinus} />
+              <RNView
+                style={[
+                  styles.appIconMinus,
+                  { backgroundColor: Colors.light.onPrimary },
+                ]}
+              />
+              <RNView
+                style={[
+                  styles.appIconMinus,
+                  { backgroundColor: Colors.light.onPrimary },
+                ]}
+              />
             </RNView>
             <RNView style={styles.routeCopy}>
               <Text style={styles.routeLabel}>App 图标</Text>
@@ -781,13 +791,13 @@ function ColorPickerSection({
           onChangeText={(val) => {
             const v = val.startsWith('#') ? val : val ? `#${val}` : '#';
             setHexText(v);
-            if (v.length === 7) {
+            if (/^#[0-9a-fA-F]{6}$/.test(v)) {
               onColorChange(v);
               setHsl(hexToHsl(v));
             }
           }}
           onBlur={() => {
-            if (hexText.length !== 7)
+            if (!/^#[0-9a-fA-F]{6}$/.test(hexText))
               setHexText(primaryColor || Colors.light.primary);
           }}
           maxLength={7}
@@ -866,7 +876,6 @@ const styles = StyleSheet.create({
     width: 8,
     height: 3,
     borderRadius: 2,
-    backgroundColor: Colors.light.textInverse,
   },
   routeCopy: { flex: 1, marginHorizontal: 12 },
   routeLabel: { fontSize: 16, fontWeight: '600' },

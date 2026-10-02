@@ -142,6 +142,7 @@ export default function UserStreamScreen() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isFetching,
     refetch,
   } = useInfiniteQuery({
     queryKey: ['user-recent-published-activities', member?.id],
@@ -244,7 +245,7 @@ export default function UserStreamScreen() {
           }
           contentContainerStyle={{ paddingVertical: 10, paddingBottom: 50 }}
           onEndReached={() => {
-            if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+            if (hasNextPage && !isFetching) void fetchNextPage();
           }}
           onEndReachedThreshold={0.5}
           ListEmptyComponent={

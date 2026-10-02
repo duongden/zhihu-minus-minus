@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import type React from 'react';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -25,6 +25,7 @@ export interface CommentDraft {
 }
 
 interface SelectedImage {
+  id: number;
   asset: LocalImageAsset;
   status: 'uploading' | 'uploaded' | 'failed';
   uploaded?: UploadedImage;
@@ -61,42 +62,66 @@ export function CommentComposer({
 }: CommentComposerProps) {
   const [selectedImages, setSelectedImages] = useState<SelectedImage[]>([]);
   const [isPicking, setIsPicking] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const pickingRef = useRef(false);
+  const sendingRef = useRef(false);
+  const mountedRef = useRef(true);
+  const nextImageId = useRef(0);
+  const uploadsRef = useRef(new Map<number, AbortController>());
+  const busy = isSubmitting || isSending;
 
-  const uploadSelectedImage = (asset: LocalImageAsset) => {
-    void uploadImage(asset)
+  useEffect(() => {
+    mountedRef.current = true;
+    const uploads = uploadsRef.current;
+    return () => {
+      mountedRef.current = false;
+      for (const controller of uploads.values()) controller.abort();
+      uploads.clear();
+    };
+  }, []);
+
+  const uploadSelectedImage = (image: SelectedImage) => {
+    const controller = new AbortController();
+    uploadsRef.current.set(image.id, controller);
+    void uploadImage(image.asset, undefined, { signal: controller.signal })
       .then((uploaded) => {
+        if (!mountedRef.current || controller.signal.aborted) return;
         setSelectedImages((currentImages) =>
-          currentImages.map((image) =>
-            image.asset.uri === asset.uri
-              ? { ...image, status: 'uploaded', uploaded }
-              : image,
+          currentImages.map((currentImage) =>
+            currentImage.id === image.id
+              ? { ...currentImage, status: 'uploaded', uploaded }
+              : currentImage,
           ),
         );
       })
       .catch((error: unknown) => {
+        if (!mountedRef.current || controller.signal.aborted) return;
         setSelectedImages((currentImages) =>
-          currentImages.map((image) =>
-            image.asset.uri === asset.uri
-              ? { ...image, status: 'failed', uploaded: undefined }
-              : image,
+          currentImages.map((currentImage) =>
+            currentImage.id === image.id
+              ? { ...currentImage, status: 'failed', uploaded: undefined }
+              : currentImage,
           ),
         );
         Alert.alert('图片上传失败', getZhihuErrorMessage(error));
-      });
+      })
+      .finally(() => uploadsRef.current.delete(image.id));
   };
 
   const chooseImage = async () => {
-    if (isSubmitting || isPicking) return;
+    if (busy || sendingRef.current || pickingRef.current) return;
+    pickingRef.current = true;
+    setIsPicking(true);
 
     try {
       const permission =
         await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!mountedRef.current) return;
       if (!permission.granted) {
         Alert.alert('需要相册权限', '请允许访问照片，才能在评论中上传图片。');
         return;
       }
 
-      setIsPicking(true);
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         allowsEditing: false,
@@ -105,6 +130,7 @@ export function CommentComposer({
         quality: 1,
       });
 
+      if (!mountedRef.current) return;
       if (!result.canceled && result.assets.length > 0) {
         const newImages = result.assets.map((asset) => ({
           uri: asset.uri,
@@ -116,24 +142,31 @@ export function CommentComposer({
         const existingUris = new Set(
           selectedImages.map((image) => image.asset.uri),
         );
-        const uniqueImages = newImages.filter(
-          (image) => !existingUris.has(image.uri),
-        );
+        const uniqueImages: SelectedImage[] = newImages
+          .filter((image) => {
+            if (existingUris.has(image.uri)) return false;
+            existingUris.add(image.uri);
+            return true;
+          })
+          .map((asset) => ({
+            id: nextImageId.current++,
+            asset,
+            status: 'uploading',
+          }));
         if (uniqueImages.length > 0) {
           setSelectedImages((currentImages) => [
             ...currentImages,
-            ...uniqueImages.map((asset) => ({
-              asset,
-              status: 'uploading' as const,
-            })),
+            ...uniqueImages,
           ]);
           uniqueImages.forEach(uploadSelectedImage);
         }
       }
     } catch {
-      Alert.alert('选择图片失败', '暂时无法读取相册，请稍后重试。');
+      if (mountedRef.current)
+        Alert.alert('选择图片失败', '暂时无法读取相册，请稍后重试。');
     } finally {
-      setIsPicking(false);
+      pickingRef.current = false;
+      if (mountedRef.current) setIsPicking(false);
     }
   };
 
@@ -149,7 +182,13 @@ export function CommentComposer({
 
   const submit = async () => {
     const text = inputText.trim();
-    if ((!text && selectedImages.length === 0) || isSubmitting) return;
+    if (
+      (!text && selectedImages.length === 0) ||
+      busy ||
+      sendingRef.current ||
+      pickingRef.current
+    )
+      return;
     if (uploadingCount > 0) {
       Alert.alert('图片上传中', '请等待图片上传完成后再发布。');
       return;
@@ -159,12 +198,18 @@ export function CommentComposer({
       return;
     }
 
+    sendingRef.current = true;
+    setIsSending(true);
     try {
       await onSubmit({ text, images: uploadedImages });
+      if (!mountedRef.current) return;
       onChangeText('');
       setSelectedImages([]);
     } catch {
       // The mutation owns the error toast/alert. Keep the draft for retry.
+    } finally {
+      sendingRef.current = false;
+      if (mountedRef.current) setIsSending(false);
     }
   };
 
@@ -186,7 +231,7 @@ export function CommentComposer({
             正在回复 {replyToName}
           </Text>
           <BouncyButton
-            disabled={isSubmitting}
+            disabled={busy || isPicking}
             onPress={onCancelReply}
             style={{ borderRadius: 8 }}
           >
@@ -203,7 +248,7 @@ export function CommentComposer({
         <View className="px-[15px] pt-2.5 bg-transparent">
           <View className="flex-row flex-wrap bg-transparent">
             {selectedImages.map((image) => (
-              <View key={image.asset.uri} className="mr-2 mb-2 bg-transparent">
+              <View key={image.id} className="mr-2 mb-2 bg-transparent">
                 <Image
                   source={{ uri: image.asset.uri }}
                   style={{ width: 48, height: 48, borderRadius: 6 }}
@@ -230,15 +275,16 @@ export function CommentComposer({
                   </View>
                 )}
                 <BouncyButton
-                  disabled={isSubmitting}
-                  onPress={() =>
+                  disabled={busy || isPicking}
+                  accessibilityLabel="移除图片"
+                  onPress={() => {
+                    uploadsRef.current.get(image.id)?.abort();
                     setSelectedImages((currentImages) =>
                       currentImages.filter(
-                        (currentImage) =>
-                          currentImage.asset.uri !== image.asset.uri,
+                        (currentImage) => currentImage.id !== image.id,
                       ),
-                    )
-                  }
+                    );
+                  }}
                   style={{
                     position: 'absolute',
                     top: -6,
@@ -267,7 +313,8 @@ export function CommentComposer({
 
       <View className="flex-row items-end px-1 py-1 bg-transparent">
         <BouncyButton
-          disabled={isSubmitting || isPicking}
+          disabled={busy || isPicking}
+          accessibilityLabel="添加图片"
           onPress={chooseImage}
           style={{
             width: 40,
@@ -288,16 +335,20 @@ export function CommentComposer({
           className="flex-1 min-h-[35px] max-h-[100px] px-2 pt-2.5 pb-2.5"
           style={{ color: textColor, fontSize: 15 }}
           placeholder={placeholder}
-          placeholderTextColor="#999"
+          placeholderTextColor={Colors[colorScheme].textTertiary}
+          editable={!busy}
           value={inputText}
           onChangeText={onChangeText}
           multiline
           maxLength={1000}
         />
         <BouncyButton
+          accessibilityRole="button"
+          accessibilityLabel="发布评论"
           disabled={
             (!inputText.trim() && selectedImages.length === 0) ||
-            isSubmitting ||
+            busy ||
+            isPicking ||
             uploadingCount > 0 ||
             failedCount > 0
           }
@@ -309,7 +360,7 @@ export function CommentComposer({
             borderRadius: 20,
           }}
         >
-          {isSubmitting ? (
+          {busy ? (
             <ActivityIndicator size="small" color={tintColor} />
           ) : (
             <Text

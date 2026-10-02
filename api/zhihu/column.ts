@@ -3,7 +3,7 @@ import type {
   ZhihuColumnItem,
   ZhihuPaging,
 } from '../../types/zhihu';
-import apiClient from '../client';
+import apiClient, { type ApiRequestOptions } from '../client';
 
 export const getColumn = async (
   id: string | number,
@@ -20,11 +20,13 @@ export const getColumnItems = async (
   id: string | number,
   limit = 20,
   offset = 0,
+  options: ApiRequestOptions = {},
 ): Promise<{ paging: ZhihuPaging; data: ZhihuColumnItem[] }> => {
   const res = await apiClient.get<{
     paging: ZhihuPaging;
     data: ZhihuColumnItem[];
   }>(`/columns/${id}/items`, {
+    signal: options.signal,
     params: {
       limit,
       offset,

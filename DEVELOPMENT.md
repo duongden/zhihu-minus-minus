@@ -108,6 +108,19 @@ npm run analyze:rich-content:inbox
 
 `npm run lint` 不修改文件；需要自动修复时使用 `npm run lint:fix` 或 `npm run format`，然后逐项检查 diff。富文本专项的 fixture 投递、脱敏和 manifest 规则见 [`features/rich-content/README.md`](./features/rich-content/README.md)。
 
+### 主要界面回归场景
+
+主要界面的代码回归覆盖分页、搜索提交、评论上传与提交、历史选择、账号切换和公共菜单。修改这些流程后，除运行 `npm run check`，还应在 Android/iOS Development Build 上检查以下场景；自动化逻辑测试不能替代原生布局和手势验收：
+
+- 首页、搜索和日报：快速点击历史词/建议词、切换分类、刷新过程中触底、分页失败后重试，以及过滤/曝光去重后整页为空。服务端返回结束标记或重复游标时应停止追加。
+- 回答、文章、想法和评论：分别验证首次失败、分页失败、排序切换、多行输入和图片输入栏。评论提交期间不得重复发送或清空新编辑；移除图片、重新选择同图及离页后，旧上传结果不得回填。想法多选投票应遵守选择上限、一次提交完整选项，提交及刷新期间不可重复发送。
+- 历史、收藏和用户列表：验证带连字符的历史标识、视频/问题跳转、长按选择、重复删除、刷新与翻页互斥，以及游客入口和账号切换后的状态。
+- 话题、专栏和消息：话题结构页下拉应刷新父话题、子话题和最佳回答者；专栏刷新应回到首批文章；通知和私信长用户名不得挤掉时间，分页失败应提供重试。
+- 发布和登录：小屏、横屏及大字体下四个发布入口均可滚动到达；回答邀请链接携带查询参数或结尾斜线时仍进入正确问题；搜索/邀请请求失败应区分于空结果；登录加载期间仍可取消。
+- 公共菜单和对话框：使用长文案、多操作项和白色/黄色自定义主色，检查滚动、操作可达性、按钮文字对比度，以及关闭动画期间连续选择只执行第一次操作。更新说明的嵌套滚动也需要双端验证。
+
+上述检查只使用合成内容；真实接口、系统选图和键盘行为需在目标平台另行验证，不将真实账号、正文或登录 URL 写入测试与截图。
+
 富文本后续路线按 [Issue #40](https://github.com/huamurui/zhihu-minus-minus/issues/40) 更新为原生 attributed text / Text Flow Island，实施进度与未完成项见 [Renderer V2 计划](./features/rich-content/docs/renderer-v2-plan.md)，Release指标见 [基准计划](./features/rich-content/docs/benchmark-plan.md)。“设置 → 外观与阅读 → 正文排版”提供经典排版、tiqian-super-mini、网页排版三选项；“功能开关 → 正文排版”也会进入同一页面。业务 `ZhihuContent` 默认读取持久偏好，也可显式传 `renderer` 覆盖。从“我的 → 富文本测试案例（开发）”进入功能原型或稳定fixture，可对照这三个后端；案例内切换仅保留于该页面，不写生产偏好。生产构建隐藏开发入口并重定向 `/dev/*`，但真实正文仍可通过设置选择tiqian-super-mini。开发包另有 `zhihu--:///dev/native-validation` 合成验证页，检查 AES、原子文件、恢复、流式哈希、离线公式及原生长文布局；结果文件只含时间戳和布尔值，不能导出真实账号或密钥。
 
 新增的 [tiqian-super-mini 功能原型](./features/rich-content/docs/renderer-v2-experiment-03-native-flow.md) 经过 HTML → `ZhihuDocument` → Rich Text IR → 本地 `modules/zhihu-rich-text`，初步支持同一流跨段选择、source map、装饰和行内附件。入口为上述案例列表的“tiqian-super-mini 原型”，也可在开发构建打开 `zhihu--:///dev/rich-content/prototype`。Android使用TextView/Spannable，iOS新增UIKit/TextKit adapter，两端共享Document、IR与JS交互宿主。未包含该模块或不支持的平台回退到RNRH。新增或变更模块后，对目标平台运行 `npx expo prebuild --platform android --no-install` 或 `npx expo prebuild --platform ios --no-install`，并重新编译/安装development build；Fast Refresh不能添加原生模块，Expo Go不支持此能力。iOS SVG解码依赖由本地podspec声明，prebuild后需安装Pods。

@@ -12,9 +12,13 @@ let mockQueryState: {
   isLoading: boolean;
 };
 const mockContentProps: ZhihuContentProps[] = [];
+const mockUseQuery = jest.fn();
 
 jest.mock('@tanstack/react-query', () => ({
-  useQuery: () => mockQueryState,
+  useQuery: (options: unknown) => {
+    mockUseQuery(options);
+    return mockQueryState;
+  },
 }));
 jest.mock('../api/client', () => ({ hasAuthenticationCookie: () => false }));
 jest.mock('../api/zhihu', () => ({
@@ -122,6 +126,35 @@ describe('feed context-menu preview transitions', () => {
     await preview.rerender(React.createElement(FeedCardPreview, { item }));
     expect(screen.getByText('保留 摘要 直到正文就绪')).toBeOnTheScreen();
     expect(screen.queryByText('正在准备完整内容...')).toBeNull();
+  });
+
+  it('fetches full detail for truncated and paid answer previews', async () => {
+    const inlineItem = { ...item, content: '<p>不完整正文</p>' };
+    const preview = await render(
+      React.createElement(FeedCardPreview, {
+        item: { ...inlineItem, contentNeedTruncated: true },
+      }),
+    );
+    expect(mockUseQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: true, placeholderData: undefined }),
+    );
+    await preview.rerender(
+      React.createElement(FeedCardPreview, {
+        item: { ...inlineItem, answerType: 'PAID' },
+      }),
+    );
+    expect(mockUseQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({ enabled: true, placeholderData: undefined }),
+    );
+    await preview.rerender(
+      React.createElement(FeedCardPreview, { item: inlineItem }),
+    );
+    expect(mockUseQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        enabled: false,
+        placeholderData: { content: inlineItem.content },
+      }),
+    );
   });
 
   it('opens once per visible session and closes toward the latest measured frame', async () => {

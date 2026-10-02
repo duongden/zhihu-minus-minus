@@ -5,9 +5,11 @@ import {
   Animated,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BouncyButton } from '@/components/BouncyButton';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -43,8 +45,10 @@ export function AppDialog({
 }: AppDialogProps) {
   const colorScheme = useColorScheme();
   const primaryColor = useThemeColor({}, 'primary');
+  const onPrimary = useThemeColor({}, 'onPrimary');
   const primaryTransparent = useThemeColor({}, 'primaryTransparent');
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [mounted, setMounted] = useState(visible);
   const mountedRef = useRef(visible);
   const onCloseRef = useRef(onClose);
@@ -128,6 +132,8 @@ export function AppDialog({
           {
             backgroundColor: Colors[colorScheme].blackTransparent,
             opacity,
+            paddingTop: insets.top + 20,
+            paddingBottom: insets.bottom + 20,
           },
         ]}
       >
@@ -145,61 +151,71 @@ export function AppDialog({
             styles.dialog,
             {
               width: Math.min(width - 40, 360),
+              maxHeight: Math.max(0, height - insets.top - insets.bottom - 40),
               backgroundColor: surface,
               transform: [{ scale }],
             },
           ]}
         >
-          {icon ? (
-            <View
-              style={[styles.icon, { backgroundColor: primaryTransparent }]}
-            >
-              <Ionicons name={icon} size={27} color={primary} />
-            </View>
-          ) : null}
-          <Text style={styles.title}>{title}</Text>
-          {message ? (
-            <Text type="secondary" style={styles.message}>
-              {message}
-            </Text>
-          ) : null}
-          {children}
-          {actions.length > 0 ? (
-            <View style={styles.actions}>
-              {actions.map((action) => {
-                const variant = action.variant || 'secondary';
-                const backgroundColor =
-                  variant === 'primary'
-                    ? primary
-                    : variant === 'destructive'
-                      ? Colors[colorScheme].danger
-                      : tertiary;
-                const color =
-                  variant === 'secondary'
-                    ? Colors[colorScheme].text
-                    : Colors[colorScheme].textInverse;
-                return (
-                  <BouncyButton
-                    key={action.label}
-                    accessibilityRole="button"
-                    accessibilityLabel={action.label}
-                    accessibilityState={{ disabled: action.disabled }}
-                    disabled={action.disabled}
-                    onPress={action.onPress}
-                    style={[
-                      styles.action,
-                      { backgroundColor },
-                      action.disabled && styles.disabled,
-                    ]}
-                  >
-                    <Text style={[styles.actionLabel, { color }]}>
-                      {action.label}
-                    </Text>
-                  </BouncyButton>
-                );
-              })}
-            </View>
-          ) : null}
+          <ScrollView
+            nestedScrollEnabled
+            style={styles.scroll}
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+          >
+            {icon ? (
+              <View
+                style={[styles.icon, { backgroundColor: primaryTransparent }]}
+              >
+                <Ionicons name={icon} size={27} color={primary} />
+              </View>
+            ) : null}
+            <Text style={styles.title}>{title}</Text>
+            {message ? (
+              <Text type="secondary" style={styles.message}>
+                {message}
+              </Text>
+            ) : null}
+            {children}
+            {actions.length > 0 ? (
+              <View style={styles.actions}>
+                {actions.map((action) => {
+                  const variant = action.variant || 'secondary';
+                  const backgroundColor =
+                    variant === 'primary'
+                      ? primary
+                      : variant === 'destructive'
+                        ? Colors[colorScheme].danger
+                        : tertiary;
+                  const color =
+                    variant === 'primary'
+                      ? onPrimary
+                      : variant === 'secondary'
+                        ? Colors[colorScheme].text
+                        : Colors[colorScheme].textInverse;
+                  return (
+                    <BouncyButton
+                      key={action.label}
+                      accessibilityRole="button"
+                      accessibilityLabel={action.label}
+                      accessibilityState={{ disabled: action.disabled }}
+                      disabled={action.disabled}
+                      onPress={action.onPress}
+                      style={[
+                        styles.action,
+                        { backgroundColor },
+                        action.disabled && styles.disabled,
+                      ]}
+                    >
+                      <Text style={[styles.actionLabel, { color }]}>
+                        {action.label}
+                      </Text>
+                    </BouncyButton>
+                  );
+                })}
+              </View>
+            ) : null}
+          </ScrollView>
         </Animated.View>
       </Animated.View>
     </Modal>
@@ -215,6 +231,14 @@ const styles = StyleSheet.create({
   },
   dialog: {
     borderRadius: 20,
+    overflow: 'hidden',
+  },
+  scroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+    width: '100%',
+  },
+  content: {
     padding: 24,
     alignItems: 'center',
   },

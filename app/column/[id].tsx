@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, Image } from 'react-native';
@@ -19,17 +19,22 @@ import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
+import { useRefreshAction } from '@/hooks/useRefreshAction';
+import { useZhihuInfiniteQuery } from '@/hooks/useZhihuInfiniteQuery';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import type { ZhihuColumnItem } from '@/types/zhihu';
 import { formatDate } from '@/utils/date';
+import { refreshInfiniteQuery } from '@/utils/query';
 
 export default function ColumnDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const _insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
+  const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
 
   const tintColor = useThemeColor({}, 'primary');
+  const onPrimary = useThemeColor({}, 'onPrimary');
   const textColor = useThemeColor({}, 'text');
   const backgroundColor = useThemeColor({}, 'background');
   const borderColor = useThemeColor({}, 'border');
@@ -80,20 +85,23 @@ export default function ColumnDetail() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isFetching,
+    isFetchNextPageError,
     isError: itemsError,
     refetch,
-    isRefetching,
-  } = useInfiniteQuery({
+  } = useZhihuInfiniteQuery({
     queryKey: ['column-items', id],
-    queryFn: ({ pageParam = 0 }) => getColumnItems(id, 20, pageParam as number),
+    queryFn: ({ pageParam = 0, signal }) =>
+      getColumnItems(id, 20, pageParam, { signal }),
     initialPageParam: 0,
-    getNextPageParam: (lastPage) => {
-      if (!lastPage || lastPage.paging?.is_end) return undefined;
-      const nextUrl = lastPage.paging?.next;
-      const match = nextUrl?.match(/offset=(\d+)/);
-      return match ? parseInt(match[1], 10) : undefined;
-    },
   });
+
+  const { refresh, refreshing } = useRefreshAction(() =>
+    Promise.all([
+      refetchColumn(),
+      refreshInfiniteQuery(queryClient, ['column-items', id]),
+    ]),
+  );
 
   const articles = itemsData?.pages.flatMap((page) => page.data) || [];
 
@@ -148,7 +156,7 @@ export default function ColumnDetail() {
               style={{
                 color: column.is_following
                   ? Colors[colorScheme].textSecondary
-                  : Colors[colorScheme].textInverse,
+                  : onPrimary,
               }}
               className="font-bold text-sm"
             >
@@ -273,14 +281,20 @@ export default function ColumnDetail() {
 
       <FlashList
         data={articles}
+        keyExtractor={(item) => `${item.type}-${item.id}`}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
         renderItem={renderItem}
         ListHeaderComponent={renderHeader}
         onEndReached={() =>
-          hasNextPage && !isFetchingNextPage && fetchNextPage()
+          hasNextPage &&
+          !isFetching &&
+          !refreshing &&
+          !isFetchNextPageError &&
+          fetchNextPage()
         }
         onEndReachedThreshold={0.5}
-        onRefresh={refetch}
-        refreshing={isRefetching}
+        onRefresh={refresh}
+        refreshing={refreshing}
         ListEmptyComponent={() => (
           <View className="p-10 items-center bg-transparent">
             {itemsLoading ? (
@@ -301,6 +315,12 @@ export default function ColumnDetail() {
             <ActivityIndicator
               style={{ marginVertical: 20 }}
               color={tintColor}
+            />
+          ) : isFetchNextPageError ? (
+            <QueryErrorView
+              compact
+              message="更多文章加载失败"
+              onRetry={() => void fetchNextPage()}
             />
           ) : articles.length > 0 && !hasNextPage ? (
             <Text type="secondary" className="text-center my-5">

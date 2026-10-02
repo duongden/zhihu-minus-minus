@@ -1,29 +1,31 @@
 import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQueryClient,
-} from '@tanstack/react-query';
-import { type Href, Stack, useRouter } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { Stack, useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert } from 'react-native';
 import { hasAuthenticationCookie } from '@/api/client';
-import {
-  batchDelReadHistory,
-  getReadHistory,
-  type ReadHistoryContentType,
-  type ReadHistoryDataItem,
-  type ReadHistoryResponse,
-} from '@/api/zhihu';
+import { getReadHistory, type ReadHistoryDataItem } from '@/api/zhihu';
 import { BouncyButton } from '@/components/BouncyButton';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
-import { useAuthStore } from '@/store/useAuthStore';
+import {
+  READ_HISTORY_QUERY_KEY,
+  useReadHistoryActions,
+} from '@/hooks/useReadHistoryActions';
+import { useRefreshAction } from '@/hooks/useRefreshAction';
+import { useZhihuInfiniteQuery } from '@/hooks/useZhihuInfiniteQuery';
+import { getAuthSessionVersion, useAuthStore } from '@/store/useAuthStore';
 import { formatDate } from '@/utils/date';
-import { getZhihuErrorMessage } from '@/utils/zhihuError';
+import { refreshInfiniteQuery } from '@/utils/query';
+import {
+  getReadHistoryKey,
+  getReadHistoryPair,
+  getReadHistoryRoute,
+  getSelectedReadHistoryPairs,
+} from '@/utils/readHistory';
 
 export default function HistoryScreen() {
   const router = useRouter();
@@ -32,6 +34,9 @@ export default function HistoryScreen() {
   const queryClient = useQueryClient();
   const cookies = useAuthStore((state) => state.cookies);
   const isAuthenticated = hasAuthenticationCookie(cookies);
+  const session = getAuthSessionVersion();
+  const selectionSession = useRef(session);
+  const { deleteHistory, isPending: isDeleting } = useReadHistoryActions();
   const [selecting, setSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -41,29 +46,30 @@ export default function HistoryScreen() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isFetching,
     refetch,
-    isRefetching,
     isError,
-  } = useInfiniteQuery({
-    queryKey: ['read-history'],
+  } = useZhihuInfiniteQuery({
+    queryKey: READ_HISTORY_QUERY_KEY,
     queryFn: ({ pageParam = 0, signal }) =>
       getReadHistory(20, pageParam as number, { signal }),
     enabled: isAuthenticated,
     initialPageParam: 0,
-    getNextPageParam: (lastPage: ReadHistoryResponse) => {
-      if (!lastPage || lastPage.paging?.is_end) return undefined;
-      const nextUrl = lastPage.paging?.next;
-      const match = nextUrl?.match(/offset=(\d+)/);
-      return match ? parseInt(match[1], 10) : undefined;
-    },
   });
+
+  const { refresh, refreshing } = useRefreshAction(() =>
+    refreshInfiniteQuery(queryClient, READ_HISTORY_QUERY_KEY),
+  );
 
   const historyItems = data?.pages.flatMap((page) => page.data) || [];
 
-  const makeItemKey = useCallback((item: ReadHistoryDataItem): string => {
-    const extra = item.data?.extra;
-    return `${extra?.content_type || 'unknown'}-${extra?.content_token || ''}`;
-  }, []);
+  useEffect(() => {
+    if (selectionSession.current !== session) {
+      selectionSession.current = session;
+      setSelecting(false);
+      setSelectedIds(new Set());
+    }
+  }, [session]);
 
   const exitSelection = () => {
     setSelecting(false);
@@ -79,87 +85,63 @@ export default function HistoryScreen() {
     });
   }, []);
 
-  const deleteMutation = useMutation({
-    mutationFn: async (
-      pairs: { content_token: string; content_type: ReadHistoryContentType }[],
-    ) => {
-      await batchDelReadHistory({ pairs, clear: false });
-    },
-    onSuccess: () => {
-      exitSelection();
-      queryClient.invalidateQueries({ queryKey: ['read-history'] });
-    },
-    onError: (error) => {
-      Alert.alert('删除失败', getZhihuErrorMessage(error));
-    },
-  });
-
-  const clearAllMutation = useMutation({
-    mutationFn: async () => {
-      await batchDelReadHistory({ clear: true });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['read-history'] });
-    },
-    onError: (error) => {
-      Alert.alert('清空失败', getZhihuErrorMessage(error));
-    },
-  });
-
   const handleClearAll = () => {
+    if (isDeleting || !isAuthenticated) return;
+    const session = getAuthSessionVersion();
     Alert.alert('清空全部记录', '确定要清空所有浏览历史吗？此操作不可撤销。', [
       { text: '取消', style: 'cancel' },
       {
         text: '清空',
         style: 'destructive',
-        onPress: () => clearAllMutation.mutate(),
+        onPress: () => {
+          if (session !== getAuthSessionVersion()) return;
+          void deleteHistory({ clear: true }).then((deleted) => {
+            if (deleted) exitSelection();
+          });
+        },
       },
     ]);
   };
 
   const handleDeleteSelected = () => {
-    if (selectedIds.size === 0) return;
-    const pairs: {
-      content_token: string;
-      content_type: ReadHistoryContentType;
-    }[] = [];
-    for (const key of selectedIds) {
-      const [type, token] = key.split('-');
-      pairs.push({
-        content_token: token,
-        content_type: type as ReadHistoryContentType,
-      });
-    }
+    if (isDeleting || !isAuthenticated) return;
+    const pairs = getSelectedReadHistoryPairs(historyItems, selectedIds);
+    if (pairs.length === 0) return;
+    const session = getAuthSessionVersion();
     Alert.alert('删除选中记录', `确定要删除选中的 ${pairs.length} 条记录吗？`, [
       { text: '取消', style: 'cancel' },
       {
         text: '删除',
         style: 'destructive',
-        onPress: () => deleteMutation.mutate(pairs),
+        onPress: () => {
+          if (session !== getAuthSessionVersion()) return;
+          void deleteHistory({ pairs, clear: false }).then((deleted) => {
+            if (deleted) exitSelection();
+          });
+        },
       },
     ]);
   };
 
-  const handleLongPress = () => {
-    if (!selecting) setSelecting(true);
+  const handleLongPress = (item: ReadHistoryDataItem) => {
+    if (isDeleting || !getReadHistoryPair(item)) return;
+    setSelecting(true);
+    setSelectedIds((previous) =>
+      new Set(previous).add(getReadHistoryKey(item)),
+    );
   };
 
   const onPressItem = useCallback(
     (item: ReadHistoryDataItem) => {
+      if (isDeleting) return;
       if (selecting) {
-        toggleSelect(makeItemKey(item));
+        if (getReadHistoryPair(item)) toggleSelect(getReadHistoryKey(item));
       } else {
-        const type = item.data?.extra?.content_type || 'answer';
-        const token = item.data?.extra?.content_token;
-        if (!token) return;
-        if (type === 'profile') {
-          router.push(`/user/${token}`);
-        } else {
-          router.push(`/${type}/${token}` as Href);
-        }
+        const route = getReadHistoryRoute(item);
+        if (route) router.push(route);
       }
     },
-    [makeItemKey, router, selecting, toggleSelect],
+    [isDeleting, router, selecting, toggleSelect],
   );
 
   const renderItem = ({ item }: { item: ReadHistoryDataItem }) => {
@@ -167,9 +149,7 @@ export default function HistoryScreen() {
     if (!rawData) return null;
 
     const extra = rawData.extra;
-    const _type = extra?.content_type || 'answer';
-
-    const key = makeItemKey(item);
+    const key = getReadHistoryKey(item);
     const isSelected = selectedIds.has(key);
 
     const mappedItem = {
@@ -183,7 +163,8 @@ export default function HistoryScreen() {
     return (
       <BouncyButton
         onPress={() => onPressItem(item)}
-        onLongPress={handleLongPress}
+        onLongPress={() => handleLongPress(item)}
+        disabled={isDeleting}
       >
         <View
           type="surface"
@@ -242,6 +223,7 @@ export default function HistoryScreen() {
               <BouncyButton
                 className="p-2 rounded-full"
                 onPress={exitSelection}
+                disabled={isDeleting}
               >
                 <Text style={{ color: primaryColor, fontSize: 16 }}>完成</Text>
               </BouncyButton>
@@ -249,6 +231,7 @@ export default function HistoryScreen() {
               <BouncyButton
                 className="p-2 rounded-full"
                 onPress={handleClearAll}
+                disabled={isDeleting}
               >
                 <Ionicons
                   name="trash-outline"
@@ -262,12 +245,11 @@ export default function HistoryScreen() {
       <FlashList
         data={historyItems}
         renderItem={renderItem}
-        keyExtractor={(item, index) => {
-          const id = item.data?.extra?.content_token || index;
-          return `history-${id}-${index}`;
-        }}
+        keyExtractor={getReadHistoryKey}
+        extraData={{ selecting, selectedIds, isDeleting }}
+        contentContainerStyle={{ paddingBottom: selecting ? 100 : 24 }}
         onEndReached={() => {
-          if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+          if (hasNextPage && !isFetching && !isDeleting) void fetchNextPage();
         }}
         onEndReachedThreshold={0.5}
         ListFooterComponent={() =>
@@ -296,17 +278,20 @@ export default function HistoryScreen() {
             )}
           </View>
         )}
-        onRefresh={refetch}
-        refreshing={isRefetching}
+        onRefresh={
+          isAuthenticated && !isDeleting ? () => void refresh() : undefined
+        }
+        refreshing={refreshing}
       />
       {selecting && selectedIds.size > 0 && (
         <BouncyButton
           onPress={handleDeleteSelected}
+          disabled={isDeleting}
           className="absolute bottom-8 left-8 right-8 py-3 rounded-xl items-center"
           style={{ backgroundColor: primaryColor }}
         >
           <Text className="text-on-primary text-base font-bold">
-            删除选中 ({selectedIds.size})
+            {isDeleting ? '正在删除…' : `删除选中 (${selectedIds.size})`}
           </Text>
         </BouncyButton>
       )}

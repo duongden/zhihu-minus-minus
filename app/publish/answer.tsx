@@ -6,12 +6,15 @@ import { ActivityIndicator, FlatList, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getInvitedQuestions, searchCreatorQuestions } from '@/api/zhihu';
 import { BouncyButton } from '@/components/BouncyButton';
+import { QueryErrorView } from '@/components/QueryErrorView';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
-import type { ZhihuInvitationItem, ZhihuQuestion } from '@/types/zhihu';
-
-type PublishQuestionItem = ZhihuInvitationItem | ZhihuQuestion;
+import type { ZhihuQuestion } from '@/types/zhihu';
+import {
+  getPublishingQuestionId,
+  type PublishingQuestionItem,
+} from '@/utils/publishingQuestion';
 
 export default function PublishAnswerScreen() {
   const insets = useSafeAreaInsets();
@@ -21,39 +24,57 @@ export default function PublishAnswerScreen() {
   const textColor = Colors[colorScheme].text;
   const secondaryColor = Colors[colorScheme].textSecondary;
   const borderCol = Colors[colorScheme].border;
-  const _backgroundColor = Colors[colorScheme].background;
 
   const [activeTab, setActiveTab] = useState<'search' | 'invite'>('search');
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedQuery(query), 500);
+    const timer = setTimeout(() => setDebouncedQuery(query.trim()), 500);
     return () => clearTimeout(timer);
   }, [query]);
 
-  const { data: searchResults, isLoading: isSearching } = useQuery({
+  const {
+    data: searchResults,
+    isLoading: isSearching,
+    isError: searchError,
+    refetch: retrySearch,
+  } = useQuery({
     queryKey: ['creator-search', debouncedQuery],
     queryFn: () => searchCreatorQuestions(debouncedQuery),
     enabled: debouncedQuery.length > 0 && activeTab === 'search',
   });
 
-  const { data: invitedResults, isLoading: isInvitedLoading } = useQuery({
+  const {
+    data: invitedResults,
+    isLoading: isInvitedLoading,
+    isError: invitedError,
+    refetch: retryInvited,
+  } = useQuery({
     queryKey: ['invited-questions'],
     queryFn: () => getInvitedQuestions(),
     enabled: activeTab === 'invite',
   });
 
-  const renderQuestionItem = ({ item }: { item: PublishQuestionItem }) => {
+  const searchPending = query.trim() !== debouncedQuery || isSearching;
+  const searchItems =
+    !query.trim() || searchPending
+      ? []
+      : (searchResults?.data.filter((item) => getPublishingQuestionId(item)) ??
+        []);
+  const invitedItems =
+    invitedResults?.data.filter((item) => getPublishingQuestionId(item)) ?? [];
+
+  const renderQuestionItem = ({ item }: { item: PublishingQuestionItem }) => {
+    const questionId = getPublishingQuestionId(item);
+    if (!questionId) return null;
     // Check if it's an invitation item
     if ('content' in item && item.content?.text) {
       const {
         title: inviter,
         sub_title: inviteMsg,
         text: qTitle,
-        target_link,
       } = item.content;
-      const questionId = target_link?.split('/').pop();
 
       return (
         <BouncyButton
@@ -95,7 +116,7 @@ export default function PublishAnswerScreen() {
 
     return (
       <BouncyButton
-        onPress={() => router.push(`/question/write/${question.id}`)}
+        onPress={() => router.push(`/question/write/${questionId}`)}
         className="px-5 py-4 border-b"
         style={{ borderBottomColor: borderCol }}
       >
@@ -190,32 +211,42 @@ export default function PublishAnswerScreen() {
                 onChangeText={setQuery}
                 autoFocus
               />
-              {isSearching && (
+              {query.trim() && searchPending ? (
                 <ActivityIndicator
                   size="small"
                   color={tintColor}
                   className="ml-2"
                 />
-              )}
+              ) : null}
             </View>
           </View>
           <FlatList
-            data={searchResults?.data || []}
+            data={searchItems}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
             renderItem={renderQuestionItem}
-            keyExtractor={(_item, index) => index.toString()}
-            ListEmptyComponent={() => (
-              <View className="flex-1 justify-center items-center mt-20 px-10">
-                <Ionicons name="search-outline" size={64} color={borderCol} />
-                <Text
-                  className="text-center mt-4"
-                  style={{ color: secondaryColor }}
-                >
-                  {query.trim()
-                    ? '没有找到相关问题喵'
-                    : '试着搜索一些你感兴趣的话题吧'}
-                </Text>
-              </View>
-            )}
+            keyExtractor={(item) => getPublishingQuestionId(item) ?? ''}
+            ListEmptyComponent={() =>
+              query.trim() && searchPending ? null : query.trim() &&
+                searchError ? (
+                <QueryErrorView
+                  message="问题搜索失败"
+                  onRetry={() => void retrySearch()}
+                />
+              ) : (
+                <View className="flex-1 justify-center items-center mt-20 px-10">
+                  <Ionicons name="search-outline" size={64} color={borderCol} />
+                  <Text
+                    className="text-center mt-4"
+                    style={{ color: secondaryColor }}
+                  >
+                    {query.trim()
+                      ? '没有找到相关问题喵'
+                      : '试着搜索一些你感兴趣的话题吧'}
+                  </Text>
+                </View>
+              )
+            }
           />
         </View>
       ) : (
@@ -226,20 +257,29 @@ export default function PublishAnswerScreen() {
             </View>
           ) : (
             <FlatList
-              data={invitedResults?.data || []}
+              data={invitedItems}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
               renderItem={renderQuestionItem}
-              keyExtractor={(_item, index) => index.toString()}
-              ListEmptyComponent={() => (
-                <View className="flex-1 justify-center items-center mt-20 px-10">
-                  <Ionicons name="mail-outline" size={64} color={borderCol} />
-                  <Text
-                    className="text-center mt-4"
-                    style={{ color: secondaryColor }}
-                  >
-                    暂时没有收到回答邀请喵
-                  </Text>
-                </View>
-              )}
+              keyExtractor={(item) => getPublishingQuestionId(item) ?? ''}
+              ListEmptyComponent={() =>
+                invitedError ? (
+                  <QueryErrorView
+                    message="回答邀请加载失败"
+                    onRetry={() => void retryInvited()}
+                  />
+                ) : (
+                  <View className="flex-1 justify-center items-center mt-20 px-10">
+                    <Ionicons name="mail-outline" size={64} color={borderCol} />
+                    <Text
+                      className="text-center mt-4"
+                      style={{ color: secondaryColor }}
+                    >
+                      暂时没有收到回答邀请喵
+                    </Text>
+                  </View>
+                )
+              }
             />
           )}
         </View>

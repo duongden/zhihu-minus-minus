@@ -198,6 +198,8 @@ export default function ProfileScreen({ isActive = true }: ProfileScreenProps) {
       return;
     }
 
+    const startingSession = getAuthSessionVersion();
+    const targetAccountId = accounts[index]?.me.id;
     let verifiedSession:
       | Awaited<ReturnType<typeof verifyZhihuSession>>
       | undefined;
@@ -205,13 +207,24 @@ export default function ProfileScreen({ isActive = true }: ProfileScreenProps) {
       try {
         verifiedSession = await verifyZhihuSession(targetCookies ?? '');
       } catch {
-        Alert.alert('切换失败', '目标账号的登录信息已失效，请重新登录。');
+        if (startingSession === getAuthSessionVersion()) {
+          Alert.alert('切换失败', '目标账号的登录信息已失效，请重新登录。');
+        }
         sessionChangeInFlight.current = false;
         setSessionChanging(false);
         return;
       }
     }
 
+    const currentAccount = useAuthStore.getState().accounts[index];
+    if (
+      startingSession !== getAuthSessionVersion() ||
+      (index !== -1 && currentAccount?.me.id !== targetAccountId)
+    ) {
+      sessionChangeInFlight.current = false;
+      setSessionChanging(false);
+      return;
+    }
     switchAccount(index, verifiedSession);
     const session = getAuthSessionVersion();
     queryClient.clear();
@@ -248,14 +261,22 @@ export default function ProfileScreen({ isActive = true }: ProfileScreenProps) {
 
   const handleAddAccount = async () => {
     if (sessionChangeInFlight.current) return;
+    sessionChangeInFlight.current = true;
+    setSessionChanging(true);
+    const session = getAuthSessionVersion();
     setAccountModalVisible(false);
     // Keep the current app account selected, but start the login WebView with
     // an empty native session. A successful login will write the new cookies.
     try {
       await CookieManager.clearAllStores();
-      router.push('/login');
+      if (session === getAuthSessionVersion()) router.push('/login');
     } catch {
-      Alert.alert('无法添加账号', '清理网页登录状态失败，请稍后重试。');
+      if (session === getAuthSessionVersion()) {
+        Alert.alert('无法添加账号', '清理网页登录状态失败，请稍后重试。');
+      }
+    } finally {
+      sessionChangeInFlight.current = false;
+      setSessionChanging(false);
     }
   };
 

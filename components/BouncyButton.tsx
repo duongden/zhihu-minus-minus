@@ -69,11 +69,12 @@ export function BouncyButton({
   ...props
 }: BouncyButtonProps) {
   const isAndroid = Platform.OS === 'android';
-  const settings = useSettingsStore();
-  const pressOpacity = settings.pressOpacity ?? 0.82;
-  const pressScale = settings.pressScale ?? 0.98;
+  const pressOpacity = useSettingsStore((state) => state.pressOpacity ?? 0.82);
+  const pressScale = useSettingsStore((state) => state.pressScale ?? 0.98);
   const primaryColor = useThemeColor({}, 'primary');
-  const androidFeedbackType = settings.androidFeedbackType ?? 'ripple';
+  const androidFeedbackType = useSettingsStore(
+    (state) => state.androidFeedbackType ?? 'ripple',
+  );
 
   // 是否启用物理动画（缩放与不透明度）
   const enableAnimation = !isAndroid || androidFeedbackType === 'scale-opacity';

@@ -51,7 +51,13 @@ export function FeedCardPreview({ item }: FeedCardPreviewProps) {
           ? 'pin'
           : 'question';
   const inlineContent = item.content as unknown;
-  const hasInlineContent = hasInlineRichContent(inlineContent);
+  const hasInlineContent =
+    hasInlineRichContent(inlineContent) &&
+    !(
+      item.type === 'answers' &&
+      (item.answerType?.toUpperCase() === 'PAID' ||
+        item.contentNeedTruncated === true)
+    );
   const queryKey = isVideo
     ? ['video-preview', item.id]
     : getRichContentQueryKey(

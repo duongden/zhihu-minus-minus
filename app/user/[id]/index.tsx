@@ -546,6 +546,7 @@ export default function UserDetailScreen() {
           isLoading: activitiesQuery.isLoading,
           isError: activitiesQuery.isError,
           isFetchingNextPage: activitiesQuery.isFetchingNextPage,
+          isFetching: activitiesQuery.isFetching,
           hasNextPage: activitiesQuery.hasNextPage,
           fetchNextPage: activitiesQuery.fetchNextPage,
           refetch: activitiesQuery.refetch,
@@ -559,6 +560,7 @@ export default function UserDetailScreen() {
           isLoading: answersQuery.isLoading,
           isError: answersQuery.isError,
           isFetchingNextPage: answersQuery.isFetchingNextPage,
+          isFetching: answersQuery.isFetching,
           hasNextPage: answersQuery.hasNextPage,
           fetchNextPage: answersQuery.fetchNextPage,
           refetch: answersQuery.refetch,
@@ -572,6 +574,7 @@ export default function UserDetailScreen() {
           isLoading: articlesQuery.isLoading,
           isError: articlesQuery.isError,
           isFetchingNextPage: articlesQuery.isFetchingNextPage,
+          isFetching: articlesQuery.isFetching,
           hasNextPage: articlesQuery.hasNextPage,
           fetchNextPage: articlesQuery.fetchNextPage,
           refetch: articlesQuery.refetch,
@@ -585,6 +588,7 @@ export default function UserDetailScreen() {
           isLoading: questionsQuery.isLoading,
           isError: questionsQuery.isError,
           isFetchingNextPage: questionsQuery.isFetchingNextPage,
+          isFetching: questionsQuery.isFetching,
           hasNextPage: questionsQuery.hasNextPage,
           fetchNextPage: questionsQuery.fetchNextPage,
           refetch: questionsQuery.refetch,
@@ -597,6 +601,7 @@ export default function UserDetailScreen() {
           isLoading: pinsQuery.isLoading,
           isError: pinsQuery.isError,
           isFetchingNextPage: pinsQuery.isFetchingNextPage,
+          isFetching: pinsQuery.isFetching,
           hasNextPage: pinsQuery.hasNextPage,
           fetchNextPage: pinsQuery.fetchNextPage,
           refetch: pinsQuery.refetch,
@@ -610,6 +615,7 @@ export default function UserDetailScreen() {
     fetchNextPage: fetchNextSearchPage,
     hasNextPage: hasNextSearchPage,
     isFetchingNextPage: isFetchingNextSearchPage,
+    isFetching: isFetchingSearch,
     isLoading: searchLoading,
     isError: isSearchError,
     isRefetching: isRefetchingSearch,
@@ -1151,7 +1157,7 @@ export default function UserDetailScreen() {
         <FlashList<FeedItem>
           data={currentListItems}
           renderItem={({ item }) => <FeedCard item={item} />}
-          keyExtractor={(item) => `user-search-item-${item.id}`}
+          keyExtractor={(item) => `user-search-item-${item.type}-${item.id}`}
           scrollEventThrottle={16}
           ListHeaderComponent={
             <View className="bg-transparent">
@@ -1186,8 +1192,7 @@ export default function UserDetailScreen() {
             )
           }
           onEndReached={() => {
-            if (hasNextSearchPage && !isFetchingNextSearchPage)
-              fetchNextSearchPage();
+            if (hasNextSearchPage && !isFetchingSearch) fetchNextSearchPage();
           }}
           onEndReachedThreshold={0.5}
           onRefresh={() => void refreshSearch()}
@@ -1324,7 +1329,7 @@ export default function UserDetailScreen() {
                       )
                     }
                     onEndReached={() => {
-                      if (query.hasNextPage && !query.isFetchingNextPage) {
+                      if (query.hasNextPage && !query.isFetching) {
                         query.fetchNextPage();
                       }
                     }}

@@ -86,6 +86,11 @@ import {
   getFeedContentKey,
   getInMemoryFeedKey,
 } from '@/utils/feedIdentity';
+import {
+  getFeedNextUrl,
+  getFeedRequestUrl,
+  getNextUnvisitedFeedPage,
+} from '@/utils/feedPagination';
 import { resolveLocalAccountKey } from '@/utils/localAccount';
 import { refreshInfiniteQuery, shouldRetryQuery } from '@/utils/query';
 import { getZhihuErrorMessage } from '@/utils/zhihuError';
@@ -156,14 +161,15 @@ export default function HomeScreen() {
   const nativeIOSBottomTabs = Platform.OS === 'ios' && useNativeIOSBottomTabs;
 
   // 动态过滤 Tabs
-  const currentTabs = useMemo(() => {
+  const currentTabs = useMemo<TabType[]>(() => {
     const configuredTabs = TABS.filter((tab) => {
       if (tab === 'profile') return true;
       return visibleTabs.includes(tab);
     });
-    return nativeIOSBottomTabs
+    const tabs = nativeIOSBottomTabs
       ? configuredTabs.filter((tab) => !['publish', 'profile'].includes(tab))
       : configuredTabs;
+    return tabs.length > 0 ? tabs : ['recommend'];
   }, [nativeIOSBottomTabs, visibleTabs]);
 
   const homeTabs = useMemo(() => {
@@ -353,6 +359,7 @@ export default function HomeScreen() {
 
   // 顶部 Tab 指示器动画
   const topIndicatorStyle = useAnimatedStyle(() => {
+    if (homeTabsCount <= 1) return { transform: [{ translateX: 0 }] };
     const tabWidth = 58;
     const maxIndex = Math.max(0, homeTabsCount - 1);
     const clampedScroll = interpolate(
@@ -1038,6 +1045,8 @@ const FeedList = React.forwardRef<
       fetchNextPage,
       hasNextPage,
       isFetchingNextPage,
+      isFetching,
+      isFetchNextPageError,
       isLoading,
       isError,
       error: feedError,
@@ -1046,20 +1055,12 @@ const FeedList = React.forwardRef<
     } = useInfiniteQuery({
       queryKey: feedQueryKey,
       queryFn: async ({ pageParam = FEED_URLS[tab], signal }) => {
-        let requestUrl = pageParam as string;
-        const isInitialUrl =
-          (requestUrl === FEED_URLS[tab] ||
-            requestUrl === 'zhihu://local-feed' ||
-            requestUrl.includes('feed/topstory/recommend')) &&
-          !requestUrl.includes('action=down');
-        if (isRefreshing && isInitialUrl) {
-          const sep = requestUrl.includes('?') ? '&' : '?';
-          requestUrl = `${requestUrl}${sep}action=up&t=${Date.now()}`;
-        }
-
-        console.log(
-          `🌐 [queryFn] Requesting feed (tab=${tab}, isRefreshing=${isRefreshing})`,
+        const requestUrl = getFeedRequestUrl(
+          pageParam,
+          FEED_URLS[tab],
+          refreshInFlightRef.current,
         );
+        const isInitialUrl = pageParam === FEED_URLS[tab];
         const data = await getFeed(requestUrl, { signal });
         const rawItems = data.data || [];
         seedAnswerDetailsFromFeed(queryClient, rawItems);
@@ -1077,8 +1078,7 @@ const FeedList = React.forwardRef<
             parseHotData(item, index),
           );
 
-        const nextUrl =
-          data.paging?.next?.replace('http://', 'https://') ?? null;
+        const nextUrl = getFeedNextUrl(data.paging);
 
         if (launchCacheContext && isInitialUrl && items.length > 0) {
           void feedCacheRepository
@@ -1092,7 +1092,8 @@ const FeedList = React.forwardRef<
         };
       },
       initialPageParam: FEED_URLS[tab],
-      getNextPageParam: (lastPage) => lastPage.nextUrl,
+      getNextPageParam: (lastPage, _pages, _lastPageParam, pageParams) =>
+        getNextUnvisitedFeedPage(lastPage.nextUrl, pageParams),
       // Guest recommendations already try both the App endpoint and the Web
       // compatibility endpoint. Retrying the whole pair here can otherwise
       // keep an empty screen loading for up to a minute (2 endpoints x 3 runs).
@@ -1238,8 +1239,9 @@ const FeedList = React.forwardRef<
     // 这里主动补页把可渲染行数补到 MIN_RENDERABLE_ITEMS，并以
     // MAX_AUTO_FETCH_ROUNDS 封顶，避免高过滤率下无节制连续请求。
     useEffect(() => {
-      if (!filterEnabled) return;
-      if (!hasNextPage || isFetchingNextPage) return;
+      if (!isActive || (!filterEnabled && !localDedupEnabled)) return;
+      if (!hasNextPage || isFetching || isRefreshing || isFetchNextPageError)
+        return;
       if (flattenedData.length >= MIN_RENDERABLE_ITEMS) return;
       if (autoFetchRounds.current >= MAX_AUTO_FETCH_ROUNDS) {
         // 相同值的 setState 会被 React bail out，不会造成循环
@@ -1247,12 +1249,16 @@ const FeedList = React.forwardRef<
         return;
       }
       autoFetchRounds.current += 1;
-      void fetchNextPage();
+      void fetchNextPage({ cancelRefetch: false });
     }, [
+      isActive,
+      localDedupEnabled,
+      isRefreshing,
+      isFetching,
+      isFetchNextPageError,
       filterEnabled,
       flattenedData.length,
       hasNextPage,
-      isFetchingNextPage,
       fetchNextPage,
     ]);
 
@@ -1295,10 +1301,16 @@ const FeedList = React.forwardRef<
             return `feed-${key || index}`;
           }}
           onEndReached={() => {
-            // 只要有下一页就继续追加。隐藏模式被过滤项不占行，列表自然偏短，
-            // 这里依靠 hasNextPage 持续续页即可；列表过短且已到底时由 footer
-            // 给出一句诚实的提示，避免用户以为加载卡住。
-            if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+            if (
+              isActive &&
+              hasNextPage &&
+              !isFetching &&
+              !refreshInFlightRef.current &&
+              !isFetchNextPageError &&
+              (!(filterEnabled || localDedupEnabled) ||
+                flattenedData.length >= MIN_RENDERABLE_ITEMS)
+            )
+              void fetchNextPage({ cancelRefetch: false });
           }}
           onEndReachedThreshold={0.5}
           onViewableItemsChanged={onViewableItemsChanged}
@@ -1349,21 +1361,33 @@ const FeedList = React.forwardRef<
           ListFooterComponent={
             isFetchingNextPage ? (
               <ActivityIndicator style={{ margin: 20 }} />
-            ) : filterEnabled &&
+            ) : isFetchNextPageError ? (
+              <QueryErrorView
+                compact
+                message="更多内容加载失败"
+                onRetry={() => void fetchNextPage({ cancelRefetch: false })}
+              />
+            ) : (filterEnabled || localDedupEnabled) &&
               !isRefreshing &&
               !isRefetching &&
               !isLoading &&
-              flattenedData.length > 0 &&
               flattenedData.length <= MIN_RENDERABLE_ITEMS &&
               (!hasNextPage || autoFetchExhausted) ? (
-              <Text
-                type="secondary"
-                style={{ textAlign: 'center', margin: 20, fontSize: 12 }}
-              >
-                {hasNextPage
-                  ? '过滤后内容偏少，下拉可继续加载'
-                  : '过滤后内容偏少，已无更多可加载'}
-              </Text>
+              hasNextPage ? (
+                <BouncyButton
+                  onPress={() => void fetchNextPage({ cancelRefetch: false })}
+                  className="items-center p-5"
+                >
+                  <Text type="primary">过滤后内容偏少，点击继续加载</Text>
+                </BouncyButton>
+              ) : (
+                <Text
+                  type="secondary"
+                  style={{ textAlign: 'center', margin: 20, fontSize: 12 }}
+                >
+                  过滤后内容偏少，已无更多可加载
+                </Text>
+              )
             ) : null
           }
           ListEmptyComponent={

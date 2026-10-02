@@ -1,13 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQueryClient,
-} from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, StyleSheet } from 'react-native';
+import { hasAuthenticationCookie } from '@/api/client';
 import {
   createCollection,
   deleteCollection,
@@ -22,16 +19,14 @@ import { QueryErrorView } from '@/components/QueryErrorView';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { useRefreshAction } from '@/hooks/useRefreshAction';
+import { useZhihuInfiniteQuery } from '@/hooks/useZhihuInfiniteQuery';
+import { useAuthStore } from '@/store/useAuthStore';
+import type { ZhihuCollectionSummary } from '@/types/zhihu';
+import { refreshInfiniteQuery } from '@/utils/query';
 import { getZhihuErrorMessage } from '@/utils/zhihuError';
 
-interface CollectionItem {
-  id: string | number;
-  title: string;
-  description?: string;
-  is_public: boolean;
-  answer_count?: number;
-  follower_count?: number;
-}
+type CollectionItem = ZhihuCollectionSummary;
 
 export default function MyCollectionsScreen() {
   const colorScheme = useColorScheme();
@@ -39,6 +34,8 @@ export default function MyCollectionsScreen() {
   const navigation = useNavigation();
   const queryClient = useQueryClient();
 
+  const cookies = useAuthStore((state) => state.cookies);
+  const isAuthenticated = hasAuthenticationCookie(cookies);
   const primaryColor = useThemeColor({}, 'primary');
   const borderColor = Colors[colorScheme].border;
   const [modalVisible, setModalVisible] = useState(false);
@@ -54,25 +51,24 @@ export default function MyCollectionsScreen() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isFetching,
     refetch,
-    isRefetching,
     isError,
-  } = useInfiniteQuery({
+  } = useZhihuInfiniteQuery({
     queryKey: ['my-collections'],
     queryFn: ({ pageParam = 0 }) => getMyCollections(20, pageParam as number),
+    enabled: isAuthenticated,
     initialPageParam: 0,
-    getNextPageParam: (lastPage) => {
-      if (!lastPage || lastPage.paging?.is_end) return undefined;
-      const nextUrl = lastPage.paging?.next;
-      const match = nextUrl?.match(/offset=(\d+)/);
-      return match ? parseInt(match[1], 10) : undefined;
-    },
   });
+
+  const { refresh, refreshing } = useRefreshAction(() =>
+    refreshInfiniteQuery(queryClient, ['my-collections']),
+  );
 
   const createMutation = useMutation({
     mutationFn: createCollection,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['my-collections'] });
+      void refreshInfiniteQuery(queryClient, ['my-collections']);
       closeModal();
     },
     onError: (error) => {
@@ -84,8 +80,12 @@ export default function MyCollectionsScreen() {
       id: string | number;
       data: { title: string; description: string; is_public: boolean };
     }) => updateCollection(vars.id, vars.data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['my-collections'] });
+    onSuccess: (_response, { id }) => {
+      void refreshInfiniteQuery(queryClient, ['my-collections']);
+      void queryClient.invalidateQueries({
+        queryKey: ['collection-detail', String(id)],
+        exact: true,
+      });
       closeModal();
     },
     onError: (error) => {
@@ -94,27 +94,46 @@ export default function MyCollectionsScreen() {
   });
   const deleteMutation = useMutation({
     mutationFn: deleteCollection,
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: ['my-collections'] }),
+    onSuccess: (_response, id) => {
+      queryClient.removeQueries({
+        queryKey: ['collection-detail', String(id)],
+        exact: true,
+      });
+      queryClient.removeQueries({
+        queryKey: ['collection-contents', String(id)],
+        exact: true,
+      });
+      return refreshInfiniteQuery(queryClient, ['my-collections']);
+    },
     onError: (error) => {
       Alert.alert('删除失败', getZhihuErrorMessage(error));
     },
   });
 
-  const openModal = useCallback((item?: CollectionItem) => {
-    if (item) {
-      setEditingItem(item);
-      setTitle(item.title);
-      setDescription(item.description || '');
-      setIsPublic(item.is_public);
-    } else {
-      setEditingItem(null);
-      setTitle('');
-      setDescription('');
-      setIsPublic(true);
-    }
-    setModalVisible(true);
-  }, []);
+  const isSaving = createMutation.isPending || updateMutation.isPending;
+
+  const openModal = useCallback(
+    (item?: CollectionItem) => {
+      if (!isAuthenticated) {
+        router.push('/login');
+        return;
+      }
+      if (isSaving) return;
+      if (item) {
+        setEditingItem(item);
+        setTitle(item.title);
+        setDescription(item.description || '');
+        setIsPublic(item.is_public ?? false);
+      } else {
+        setEditingItem(null);
+        setTitle('');
+        setDescription('');
+        setIsPublic(true);
+      }
+      setModalVisible(true);
+    },
+    [isAuthenticated, isSaving, router],
+  );
 
   useEffect(() => {
     navigation.setOptions({
@@ -123,24 +142,30 @@ export default function MyCollectionsScreen() {
         <BouncyButton
           className="p-2 rounded-full"
           onPress={() => openModal()}
+          disabled={isSaving}
           style={{ marginRight: 15 }}
         >
           <Ionicons name="add" size={28} color={primaryColor} />
         </BouncyButton>
       ),
     });
-  }, [navigation, openModal, primaryColor]);
+  }, [isSaving, navigation, openModal, primaryColor]);
   const closeModal = () => {
     setModalVisible(false);
     setEditingItem(null);
   };
 
   const handleSave = () => {
+    if (isSaving || !isAuthenticated) return;
     if (!title.trim()) {
       Alert.alert('提示', '请输入标题喵');
       return;
     }
-    const data = { title, description, is_public: isPublic };
+    const data = {
+      title: title.trim(),
+      description: description.trim(),
+      is_public: isPublic,
+    };
     if (editingItem) updateMutation.mutate({ id: editingItem.id, data });
     else createMutation.mutate(data);
   };
@@ -160,10 +185,7 @@ export default function MyCollectionsScreen() {
     );
   };
 
-  const collections =
-    (data?.pages.flatMap((page) => page.data) as
-      | CollectionItem[]
-      | undefined) || [];
+  const collections = data?.pages.flatMap((page) => page.data) || [];
 
   const renderItem = ({ item }: { item: CollectionItem }) => (
     <BouncyButton
@@ -234,16 +256,26 @@ export default function MyCollectionsScreen() {
       <FlashList
         data={collections}
         renderItem={renderItem}
+        keyExtractor={(item) => String(item.id)}
         {...({ estimatedItemSize: 90 } as object)}
         onEndReached={() => {
-          if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+          if (hasNextPage && !isFetching) void fetchNextPage();
         }}
-        onRefresh={refetch}
-        refreshing={isRefetching}
+        onRefresh={isAuthenticated ? () => void refresh() : undefined}
+        refreshing={refreshing}
         ListHeaderComponent={() => <View className="h-2.5" />}
+        ListFooterComponent={
+          isFetchingNextPage ? (
+            <ActivityIndicator style={{ margin: 20 }} color={primaryColor} />
+          ) : null
+        }
         ListEmptyComponent={() => (
-          <View className="flex-1 p-[100px] items-center">
-            {isLoading ? (
+          <View className="px-6 py-16 items-center">
+            {!isAuthenticated ? (
+              <BouncyButton onPress={() => router.push('/login')}>
+                <Text type="secondary">登录后查看收藏夹，点此登录</Text>
+              </BouncyButton>
+            ) : isLoading ? (
               <ActivityIndicator color={primaryColor} />
             ) : isError ? (
               <QueryErrorView
@@ -260,7 +292,10 @@ export default function MyCollectionsScreen() {
 
       <BottomSheet
         visible={modalVisible}
-        onClose={closeModal}
+        dismissible={!isSaving}
+        onClose={() => {
+          if (!isSaving) closeModal();
+        }}
         title={editingItem ? '编辑收藏夹' : '新建收藏夹'}
         height="72%"
         keyboardAvoiding

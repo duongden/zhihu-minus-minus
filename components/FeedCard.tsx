@@ -90,6 +90,8 @@ function areFeedCardPropsEqual(
     previousItem.commentCount === nextItem.commentCount &&
     previousItem.favlistsCount === nextItem.favlistsCount &&
     previousItem.voted === nextItem.voted &&
+    previousItem.answerType === nextItem.answerType &&
+    previousItem.contentNeedTruncated === nextItem.contentNeedTruncated &&
     previousItem.author.id === nextItem.author.id &&
     previousItem.author.url_token === nextItem.author.url_token &&
     previousItem.author.name === nextItem.author.name &&
@@ -116,6 +118,10 @@ const FeedCardComponent = ({ item, tab }: FeedCardProps) => {
 
   const [voted, setVoted] = useState(item.voted || 0);
   const [voteCount, setVoteCount] = useState(item.voteCount || 0);
+  const identity = `${item.type}:${item.id}`;
+  const currentIdentityRef = useRef(identity);
+  currentIdentityRef.current = identity;
+  const pendingVotesRef = useRef(new Set<string>());
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: FlashList identity changes must reset local reactions even when initial values match the previous item.
   useEffect(() => {
@@ -210,6 +216,14 @@ const FeedCardComponent = ({ item, tab }: FeedCardProps) => {
     height: number;
   } | null>(null);
 
+  // Recycled cells must not retain another item's preview or share sheet.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: resetting overlays is keyed to the recycled content identity.
+  useEffect(() => {
+    setMenuVisible(false);
+    setPreviewVisible(false);
+    setOriginLayout(null);
+  }, [identity]);
+
   const menuOptions: MenuOption[] = [
     ...(engagementType
       ? [
@@ -225,6 +239,8 @@ const FeedCardComponent = ({ item, tab }: FeedCardProps) => {
                   : '赞同',
             icon: voted === 1 ? 'caret-up' : 'caret-up-outline',
             onPress: async () => {
+              if (pendingVotesRef.current.has(identity)) return;
+              pendingVotesRef.current.add(identity);
               const nextVoted = voted === 1 ? 0 : 1;
               try {
                 const voteType =
@@ -248,8 +264,10 @@ const FeedCardComponent = ({ item, tab }: FeedCardProps) => {
                       Number(result.voted === 1) -
                       Number(voted === 1),
                   );
-                setVoted(result.voted);
-                setVoteCount(resolvedCount);
+                if (currentIdentityRef.current === identity) {
+                  setVoted(result.voted);
+                  setVoteCount(resolvedCount);
+                }
                 updateContentInteractionCaches(queryClient, {
                   type: engagementType,
                   id: item.id,
@@ -261,6 +279,8 @@ const FeedCardComponent = ({ item, tab }: FeedCardProps) => {
                 );
               } catch (error: unknown) {
                 showToast(getZhihuErrorMessage(error));
+              } finally {
+                pendingVotesRef.current.delete(identity);
               }
             },
           },
@@ -324,6 +344,7 @@ const FeedCardComponent = ({ item, tab }: FeedCardProps) => {
           void impactAsync(ImpactFeedbackStyle.Medium);
           containerRef.current?.measureInWindow(
             (x: number, y: number, width: number, height: number) => {
+              if (currentIdentityRef.current !== identity) return;
               setOriginLayout({ x, y, width, height });
               setPreviewVisible(true);
             },

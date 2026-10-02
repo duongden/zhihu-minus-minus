@@ -148,6 +148,7 @@ export default function FollowingScreen() {
           isLoading: usersQuery.isLoading,
           isError: usersQuery.isError,
           isFetchingNextPage: usersQuery.isFetchingNextPage,
+          isFetching: usersQuery.isFetching,
           hasNextPage: usersQuery.hasNextPage,
           fetchNextPage: usersQuery.fetchNextPage,
           refetch: usersQuery.refetch,
@@ -160,6 +161,7 @@ export default function FollowingScreen() {
           isLoading: columnsQuery.isLoading,
           isError: columnsQuery.isError,
           isFetchingNextPage: columnsQuery.isFetchingNextPage,
+          isFetching: columnsQuery.isFetching,
           hasNextPage: columnsQuery.hasNextPage,
           fetchNextPage: columnsQuery.fetchNextPage,
           refetch: columnsQuery.refetch,
@@ -172,6 +174,7 @@ export default function FollowingScreen() {
           isLoading: topicsQuery.isLoading,
           isError: topicsQuery.isError,
           isFetchingNextPage: topicsQuery.isFetchingNextPage,
+          isFetching: topicsQuery.isFetching,
           hasNextPage: topicsQuery.hasNextPage,
           fetchNextPage: topicsQuery.fetchNextPage,
           refetch: topicsQuery.refetch,
@@ -184,6 +187,7 @@ export default function FollowingScreen() {
           isLoading: questionsQuery.isLoading,
           isError: questionsQuery.isError,
           isFetchingNextPage: questionsQuery.isFetchingNextPage,
+          isFetching: questionsQuery.isFetching,
           hasNextPage: questionsQuery.hasNextPage,
           fetchNextPage: questionsQuery.fetchNextPage,
           refetch: questionsQuery.refetch,
@@ -196,6 +200,7 @@ export default function FollowingScreen() {
           isLoading: favlistsQuery.isLoading,
           isError: favlistsQuery.isError,
           isFetchingNextPage: favlistsQuery.isFetchingNextPage,
+          isFetching: favlistsQuery.isFetching,
           hasNextPage: favlistsQuery.hasNextPage,
           fetchNextPage: favlistsQuery.fetchNextPage,
           refetch: favlistsQuery.refetch,
@@ -208,6 +213,7 @@ export default function FollowingScreen() {
           isLoading: false,
           isError: false,
           isFetchingNextPage: false,
+          isFetching: false,
           hasNextPage: false,
           fetchNextPage: () => {},
           refetch: async () => {},
@@ -438,7 +444,7 @@ export default function FollowingScreen() {
                 keyExtractor={(item) => getFollowingItemKey(item, tab.key)}
                 renderItem={({ item }) => renderItem({ item, tabKey: tab.key })}
                 onEndReached={() => {
-                  if (query.hasNextPage && !query.isFetchingNextPage) {
+                  if (query.hasNextPage && !query.isFetching) {
                     void query.fetchNextPage();
                   }
                 }}

@@ -1,16 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { BlurView } from 'expo-blur';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { recordReadHistory } from '@/api/zhihu/history';
 import { followMember, unfollowMember } from '@/api/zhihu/member';
-import { getPin, votePinPoll } from '@/api/zhihu/pin';
+import { getPin } from '@/api/zhihu/pin';
 import { getContentVoteCount, getContentVoteState } from '@/api/zhihu/voters';
 import { BouncyButton } from '@/components/BouncyButton';
 import { LikeButton } from '@/components/LikeButton';
+import { PinPollCard } from '@/components/PinPollCard';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { ReadingProgressNotice } from '@/components/ReadingProgressNotice';
 import { ShareMenu } from '@/components/ShareMenu';
@@ -32,7 +33,6 @@ export default function PinDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const queryClient = useQueryClient();
   const textColor = Colors[colorScheme].text;
   const borderColor = Colors[colorScheme].border;
   const backgroundColor = Colors[colorScheme].background;
@@ -42,9 +42,6 @@ export default function PinDetailScreen() {
 
   const [isSharing, setIsSharing] = React.useState(false);
   const [votersVisible, setVotersVisible] = React.useState(false);
-  const [pollVotingOptionId, setPollVotingOptionId] = React.useState<
-    string | null
-  >(null);
   const scrollViewRef = React.useRef<ScrollView>(null);
 
   const {
@@ -70,20 +67,6 @@ export default function PinDetailScreen() {
   const poll = pin?.bottom_poll?.voting as ZhihuPinPoll | undefined;
   const pinVoteCount = getContentVoteCount('pins', pin) ?? 0;
   const pinVoteState = getContentVoteState('pins', pin) ?? 0;
-  const pollMutation = useMutation({
-    mutationFn: ({ pollId, optionId }: { pollId: string; optionId: string }) =>
-      votePinPoll(pollId, [optionId]),
-    onMutate: ({ optionId }) => setPollVotingOptionId(optionId),
-    onSuccess: async () => {
-      setPollVotingOptionId(null);
-      await queryClient.invalidateQueries({ queryKey: ['pin-detail', id] });
-    },
-    onError: () => {
-      setPollVotingOptionId(null);
-      Alert.alert('投票失败', '知乎没有接受这次投票，请稍后重试。');
-    },
-  });
-
   const enableBrowseHistory = useSettingsStore((s) => s.enableBrowseHistory);
 
   useEffect(() => {
@@ -269,11 +252,9 @@ export default function PinDetailScreen() {
           />
           {poll ? (
             <PinPollCard
+              key={`${id}:${poll.id}`}
               poll={poll}
-              votingOptionId={pollVotingOptionId}
-              onVote={(pollId, optionId) =>
-                pollMutation.mutate({ pollId, optionId })
-              }
+              contentId={String(id)}
             />
           ) : null}
           <Text
@@ -369,105 +350,6 @@ export default function PinDetailScreen() {
         contentId={String(id)}
         count={pinVoteCount}
       />
-    </View>
-  );
-}
-
-function PinPollCard({
-  poll,
-  votingOptionId,
-  onVote,
-}: {
-  poll: ZhihuPinPoll;
-  votingOptionId: string | null;
-  onVote: (pollId: string, optionId: string) => void;
-}) {
-  const colorScheme = useColorScheme();
-  const primaryColor = useThemeColor({}, 'primary');
-  const borderColor = Colors[colorScheme].border;
-  const now = Math.floor(Date.now() / 1000);
-  const acceptsVote =
-    poll.is_reviewing !== true &&
-    (poll.end_at === undefined || poll.end_at < 0 || poll.end_at > now);
-  const resultMode = poll.is_voted === true || !acceptsVote;
-  const totalVotes = poll.member_count || poll.voting_count || 0;
-
-  return (
-    <View
-      className="mt-4 rounded-2xl p-4"
-      style={{
-        borderWidth: StyleSheet.hairlineWidth,
-        borderColor,
-        backgroundColor: Colors[colorScheme].backgroundSecondary,
-      }}
-    >
-      <Text className="font-bold text-base">{poll.title || '想法投票'}</Text>
-      <Text type="secondary" className="text-xs mt-1 mb-3">
-        {resultMode
-          ? poll.is_reviewing
-            ? '投票审核中'
-            : poll.end_at !== undefined && poll.end_at <= now
-              ? `投票已结束 · ${totalVotes} 人参与`
-              : `${totalVotes} 人参与`
-          : poll.max_selections && poll.max_selections > 1
-            ? `最多选择 ${poll.max_selections} 项`
-            : '请选择一个选项'}
-      </Text>
-      {poll.options.map((option) => {
-        const optionVotes = option.voting_count || 0;
-        const percentage =
-          totalVotes > 0 ? Math.round((optionVotes / totalVotes) * 100) : 0;
-        if (resultMode) {
-          return (
-            <View key={option.id} className="mb-2">
-              <View className="flex-row justify-between mb-1">
-                <Text className="text-sm flex-1" numberOfLines={1}>
-                  {option.title}
-                </Text>
-                <Text type="secondary" className="text-xs ml-2">
-                  {percentage}%
-                </Text>
-              </View>
-              <View
-                className="h-2 rounded-full overflow-hidden"
-                style={{ backgroundColor: borderColor }}
-              >
-                <View
-                  className="h-full rounded-full"
-                  style={{
-                    width: `${percentage}%`,
-                    backgroundColor: option.is_selected
-                      ? primaryColor
-                      : Colors[colorScheme].textSecondary,
-                  }}
-                />
-              </View>
-            </View>
-          );
-        }
-
-        return (
-          <BouncyButton
-            key={option.id}
-            disabled={votingOptionId !== null}
-            onPress={() => onVote(poll.id, option.id)}
-            className="rounded-xl px-3 py-2.5 mb-2"
-            style={{
-              borderWidth: StyleSheet.hairlineWidth,
-              borderColor: primaryColor,
-              opacity: votingOptionId === option.id ? 0.6 : 1,
-            }}
-          >
-            {votingOptionId === option.id ? (
-              <ActivityIndicator size="small" color={primaryColor} />
-            ) : (
-              <Text style={{ color: primaryColor }} className="text-sm">
-                {option.title}
-              </Text>
-            )}
-          </BouncyButton>
-        );
-      })}
     </View>
   );
 }

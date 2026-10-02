@@ -1,10 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQueryClient,
-} from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { BlurView } from 'expo-blur';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useEffect, useState } from 'react';
@@ -33,14 +29,9 @@ import {
   createPinComment,
   createQuestionComment,
   deleteComment,
-  getAnswerComments,
-  getArticleCommentsV5 as getArticleComments,
-  getPinCommentsV5 as getPinComments,
-  getQuestionCommentsV5 as getQuestionComments,
   parseAnswerSegmentCommentContext,
   parseAnswerSegmentCommentTarget,
 } from '@/api/zhihu';
-import type { ZhihuCommentResponse } from '@/api/zhihu/comment';
 import { BouncyButton } from '@/components/BouncyButton';
 import { CommentActionSheet } from '@/components/CommentActionSheet';
 import {
@@ -49,10 +40,12 @@ import {
 } from '@/components/CommentComposer';
 import { CommentContent } from '@/components/CommentContent';
 import { LikeButton } from '@/components/LikeButton';
+import { QueryErrorView } from '@/components/QueryErrorView';
 import { StableAvatar } from '@/components/StableAvatar';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { useCommentListQuery } from '@/hooks/useCommentQueries';
 import { formatDate } from '@/utils/date';
 import { buildZhihuContent, buildZhihuImageHtml } from '@/utils/zhihuContent';
 import { getZhihuErrorMessage } from '@/utils/zhihuError';
@@ -87,7 +80,7 @@ export default function CommentScreen() {
   const borderColor = Colors[colorScheme].border;
   const surfaceColor = Colors[colorScheme].surface;
   const textColor = Colors[colorScheme].text;
-  const tintColor = useThemeColor({}, 'primary');
+  const tintColor = useThemeColor({}, 'link');
   const { width: screenWidth } = useWindowDimensions();
   // 减去头像(32) + 间距(12) + 左右padding(30)
   const contentWidth = screenWidth - 32 - 12 - 30;
@@ -150,64 +143,21 @@ export default function CommentScreen() {
     bottom: keyboardHeight.value,
   }));
 
-  // 输入框高度（居中估算，动态取实际高度应用 onLayout）
-  const INPUT_BAR_HEIGHT = 60;
-
+  const [inputBarHeight, setInputBarHeight] = useState(80 + insets.bottom);
   const [orderBy, setOrderBy] = useState<'score' | 'ts'>('score');
-
   const {
-    data,
+    comments,
     isLoading,
+    isError,
+    isFetchNextPageError,
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
     isFetching,
     refetch,
-  } = useInfiniteQuery({
-    queryKey: ['comments', id, type, segmentId, orderBy],
-    enabled: !isSegmentDiscussion || segmentTarget !== null,
-    queryFn: async ({ pageParam = '' }): Promise<ZhihuCommentResponse> => {
-      if (isSegmentDiscussion) {
-        if (!segmentTarget) throw new Error('知识点评论目标无效');
-        const offset = Number(pageParam || 0);
-        if (!Number.isSafeInteger(offset) || offset < 0)
-          throw new Error('知识点评论分页位置无效');
-        const { getSegmentComments } = await import('@/api/zhihu/answer');
-        const segmentResponse = await getSegmentComments(
-          segmentTarget.answerId,
-          segmentTarget.segmentIds.join(','),
-          offset,
-        );
-        return {
-          data: segmentResponse.data || [],
-          paging: segmentResponse.paging || {
-            is_end: true,
-            is_start: true,
-            next: '',
-            previous: '',
-            totals: segmentResponse.data?.length || 0,
-          },
-        };
-      }
-      if (type === 'question')
-        return getQuestionComments(id as string, 20, pageParam, orderBy);
-      if (type === 'article')
-        return getArticleComments(id as string, 20, pageParam, orderBy);
-      if (type === 'pin')
-        return getPinComments(id as string, 20, pageParam, orderBy);
-      return getAnswerComments(id as string);
-    },
-    getNextPageParam: (lastPage) => {
-      if (!lastPage?.paging?.is_end && lastPage?.paging?.next) {
-        const match = lastPage.paging.next.match(/offset=([^&]*)/);
-        return match ? match[1] : undefined;
-      }
-      return undefined;
-    },
-    initialPageParam: '',
-  });
-
-  const comments = data?.pages.flatMap((page) => page.data || []) || [];
+    refresh,
+    refreshing,
+  } = useCommentListQuery({ id, type, segmentId, segmentTarget, orderBy });
 
   const mutation = useMutation({
     mutationFn: async ({ text: commentText, images }: CommentDraft) => {
@@ -356,7 +306,7 @@ export default function CommentScreen() {
                   variant="ghost"
                 />
                 <BouncyButton
-                  disabled={!canPostComment}
+                  disabled={!canPostComment || mutation.isPending}
                   onPress={() => {
                     setReplyTo({
                       id: item.id as string,
@@ -447,25 +397,26 @@ export default function CommentScreen() {
       <Stack.Screen
         options={{
           title: `评论${count ? ` (${count})` : ''}`,
-          headerRight: () => (
-            <BouncyButton
-              onPress={() =>
-                setOrderBy((prev) => (prev === 'score' ? 'ts' : 'score'))
-              }
-              style={{
-                marginRight: 4,
-                borderRadius: 6,
-                paddingHorizontal: 4,
-                paddingVertical: 2,
-              }}
-            >
-              <Text
-                style={{ color: tintColor, fontSize: 14, fontWeight: '600' }}
+          headerRight: () =>
+            !isSegmentDiscussion && (
+              <BouncyButton
+                onPress={() =>
+                  setOrderBy((prev) => (prev === 'score' ? 'ts' : 'score'))
+                }
+                style={{
+                  marginRight: 4,
+                  borderRadius: 6,
+                  paddingHorizontal: 4,
+                  paddingVertical: 2,
+                }}
               >
-                {orderBy === 'score' ? '默认' : '最新'}
-              </Text>
-            </BouncyButton>
-          ),
+                <Text
+                  style={{ color: tintColor, fontSize: 14, fontWeight: '600' }}
+                >
+                  {orderBy === 'score' ? '默认' : '最新'}
+                </Text>
+              </BouncyButton>
+            ),
         }}
       />
 
@@ -475,15 +426,18 @@ export default function CommentScreen() {
           renderItem={renderComment}
           keyExtractor={(item: CommentItem) => item.id.toString()}
           {...({ estimatedItemSize: 120 } as object)}
-          onRefresh={refetch}
-          refreshing={isFetching && !isLoading}
+          onRefresh={() => void refresh()}
+          refreshing={refreshing}
           onEndReached={() =>
-            hasNextPage && !isFetchingNextPage && fetchNextPage()
+            hasNextPage &&
+            !isFetching &&
+            !isFetchNextPageError &&
+            fetchNextPage()
           }
           onEndReachedThreshold={0.3}
           keyboardDismissMode="on-drag"
           contentContainerStyle={{
-            paddingBottom: INPUT_BAR_HEIGHT + insets.bottom + 20,
+            paddingBottom: inputBarHeight + 20,
             paddingTop: 8,
           }}
           ListHeaderComponent={
@@ -537,6 +491,12 @@ export default function CommentScreen() {
               <View className="py-4 items-center bg-transparent">
                 <ActivityIndicator size="small" color={tintColor} />
               </View>
+            ) : isFetchNextPageError ? (
+              <QueryErrorView
+                compact
+                message="更多评论加载失败"
+                onRetry={() => void fetchNextPage()}
+              />
             ) : null
           }
           ListEmptyComponent={
@@ -544,9 +504,18 @@ export default function CommentScreen() {
               <View className="flex-1 items-center justify-center mt-[100px] bg-transparent">
                 <ActivityIndicator size="large" color={tintColor} />
               </View>
+            ) : isError ? (
+              <QueryErrorView
+                message="评论加载失败"
+                onRetry={() => void refetch()}
+              />
             ) : (
               <View className="flex-1 items-center justify-center mt-[100px] bg-transparent">
-                <Text type="secondary">暂无评论 喵~</Text>
+                <Text type="secondary">
+                  {isSegmentDiscussion && !segmentTarget
+                    ? segmentPostingHint
+                    : '暂无评论 喵~'}
+                </Text>
               </View>
             )
           }
@@ -555,6 +524,7 @@ export default function CommentScreen() {
 
       {/* 输入框：绝对定位 + 随键盘动画移动，避免 KAV 全屏占位导致收起后不归位的 bug */}
       <Reanimated.View
+        onLayout={(event) => setInputBarHeight(event.nativeEvent.layout.height)}
         style={[
           {
             position: 'absolute',

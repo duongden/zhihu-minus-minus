@@ -21,6 +21,7 @@ export default function MutualFollowersScreen() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isFetching,
     isError,
     refetch,
     isRefetching,
@@ -46,7 +47,7 @@ export default function MutualFollowersScreen() {
           <UserCard user={item} invalidateQueryKeys={[['user-mutual', id]]} />
         )}
         onEndReached={() => {
-          if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+          if (hasNextPage && !isFetching) void fetchNextPage();
         }}
         onRefresh={() =>
           void refreshInfiniteQuery(queryClient, ['user-mutual', id], refetch)

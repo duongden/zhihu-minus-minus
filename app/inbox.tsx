@@ -1,7 +1,7 @@
 import { FlashList } from '@shopify/flash-list';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigation, useRouter } from 'expo-router';
-import { useCallback, useEffect } from 'react';
+import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet } from 'react-native';
 import { getInbox, type InboxThread } from '@/api/zhihu';
 import { BouncyButton } from '@/components/BouncyButton';
@@ -10,6 +10,7 @@ import { StableAvatar } from '@/components/StableAvatar';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { useRefreshAction } from '@/hooks/useRefreshAction';
 import { formatDateTime } from '@/utils/date';
 import { refreshInfiniteQuery } from '@/utils/query';
 
@@ -31,8 +32,9 @@ export default function InboxScreen() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isFetching,
+    isFetchNextPageError,
     refetch,
-    isRefetching,
     isError,
   } = useInfiniteQuery({
     queryKey: ['inbox'],
@@ -45,9 +47,9 @@ export default function InboxScreen() {
     },
   });
 
-  const handleRefresh = useCallback(() => {
+  const { refresh: handleRefresh, refreshing } = useRefreshAction(() => {
     return refreshInfiniteQuery(queryClient, ['inbox'], refetch);
-  }, [queryClient, refetch]);
+  });
 
   const threads = data?.pages.flatMap((page) => page.data) || [];
 
@@ -88,7 +90,7 @@ export default function InboxScreen() {
 
         <View className="ml-[15px] flex-1 bg-transparent justify-center">
           <View className="flex-row items-center justify-between mb-1 bg-transparent">
-            <Text className="font-bold text-base" numberOfLines={1}>
+            <Text className="font-bold text-base flex-1 mr-2" numberOfLines={1}>
               {participant.name}
             </Text>
             <Text type="secondary" className="text-[11px]">
@@ -111,15 +113,22 @@ export default function InboxScreen() {
     <View className="flex-1">
       <FlashList
         data={threads}
+        keyExtractor={(item) => item.id}
         renderItem={renderItem}
         onEndReached={() => {
-          if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+          if (
+            hasNextPage &&
+            !isFetching &&
+            !refreshing &&
+            !isFetchNextPageError
+          )
+            void fetchNextPage();
         }}
         onRefresh={handleRefresh}
-        refreshing={isRefetching}
+        refreshing={refreshing}
         contentContainerStyle={{ paddingBottom: 20 }}
         ListEmptyComponent={() => (
-          <View className="flex-1 p-[100px] items-center">
+          <View className="flex-1 px-6 py-20 items-center">
             {isLoading ? (
               <ActivityIndicator color={primaryColor} />
             ) : isError ? (
@@ -136,6 +145,12 @@ export default function InboxScreen() {
         ListFooterComponent={() =>
           isFetchingNextPage ? (
             <ActivityIndicator style={{ margin: 20 }} color={primaryColor} />
+          ) : isFetchNextPageError ? (
+            <QueryErrorView
+              compact
+              message="更多私信加载失败"
+              onRetry={() => void fetchNextPage()}
+            />
           ) : null
         }
       />

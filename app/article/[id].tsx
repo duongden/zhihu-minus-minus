@@ -47,6 +47,8 @@ export default function ArticleDetail() {
   const colorScheme = useColorScheme();
   const primaryColor = useThemeColor({}, 'primary');
   const warningColor = useThemeColor({}, 'warning');
+  const linkColor = useThemeColor({}, 'link');
+  const onPrimaryColor = useThemeColor({}, 'onPrimary');
   const { id, source } = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -57,7 +59,6 @@ export default function ArticleDetail() {
 
   const [isSharing, setIsSharing] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
-  const [isLiked, setIsLiked] = useState(false); // Local liked menu state (optional)
 
   const scrollY = useRef(new Animated.Value(0)).current;
   const scrollViewRef = useRef<NativeScrollView>(null);
@@ -106,13 +107,13 @@ export default function ArticleDetail() {
   const enableBrowseHistory = useSettingsStore((s) => s.enableBrowseHistory);
 
   useEffect(() => {
-    if (enableBrowseHistory && id) {
+    if (enableBrowseHistory && id && !isDaily) {
       recordReadHistory({
         content_token: id as string,
         content_type: 'article',
       });
     }
-  }, [enableBrowseHistory, id]);
+  }, [enableBrowseHistory, id, isDaily]);
 
   // 3. 获取文章被收藏状态
   const { data: collectionStatus, isFetchedAfterMount } = useQuery({
@@ -260,7 +261,7 @@ export default function ArticleDetail() {
           className="px-4 py-2 rounded-full"
           style={{ backgroundColor: primaryTransparent }}
         >
-          <Text className="text-xs font-bold" style={{ color: primaryColor }}>
+          <Text className="text-xs font-bold" style={{ color: linkColor }}>
             返回上一页
           </Text>
         </BouncyButton>
@@ -422,7 +423,7 @@ export default function ArticleDetail() {
                   style={[
                     data.author?.is_following
                       ? { color: Colors[colorScheme].textSecondary }
-                      : { color: tintColor },
+                      : { color: linkColor },
                   ]}
                 >
                   {data.author?.is_following ? '已关注' : '关注'}
@@ -494,7 +495,7 @@ export default function ArticleDetail() {
                   style={{
                     color: columnCard.is_following
                       ? Colors[colorScheme].textSecondary
-                      : Colors[colorScheme].textInverse,
+                      : onPrimaryColor,
                   }}
                   className="font-bold text-sm"
                 >
@@ -627,13 +628,6 @@ export default function ArticleDetail() {
         onClose={() => setMenuVisible(false)}
         title="文章操作"
         options={[
-          {
-            key: 'like',
-            icon: isLiked ? 'heart' : 'heart-outline',
-            label: isLiked ? '取消喜欢' : '加入喜欢',
-            color: isLiked ? Colors[colorScheme].danger : undefined,
-            onPress: () => setIsLiked(!isLiked),
-          },
           {
             key: 'collection',
             icon: 'star',

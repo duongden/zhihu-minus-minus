@@ -1,4 +1,5 @@
 import { useRouter } from 'expo-router';
+import { ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BouncyButton } from '@/components/BouncyButton';
 import { Text, ThemedIcon, useThemeColor, View } from '@/components/Themed';
@@ -47,7 +48,6 @@ export default function PublishView() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const colorScheme = useColorScheme();
-  const _secondaryColor = Colors[colorScheme].textSecondary;
 
   const colors = {
     primary: useThemeColor({}, 'primary'),
@@ -61,7 +61,13 @@ export default function PublishView() {
   };
 
   return (
-    <View className="flex-1 px-6">
+    <ScrollView
+      style={{ flex: 1 }}
+      contentContainerStyle={{
+        paddingHorizontal: 24,
+        paddingBottom: insets.bottom + 24,
+      }}
+    >
       <View
         className="mb-10 items-center"
         style={{ paddingTop: insets.top + 60 }}
@@ -110,6 +116,6 @@ export default function PublishView() {
           </BouncyButton>
         ))}
       </View>
-    </View>
+    </ScrollView>
   );
 }

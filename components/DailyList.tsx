@@ -20,24 +20,20 @@ import {
   type CollapsibleChromeScrollOptions,
   useCollapsibleChromeScroll,
 } from '@/hooks/useCollapsibleChromeScroll';
-import { refreshInfiniteQuery } from '@/utils/query';
+import {
+  type DailyListItem,
+  flattenDailyPages,
+  getDailyNextPageParam,
+} from '@/utils/dailyList';
+import { refreshInfiniteQuery, shouldRetryQuery } from '@/utils/query';
 import { BouncyButton } from './BouncyButton';
 import { PullToRefresh } from './PullToRefresh';
+import { QueryErrorView } from './QueryErrorView';
 
 const AnimatedFlashList = Animated.createAnimatedComponent(
   FlashList,
 ) as typeof FlashList;
 const MIN_REFRESH_INDICATOR_MS = 500;
-
-// --- 类型定义 ---
-type Story = {
-  id: number;
-  title: string;
-  hint: string;
-  images: string[];
-  type?: number;
-};
-type ListItem = { type: 'date'; date: string } | { type: 'story'; data: Story };
 
 interface DailyListHandle {
   scrollToOffset: (args: { offset: number; animated?: boolean }) => void;
@@ -127,18 +123,23 @@ export const DailyList = React.forwardRef<
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isFetching,
+    isFetchNextPageError,
+    isError,
     isLoading,
     refetch,
   } = useInfiniteQuery({
     queryKey: ['zhihu-daily'],
-    queryFn: ({ pageParam = '' }) => {
+    queryFn: ({ pageParam = '', signal }) => {
       if (pageParam) {
-        return getDailyBefore(pageParam as string);
+        return getDailyBefore(pageParam, { signal });
       }
-      return getDailyLatest();
+      return getDailyLatest({ signal });
     },
     initialPageParam: '',
-    getNextPageParam: (lastPage) => lastPage.date,
+    getNextPageParam: (lastPage, _pages, _lastPageParam, pageParams) =>
+      getDailyNextPageParam(lastPage, pageParams),
+    retry: shouldRetryQuery,
   });
 
   const handleRefresh = useCallback(async () => {
@@ -162,23 +163,12 @@ export const DailyList = React.forwardRef<
     }
   }, [queryClient, refetch, onRefreshStateChange]);
 
-  const flattenedData = useMemo(() => {
-    if (!data) return [];
-    const items: ListItem[] = [];
-    data.pages.forEach((page) => {
-      if (page.date) {
-        items.push({ type: 'date', date: page.date });
-      }
-      if (Array.isArray(page.stories)) {
-        page.stories.forEach((story: Story) => {
-          items.push({ type: 'story', data: story });
-        });
-      }
-    });
-    return items;
-  }, [data]);
+  const flattenedData = useMemo(
+    () => flattenDailyPages(data?.pages ?? []),
+    [data],
+  );
 
-  const flashListRef = React.useRef<FlashListRef<ListItem>>(null);
+  const flashListRef = React.useRef<FlashListRef<DailyListItem>>(null);
   const scrollHandler = useCollapsibleChromeScroll(chrome);
 
   React.useImperativeHandle(ref, () => ({
@@ -188,10 +178,21 @@ export const DailyList = React.forwardRef<
 
   if (isLoading && !isRefreshing) {
     return (
-      <View className="flex-1">
+      <View className="flex-1" style={{ paddingTop: insets.top + 70 }}>
         {[1, 2, 3, 4, 5].map((i) => (
           <SkeletonCard key={i} />
         ))}
+      </View>
+    );
+  }
+
+  if (isError && flattenedData.length === 0 && !isRefreshing) {
+    return (
+      <View className="flex-1 justify-center">
+        <QueryErrorView
+          message="日报加载失败，请检查网络后重试"
+          onRetry={() => void refetch()}
+        />
       </View>
     );
   }
@@ -205,7 +206,7 @@ export const DailyList = React.forwardRef<
           color={Colors[colorScheme].tabIconDefault}
         />
         <Text type="secondary" className="mt-4 text-center">
-          暂时没发现日报内容喵，可能是网络问题或者知乎日报今天还没更新。
+          暂时没有日报内容，稍后刷新再看看。
         </Text>
         <BouncyButton
           className="mt-6 px-6 py-2.5 rounded-full"
@@ -235,13 +236,21 @@ export const DailyList = React.forwardRef<
         alwaysBounceVertical
         overScrollMode="never"
         data={flattenedData}
-        keyExtractor={(item: ListItem, index: number) =>
-          item.type === 'date' ? item.date : item.data.id.toString() + index
+        keyExtractor={(item) =>
+          item.type === 'date' ? `date:${item.date}` : `story:${item.data.id}`
         }
-        {...({ estimatedItemSize: 100 } as object)}
-        onEndReached={() =>
-          hasNextPage && !isFetchingNextPage && fetchNextPage()
-        }
+        getItemType={(item) => item.type}
+        onEndReached={() => {
+          if (
+            chrome.enabled &&
+            hasNextPage &&
+            !isFetching &&
+            !refreshInFlightRef.current &&
+            !isFetchNextPageError
+          ) {
+            void fetchNextPage({ cancelRefetch: false });
+          }
+        }}
         onEndReachedThreshold={0.5}
         onScroll={scrollHandler}
         scrollEventThrottle={16}
@@ -249,7 +258,7 @@ export const DailyList = React.forwardRef<
           paddingTop: insets.top + 70,
           paddingBottom: 110,
         }}
-        renderItem={({ item }: { item: ListItem }) => {
+        renderItem={({ item }: { item: DailyListItem }) => {
           if (item.type === 'date') {
             return (
               <View className="bg-transparent">
@@ -295,6 +304,12 @@ export const DailyList = React.forwardRef<
             <Text type="secondary" className="text-center p-5">
               加载中...
             </Text>
+          ) : isFetchNextPageError ? (
+            <QueryErrorView
+              compact
+              message="更多日报加载失败"
+              onRetry={() => void fetchNextPage({ cancelRefetch: false })}
+            />
           ) : null
         }
       />

@@ -1,6 +1,6 @@
 import { FontAwesome6, Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useRef } from 'react';
-import { StyleSheet } from 'react-native';
+import { ScrollView, StyleSheet } from 'react-native';
 import { BouncyButton } from '@/components/BouncyButton';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -48,22 +48,23 @@ export function ActionSheet({
   const pendingAction = useRef<ActionSheetOption['onPress'] | null>(null);
 
   useEffect(() => {
+    if (!visible) pendingAction.current = null;
     if (visible && hapticFeedback) {
       void impactAsync(ImpactFeedbackStyle.Medium);
     }
   }, [visible, hapticFeedback]);
 
   const handleClosed = () => {
-    onClose();
     const action = pendingAction.current;
     pendingAction.current = null;
+    onClose();
     if (action) void action();
   };
 
   const close = () => sheetRef.current?.close();
 
   const selectOption = (option: ActionSheetOption) => {
-    if (option.disabled) return;
+    if (option.disabled || pendingAction.current) return;
     pendingAction.current = option.onPress;
     close();
   };
@@ -79,7 +80,11 @@ export function ActionSheet({
       title={title}
       subtitle={subtitle}
     >
-      <View style={styles.body}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.body}
+        keyboardShouldPersistTaps="handled"
+      >
         {headerContent}
         <View style={[styles.optionGroup, { backgroundColor: itemBackground }]}>
           {options.map((option, index) => {
@@ -155,12 +160,16 @@ export function ActionSheet({
             {cancelLabel}
           </Text>
         </BouncyButton>
-      </View>
+      </ScrollView>
     </BottomSheet>
   );
 }
 
 const styles = StyleSheet.create({
+  scroll: {
+    flexGrow: 0,
+    flexShrink: 1,
+  },
   body: {
     width: '100%',
     paddingHorizontal: 20,

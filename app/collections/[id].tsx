@@ -1,5 +1,5 @@
 import { FlashList } from '@shopify/flash-list';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLocalSearchParams, useNavigation } from 'expo-router';
 import { useEffect } from 'react';
 import { ActivityIndicator, StyleSheet } from 'react-native';
@@ -9,11 +9,15 @@ import { QueryErrorView } from '@/components/QueryErrorView';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { useRefreshAction } from '@/hooks/useRefreshAction';
+import { useZhihuInfiniteQuery } from '@/hooks/useZhihuInfiniteQuery';
 import type { ZhihuCollectionItem } from '@/types/zhihu';
+import { refreshInfiniteQuery } from '@/utils/query';
 
 export default function CollectionDetailScreen() {
   const colorScheme = useColorScheme();
-  const { id } = useLocalSearchParams();
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const queryClient = useQueryClient();
   const navigation = useNavigation();
   const primaryColor = useThemeColor({}, 'primary');
   const borderColor = Colors[colorScheme].border;
@@ -28,7 +32,7 @@ export default function CollectionDetailScreen() {
     refetch: refetchCollection,
   } = useQuery({
     queryKey: ['collection-detail', id],
-    queryFn: () => getCollection(id as string),
+    queryFn: () => getCollection(id),
   });
 
   const {
@@ -37,23 +41,27 @@ export default function CollectionDetailScreen() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isFetching,
     refetch,
-    isRefetching,
     isError: contentsError,
-  } = useInfiniteQuery({
+  } = useZhihuInfiniteQuery({
     queryKey: ['collection-contents', id],
     queryFn: ({ pageParam = 0 }) =>
-      getCollectionDetail(id as string, 20, pageParam as number),
+      getCollectionDetail(id, 20, pageParam as number),
     initialPageParam: 0,
-    getNextPageParam: (lastPage) => {
-      if (!lastPage || lastPage.paging?.is_end) return undefined;
-      const nextUrl = lastPage.paging?.next;
-      const match = nextUrl?.match(/offset=(\d+)/);
-      return match ? parseInt(match[1], 10) : undefined;
-    },
   });
 
-  const contents = listData?.pages.flatMap((page) => page.data) || [];
+  const { refresh, refreshing } = useRefreshAction(() =>
+    Promise.all([
+      refetchCollection(),
+      refreshInfiniteQuery(queryClient, ['collection-contents', id]),
+    ]),
+  );
+
+  const contents =
+    listData?.pages
+      .flatMap((page) => page.data)
+      .filter((item) => item.content) || [];
 
   return (
     <View className="flex-1">
@@ -86,22 +94,29 @@ export default function CollectionDetailScreen() {
 
       <FlashList
         data={contents}
+        keyExtractor={(item) => `${item.content.type}:${item.content.id}`}
         renderItem={({ item }: { item: ZhihuCollectionItem }) => {
           const content = item.content;
           if (!content) return null;
-          let type: 'answer' | 'article' | 'pin' = 'answer';
-          if (content.type === 'article') type = 'article';
-          else if (content.type === 'pin') type = 'pin';
+          const type = content.type === 'zvideo' ? 'video' : content.type;
+          if (
+            type !== 'answer' &&
+            type !== 'article' &&
+            type !== 'pin' &&
+            type !== 'question' &&
+            type !== 'video'
+          )
+            return null;
           return <CreationCard item={content} type={type} />;
         }}
         {...({ estimatedItemSize: 150 } as object)}
         onEndReached={() => {
-          if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+          if (hasNextPage && !isFetching) void fetchNextPage();
         }}
-        onRefresh={refetch}
-        refreshing={isRefetching}
+        onRefresh={() => void refresh()}
+        refreshing={refreshing}
         ListEmptyComponent={() => (
-          <View className="flex-1 p-[100px] items-center">
+          <View className="px-6 py-16 items-center">
             {isLoading ? (
               <ActivityIndicator color={primaryColor} />
             ) : contentsError ? (

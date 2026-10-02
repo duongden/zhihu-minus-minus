@@ -1,4 +1,17 @@
 import axios from 'axios';
+import type { ApiRequestOptions } from '../client';
+
+export interface DailyStory {
+  id: number;
+  title: string;
+  hint?: string;
+  images?: string[];
+}
+
+export interface DailyPage {
+  date?: string;
+  stories?: DailyStory[];
+}
 
 const dailyClient = axios.create({
   timeout: 10000,
@@ -19,16 +32,23 @@ dailyClient.interceptors.response.use(
   },
 );
 
-export const getDailyLatest = async () => {
-  const res = await dailyClient.get(
+export const getDailyLatest = async (
+  options: ApiRequestOptions = {},
+): Promise<DailyPage> => {
+  const res = await dailyClient.get<DailyPage>(
     'https://daily.zhihu.com/api/4/news/latest',
+    { signal: options.signal },
   );
   return res.data;
 };
 
-export const getDailyBefore = async (date: string) => {
-  const res = await dailyClient.get(
+export const getDailyBefore = async (
+  date: string,
+  options: ApiRequestOptions = {},
+): Promise<DailyPage> => {
+  const res = await dailyClient.get<DailyPage>(
     `https://daily.zhihu.com/api/4/news/before/${date}`,
+    { signal: options.signal },
   );
   return res.data;
 };

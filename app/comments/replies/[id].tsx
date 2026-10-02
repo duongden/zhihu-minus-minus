@@ -1,10 +1,5 @@
 import { FlashList } from '@shopify/flash-list';
-import {
-  useInfiniteQuery,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BlurView } from 'expo-blur';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -29,7 +24,6 @@ import {
   createCommentReply,
   createCommentV5,
   deleteComment,
-  getChildCommentsV5 as getChildComments,
   getComment,
 } from '@/api/zhihu';
 import { BouncyButton } from '@/components/BouncyButton';
@@ -40,10 +34,13 @@ import {
 } from '@/components/CommentComposer';
 import { CommentContent } from '@/components/CommentContent';
 import { LikeButton } from '@/components/LikeButton';
+import { QueryErrorView } from '@/components/QueryErrorView';
 import { StableAvatar } from '@/components/StableAvatar';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { useCommentRepliesQuery } from '@/hooks/useCommentQueries';
+import { parseParentComment } from '@/utils/commentRoute';
 import { formatDate } from '@/utils/date';
 import { buildZhihuContent, buildZhihuImageHtml } from '@/utils/zhihuContent';
 import { getZhihuErrorMessage } from '@/utils/zhihuError';
@@ -73,7 +70,7 @@ export default function ReplyDetailScreen() {
   const colorScheme = useColorScheme();
   const borderColor = Colors[colorScheme].border;
   const textColor = Colors[colorScheme].text;
-  const tintColor = useThemeColor({}, 'primary');
+  const tintColor = useThemeColor({}, 'link');
   const { width: screenWidth } = useWindowDimensions();
   // 减去头像(32) + 间距(12) + 左右padding(30)
   const contentWidth = screenWidth - 32 - 12 - 30;
@@ -115,17 +112,12 @@ export default function ReplyDetailScreen() {
     bottom: keyboardHeight.value,
   }));
 
-  const INPUT_BAR_HEIGHT = 60;
+  const [inputBarHeight, setInputBarHeight] = useState(80 + insets.bottom);
 
-  const initialParentComment = useMemo<CommentItem | null>(() => {
-    if (!parent) return null;
-    try {
-      return JSON.parse(decodeURIComponent(parent));
-    } catch {
-      console.error('Failed to parse parent comment');
-      return null;
-    }
-  }, [parent]);
+  const initialParentComment = useMemo(
+    () => parseParentComment(parent, id),
+    [parent, id],
+  );
 
   const { data: parentCommentFromApi } = useQuery({
     queryKey: ['parent-comment', id],
@@ -137,28 +129,19 @@ export default function ReplyDetailScreen() {
 
   const {
     data: repliesData,
+    comments: replies,
     isLoading,
+    isError,
+    isFetchNextPageError,
     refetch,
+    refresh,
+    refreshing,
     isFetching,
     isFetchingNextPage,
     hasNextPage,
     fetchNextPage,
-  } = useInfiniteQuery({
-    queryKey: ['replies', id],
-    queryFn: async ({ pageParam = '' }) => {
-      return getChildComments(id as string, 20, pageParam);
-    },
-    getNextPageParam: (lastPage) => {
-      if (!lastPage?.paging?.is_end && lastPage?.paging?.next) {
-        const match = lastPage.paging.next.match(/offset=([^&]*)/);
-        return match ? match[1] : undefined;
-      }
-      return undefined;
-    },
-    initialPageParam: '',
-  });
+  } = useCommentRepliesQuery(id);
 
-  const replies = repliesData?.pages.flatMap((page) => page.data || []) || [];
   const totalCount =
     repliesData?.pages?.[0]?.counts?.total_counts ??
     parentComment?.child_comment_count ??
@@ -338,6 +321,7 @@ export default function ReplyDetailScreen() {
                   variant="ghost"
                 />
                 <BouncyButton
+                  disabled={mutation.isPending}
                   onPress={() => {
                     setReplyTo({
                       id: item.id as string,
@@ -452,6 +436,7 @@ export default function ReplyDetailScreen() {
                   variant="ghost"
                 />
                 <BouncyButton
+                  disabled={mutation.isPending}
                   onPress={() => {
                     setReplyTo({
                       id: parentComment.id as string,
@@ -509,12 +494,15 @@ export default function ReplyDetailScreen() {
           ListHeaderComponent={renderHeader}
           {...({ estimatedItemSize: 100 } as object)}
           contentContainerStyle={{
-            paddingBottom: INPUT_BAR_HEIGHT + insets.bottom + 20,
+            paddingBottom: inputBarHeight + 20,
           }}
-          onRefresh={refetch}
-          refreshing={isFetching && !isLoading}
+          onRefresh={() => void refresh()}
+          refreshing={refreshing}
           onEndReached={() =>
-            hasNextPage && !isFetchingNextPage && fetchNextPage()
+            hasNextPage &&
+            !isFetching &&
+            !isFetchNextPageError &&
+            fetchNextPage()
           }
           onEndReachedThreshold={0.3}
           keyboardDismissMode="on-drag"
@@ -523,6 +511,12 @@ export default function ReplyDetailScreen() {
               <View className="py-4 items-center bg-transparent">
                 <ActivityIndicator size="small" color={tintColor} />
               </View>
+            ) : isFetchNextPageError ? (
+              <QueryErrorView
+                compact
+                message="更多回复加载失败"
+                onRetry={() => void fetchNextPage()}
+              />
             ) : null
           }
           ListEmptyComponent={
@@ -530,6 +524,11 @@ export default function ReplyDetailScreen() {
               <View className="flex-1 items-center justify-center mt-[50px] bg-transparent">
                 <ActivityIndicator color={tintColor} />
               </View>
+            ) : isError ? (
+              <QueryErrorView
+                message="回复加载失败"
+                onRetry={() => void refetch()}
+              />
             ) : (
               <View className="flex-1 items-center justify-center mt-[50px] bg-transparent">
                 <Text type="secondary">暂无回复喵~</Text>
@@ -541,6 +540,7 @@ export default function ReplyDetailScreen() {
 
       {/* 输入框：绝对定位 + 随键盘动画移动 */}
       <Reanimated.View
+        onLayout={(event) => setInputBarHeight(event.nativeEvent.layout.height)}
         style={[
           {
             position: 'absolute',

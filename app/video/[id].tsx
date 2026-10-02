@@ -1,6 +1,8 @@
 import { Stack, useLocalSearchParams } from 'expo-router';
+import { useRef } from 'react';
 import { ActivityIndicator } from 'react-native';
-import { WebView } from 'react-native-webview';
+import { WebView, type WebViewProps } from 'react-native-webview';
+import { QueryErrorView } from '@/components/QueryErrorView';
 import { Text, useThemeColor, View } from '@/components/Themed';
 
 export default function VideoDetailScreen() {
@@ -9,6 +11,7 @@ export default function VideoDetailScreen() {
     title?: string;
   }>();
   const primaryColor = useThemeColor({}, 'primary');
+  const webViewRef = useRef<WebView<WebViewProps>>(null);
 
   if (!id) {
     return (
@@ -22,13 +25,20 @@ export default function VideoDetailScreen() {
   return (
     <View className="flex-1">
       <Stack.Screen options={{ title: title || '视频' }} />
-      <WebView
+      <WebView<WebViewProps>
+        ref={webViewRef}
         source={{
           uri: `https://www.zhihu.com/zvideo/${encodeURIComponent(id)}`,
         }}
         sharedCookiesEnabled
         thirdPartyCookiesEnabled
         startInLoadingState
+        renderError={() => (
+          <QueryErrorView
+            message="视频加载失败"
+            onRetry={() => webViewRef.current?.reload()}
+          />
+        )}
         renderLoading={() => (
           <View className="absolute inset-0 items-center justify-center">
             <ActivityIndicator color={primaryColor} />

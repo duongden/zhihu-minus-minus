@@ -1,8 +1,9 @@
 import { FlashList } from '@shopify/flash-list';
 import { useQueryClient } from '@tanstack/react-query';
-import { useNavigation } from 'expo-router';
+import { useNavigation, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet } from 'react-native';
+import { hasAuthenticationCookie } from '@/api/client';
 import { getMyLikes } from '@/api/zhihu';
 import { BouncyButton } from '@/components/BouncyButton';
 import { CreationCard } from '@/components/CreationCard';
@@ -11,11 +12,15 @@ import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useZhihuInfiniteQuery } from '@/hooks/useZhihuInfiniteQuery';
+import { useAuthStore } from '@/store/useAuthStore';
 import type { ZhihuMemberRelation } from '@/types/zhihu';
 import { refreshInfiniteQuery } from '@/utils/query';
 
 export default function MyLikesScreen() {
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const cookies = useAuthStore((state) => state.cookies);
+  const isAuthenticated = hasAuthenticationCookie(cookies);
   const colorScheme = useColorScheme();
   const navigation = useNavigation();
   const [activeTab, setActiveTab] = useState<'answers' | 'articles'>('answers');
@@ -32,6 +37,7 @@ export default function MyLikesScreen() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isFetching,
     isError,
     refetch,
     isRefetching,
@@ -40,6 +46,7 @@ export default function MyLikesScreen() {
     queryFn: ({ pageParam = 0 }) =>
       getMyLikes(activeTab, 20, pageParam as number),
     initialPageParam: 0,
+    enabled: isAuthenticated,
   });
 
   const handleRefresh = useCallback(() => {
@@ -111,13 +118,17 @@ export default function MyLikesScreen() {
           />
         )}
         onEndReached={() => {
-          if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+          if (hasNextPage && !isFetching) fetchNextPage();
         }}
-        onRefresh={handleRefresh}
+        onRefresh={isAuthenticated ? handleRefresh : undefined}
         refreshing={isRefetching}
         ListEmptyComponent={() => (
-          <View className="flex-1 p-[100px] items-center">
-            {isLoading ? (
+          <View className="px-6 py-16 items-center">
+            {!isAuthenticated ? (
+              <BouncyButton onPress={() => router.push('/login')}>
+                <Text type="secondary">登录后查看点赞内容，点此登录</Text>
+              </BouncyButton>
+            ) : isLoading ? (
               <ActivityIndicator color={primaryColor} />
             ) : isError ? (
               <QueryErrorView

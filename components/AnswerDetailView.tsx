@@ -25,6 +25,7 @@ import { BouncyButton } from '@/components/BouncyButton';
 import { DownvoteButton } from '@/components/DownvoteButton';
 import { LikeButton } from '@/components/LikeButton';
 import { ActionSheet } from '@/components/overlays/ActionSheet';
+import { QueryErrorView } from '@/components/QueryErrorView';
 import { ReadingProgressNotice } from '@/components/ReadingProgressNotice';
 import { ShareMenu } from '@/components/ShareMenu';
 import { StableAvatar } from '@/components/StableAvatar';
@@ -75,7 +76,6 @@ export const AnswerDetailView = ({
   const scrollViewRef = useRef<NativeScrollView>(null);
   const contentViewRef = useRef<NativeView>(null);
 
-  const [isLiked, setIsLiked] = React.useState(false);
   const [menuVisible, setMenuVisible] = React.useState(false);
   const [isSharing, setIsSharing] = React.useState(false);
   const [votersVisible, setVotersVisible] = React.useState(false);
@@ -280,6 +280,7 @@ export const AnswerDetailView = ({
   };
 
   const primaryColor = useThemeColor({}, 'primary');
+  const linkColor = useThemeColor({}, 'link');
   const primaryTransparent = useThemeColor({}, 'primaryTransparent');
   const secondaryColor = useThemeColor({}, 'textSecondary');
   const renderContentPlaceholder = React.useCallback(
@@ -422,7 +423,7 @@ export const AnswerDetailView = ({
               style={[
                 answer?.author?.is_following
                   ? { color: Colors[colorScheme].textSecondary }
-                  : { color: primaryColor },
+                  : { color: linkColor },
               ]}
             >
               {answer?.author?.is_following ? '已关注' : '关注'}
@@ -432,7 +433,12 @@ export const AnswerDetailView = ({
 
         {queryLoading && !answer ? (
           renderContentPlaceholder()
-        ) : (isError || getZhihuErrorStatus(error) === 404) && !answer ? (
+        ) : isError && !answer && getZhihuErrorStatus(error) !== 404 ? (
+          <QueryErrorView
+            message="回答加载失败"
+            onRetry={() => void refetch()}
+          />
+        ) : getZhihuErrorStatus(error) === 404 && !answer ? (
           <View className="h-[300px] justify-center items-center px-6 bg-transparent">
             <Ionicons name="compass-outline" size={48} color={secondaryColor} />
             <Text className="text-base font-bold mt-4 mb-2 text-foreground dark:text-foreground-dark">
@@ -446,10 +452,7 @@ export const AnswerDetailView = ({
               className="px-4 py-2 rounded-full"
               style={{ backgroundColor: primaryTransparent }}
             >
-              <Text
-                className="text-xs font-bold"
-                style={{ color: primaryColor }}
-              >
+              <Text className="text-xs font-bold" style={{ color: linkColor }}>
                 返回上一页
               </Text>
             </BouncyButton>
@@ -617,13 +620,6 @@ export const AnswerDetailView = ({
         onClose={() => setMenuVisible(false)}
         title="回答操作"
         options={[
-          {
-            key: 'like',
-            icon: isLiked ? 'heart' : 'heart-outline',
-            label: isLiked ? '取消喜欢' : '加入喜欢',
-            color: isLiked ? Colors[colorScheme].danger : undefined,
-            onPress: () => setIsLiked(!isLiked),
-          },
           {
             key: 'collection',
             icon: 'star',

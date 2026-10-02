@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Stack, useNavigation, useRouter } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -11,6 +11,7 @@ import {
   StyleSheet,
   TextInput,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getSearchSuggest, searchContent } from '@/api/zhihu';
 import type { FeedItem } from '@/api/zhihu/feed';
 import { BouncyButton } from '@/components/BouncyButton';
@@ -22,6 +23,7 @@ import type { UserCardMember } from '@/components/UserCard';
 import { UserCard } from '@/components/UserCard';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { getZhihuNextOffset } from '@/hooks/useZhihuInfiniteQuery';
 import { useSearchStore } from '@/store/useSearchStore';
 import type {
   ZhihuSearchResultItem,
@@ -34,7 +36,7 @@ type ParsedPeople = Omit<UserCardMember, 'id' | 'name' | 'headline'> & {
   name: React.ReactNode;
   headline?: React.ReactNode;
 };
-type SearchListItem = FeedItem | ZhihuSearchResultItem | ParsedPeople;
+type SearchListItem = FeedItem | ParsedPeople;
 
 /** 转义正则元字符，避免用户输入（如 "C++"）构造出非法正则 */
 function escapeRegExp(str: string): string {
@@ -67,7 +69,7 @@ const SEARCH_TIME_FILTERS = [
 export default function SearchScreen() {
   const colorScheme = useColorScheme();
   const router = useRouter();
-  const _navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -87,14 +89,19 @@ export default function SearchScreen() {
     | 'a_year'
     | undefined
   >();
-  const [isSearching, setIsSearching] = useState(false);
+  const [submittedQuery, setSubmittedQuery] = useState<string | null>(null);
+  const isSearching = submittedQuery !== null;
   const [filterSheetVisible, setFilterSheetVisible] = useState(false);
 
   const { history, addHistory, clearHistory, removeHistory } = useSearchStore();
 
   const tintColor = useThemeColor({}, 'primary');
+  const linkColor = useThemeColor({}, 'link');
+  const onPrimaryColor = useThemeColor({}, 'onPrimary');
+  const secondaryTextColor = useThemeColor({}, 'textSecondary');
   const backgroundColor = useThemeColor({}, 'background');
-  const surfaceColor = Colors[colorScheme].backgroundTertiary;
+  const surfaceColor = useThemeColor({}, 'backgroundTertiary');
+  const selectedSurfaceColor = useThemeColor({}, 'primaryTransparent');
   const textColor = useThemeColor({}, 'text');
   const borderColor = useThemeColor({}, 'border');
 
@@ -124,7 +131,7 @@ export default function SearchScreen() {
   };
 
   useEffect(() => {
-    const handler = setTimeout(() => setDebouncedQuery(query), 300);
+    const handler = setTimeout(() => setDebouncedQuery(query.trim()), 300);
     return () => clearTimeout(handler);
   }, [query]);
 
@@ -139,42 +146,44 @@ export default function SearchScreen() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isFetching,
+    isFetchNextPageError,
     isLoading,
     isError,
     refetch,
   } = useInfiniteQuery({
     queryKey: [
       'search-results',
-      debouncedQuery,
+      submittedQuery,
       searchType,
-      contentFilter,
-      sortFilter,
-      timeFilter,
+      searchType === 'general' ? contentFilter : undefined,
+      searchType === 'general' ? sortFilter : undefined,
+      searchType === 'general' ? timeFilter : undefined,
     ],
     queryFn: ({ pageParam = 0, signal }) =>
-      searchContent(debouncedQuery, pageParam as number, 20, searchType, {
+      searchContent(submittedQuery ?? '', pageParam, 20, searchType, {
         vertical: searchType === 'general' ? contentFilter : undefined,
         sort: searchType === 'general' ? sortFilter : undefined,
         time_interval: searchType === 'general' ? timeFilter : undefined,
         signal,
       }),
-    enabled: isSearching && debouncedQuery.length > 0,
+    enabled: Boolean(submittedQuery),
     initialPageParam: 0,
-    getNextPageParam: (lastPage) => {
-      if (lastPage.paging?.is_end) return undefined;
-      const nextUrl = lastPage.paging?.next;
-      const match = nextUrl?.match(/offset=(\d+)/);
-      return match ? parseInt(match[1], 10) : undefined;
+    getNextPageParam: (lastPage, _pages, lastPageParam) => {
+      const nextOffset = getZhihuNextOffset(lastPage);
+      return nextOffset !== undefined && nextOffset > lastPageParam
+        ? nextOffset
+        : undefined;
     },
   });
 
-  const handleSearch = () => {
-    if (query.trim()) {
-      addHistory(query.trim());
-      setIsSearching(true);
-      setDebouncedQuery(query);
-      Keyboard.dismiss();
-    }
+  const handleSearch = (value = query) => {
+    const term = value.trim();
+    if (!term) return;
+    setQuery(term);
+    setSubmittedQuery(term);
+    addHistory(term);
+    Keyboard.dismiss();
   };
 
   const HighlightText = (text: string) => {
@@ -216,6 +225,7 @@ export default function SearchScreen() {
   ): FeedItem | ParsedPeople | null => {
     const obj = item.object;
     if (!obj) return null;
+    if (!String(obj.id ?? '').trim()) return null;
     const highlight = item.highlight || {};
     if (obj.type === 'people') {
       return {
@@ -229,8 +239,15 @@ export default function SearchScreen() {
           : obj.headline || undefined,
       };
     }
+    if (
+      !['answer', 'article', 'pin', 'question', 'zvideo', 'video'].includes(
+        obj.type,
+      )
+    ) {
+      return null;
+    }
     return {
-      id: String(obj.id ?? obj.question?.id ?? ''),
+      id: String(obj.id),
       type:
         obj.type === 'answer'
           ? 'answers'
@@ -243,8 +260,9 @@ export default function SearchScreen() {
                 : 'videos',
       title: highlight.title
         ? HighlightText(highlight.title)
-        : obj.question?.name || obj.title || '无标题',
-      titleString: obj.question?.name || obj.title || '无标题',
+        : obj.question?.title || obj.question?.name || obj.title || '无标题',
+      titleString:
+        obj.question?.title || obj.question?.name || obj.title || '无标题',
       excerpt: highlight.description
         ? HighlightText(highlight.description)
         : obj.excerpt || '',
@@ -262,14 +280,19 @@ export default function SearchScreen() {
     };
   };
 
-  const flattenedResults =
+  const seenResults = new Set<string>();
+  const flattenedResults: SearchListItem[] =
     searchResults?.pages.flatMap((page) =>
-      page.data
-        ?.map((item) =>
-          searchType === 'people' ? item : parseSearchResult(item),
-        )
-        .filter((item): item is SearchListItem => Boolean(item)),
-    ) || [];
+      (page.data ?? []).flatMap((rawItem) => {
+        const item = parseSearchResult(rawItem);
+        if (!item || (searchType === 'people' && item.type !== 'peoples'))
+          return [];
+        const key = `${item.type}:${item.id}`;
+        if (seenResults.has(key)) return [];
+        seenResults.add(key);
+        return [item];
+      }),
+    ) ?? [];
 
   const renderSuggestion = ({ item }: { item: ZhihuSearchSuggestItem }) => {
     const text = item.query;
@@ -282,12 +305,7 @@ export default function SearchScreen() {
           borderBottomWidth: StyleSheet.hairlineWidth,
           borderBottomColor: Colors[colorScheme].border,
         }}
-        onPress={() => {
-          setQuery(item.query);
-          addHistory(item.query);
-          setIsSearching(true);
-          Keyboard.dismiss();
-        }}
+        onPress={() => handleSearch(item.query)}
       >
         <Ionicons
           name="search-outline"
@@ -301,7 +319,7 @@ export default function SearchScreen() {
               <Text
                 // biome-ignore lint/suspicious/noArrayIndexKey: parts 是搜索词按 query split 出的片段,数量与顺序由该次渲染的建议文本唯一决定。
                 key={i}
-                style={{ color: tintColor, fontWeight: 'bold' }}
+                style={{ color: linkColor, fontWeight: 'bold' }}
               >
                 {p}
               </Text>
@@ -340,7 +358,7 @@ export default function SearchScreen() {
           <Text
             className="text-[15px]"
             style={{
-              color: searchType === tab.value ? tintColor : '#666',
+              color: searchType === tab.value ? linkColor : secondaryTextColor,
               fontWeight: searchType === tab.value ? 'bold' : 'normal',
             }}
           >
@@ -379,15 +397,13 @@ export default function SearchScreen() {
               onPress={() => onSelect(option.value)}
               className="mr-2 px-3 py-1 rounded-full"
               style={{
-                backgroundColor: active
-                  ? Colors[colorScheme].primaryTransparent
-                  : surfaceColor,
+                backgroundColor: active ? selectedSurfaceColor : surfaceColor,
               }}
             >
               <Text
                 className="text-xs"
                 style={{
-                  color: active ? tintColor : textColor,
+                  color: active ? linkColor : textColor,
                   fontWeight: active ? '600' : '400',
                 }}
               >
@@ -405,7 +421,10 @@ export default function SearchScreen() {
       <Stack.Screen options={{ headerShown: false, title: '搜索' }} />
 
       {/* Header */}
-      <View className="pt-[45px] pb-2.5 px-[5px]" style={{ backgroundColor }}>
+      <View
+        className="pb-2.5 px-[5px]"
+        style={{ backgroundColor, paddingTop: insets.top + 8 }}
+      >
         <View className="flex-row items-center">
           <BouncyButton
             onPress={() => router.back()}
@@ -434,9 +453,9 @@ export default function SearchScreen() {
               value={query}
               onChangeText={(text) => {
                 setQuery(text);
-                setIsSearching(false);
+                setSubmittedQuery(null);
               }}
-              onSubmitEditing={handleSearch}
+              onSubmitEditing={() => handleSearch()}
               autoFocus
               returnKeyType="search"
             />
@@ -445,7 +464,7 @@ export default function SearchScreen() {
                 className="p-1 rounded-full"
                 onPress={() => {
                   setQuery('');
-                  setIsSearching(false);
+                  setSubmittedQuery(null);
                   inputRef.current?.focus();
                 }}
                 hitSlop={15}
@@ -466,7 +485,7 @@ export default function SearchScreen() {
             className="px-2.5 py-2 rounded-full"
             hitSlop={15}
           >
-            <Text style={{ color: tintColor, fontWeight: 'bold' }}>搜索</Text>
+            <Text style={{ color: linkColor, fontWeight: 'bold' }}>搜索</Text>
           </BouncyButton>
         </View>
       </View>
@@ -506,7 +525,10 @@ export default function SearchScreen() {
                 className="ml-1.5 min-w-[17px] h-[17px] rounded-full items-center justify-center"
                 style={{ backgroundColor: tintColor }}
               >
-                <Text className="text-[10px] text-white font-bold">
+                <Text
+                  className="text-[10px] font-bold"
+                  style={{ color: onPrimaryColor }}
+                >
                   {activeFilterCount}
                 </Text>
               </View>
@@ -525,7 +547,7 @@ export default function SearchScreen() {
                   key={label}
                   className="flex-row items-center px-2.5 py-1 rounded-full mr-1.5"
                   style={{
-                    backgroundColor: Colors[colorScheme].primaryTransparent,
+                    backgroundColor: selectedSurfaceColor,
                   }}
                   onPress={() => setFilterSheetVisible(true)}
                 >
@@ -628,7 +650,12 @@ export default function SearchScreen() {
               style={{ backgroundColor: tintColor }}
               onPress={() => setFilterSheetVisible(false)}
             >
-              <Text className="text-sm font-semibold text-white">完成</Text>
+              <Text
+                className="text-sm font-semibold"
+                style={{ color: onPrimaryColor }}
+              >
+                完成
+              </Text>
             </BouncyButton>
           </View>
         </ScrollView>
@@ -640,7 +667,7 @@ export default function SearchScreen() {
           style={{ backgroundColor }}
         >
           <Text type="secondary" className="text-xs">
-            “{debouncedQuery}”的结果
+            “{submittedQuery}”的结果
           </Text>
           <View className="flex-1" />
           <Text type="tertiary" className="text-xs">
@@ -650,10 +677,13 @@ export default function SearchScreen() {
       ) : null}
 
       {!isSearching &&
+      query.trim() === debouncedQuery &&
+      debouncedQuery.length > 0 &&
       suggestions?.suggest &&
       suggestions.suggest.length > 0 ? (
         <FlashList
           data={suggestions.suggest}
+          keyExtractor={(item) => item.query}
           renderItem={renderSuggestion}
           {...({
             estimatedItemSize: 50,
@@ -663,44 +693,38 @@ export default function SearchScreen() {
       ) : isSearching ? (
         <FlashList
           data={flattenedResults}
-          key={searchType}
+          key={JSON.stringify([
+            submittedQuery,
+            searchType,
+            ...(searchType === 'general'
+              ? [contentFilter, sortFilter, timeFilter]
+              : []),
+          ])}
+          keyExtractor={(item) => `${item.type}:${item.id}`}
           renderItem={({ item }: { item: SearchListItem }) => {
-            if (
-              searchType === 'people' &&
-              ('object' in item || item.type === 'peoples')
-            ) {
-              const userObj = 'object' in item ? item.object : item;
-              const highlight = 'highlight' in item ? item.highlight : {};
-              const displayUser: UserCardMember = {
-                ...userObj,
-                id: String(userObj.id),
-                type: userObj.type || 'people',
-                avatar_url: userObj.avatar_url || '',
-                name:
-                  typeof userObj.name === 'string'
-                    ? HighlightText(highlight.title || userObj.name || '')
-                    : userObj.name,
-                headline:
-                  typeof userObj.headline === 'string'
-                    ? HighlightText(
-                        highlight.description || userObj.headline || '',
-                      )
-                    : userObj.headline,
-              };
-              return <UserCard user={displayUser} />;
-            }
             if (item.type === 'peoples') return <UserCard user={item} />;
-            if ('object' in item) return null;
             return <FeedCard item={item} />;
           }}
           {...({
             estimatedItemSize: searchType === 'people' ? 80 : 150,
-            contentContainerStyle: { paddingTop: 4, paddingBottom: 18 },
+            contentContainerStyle: {
+              paddingTop: 4,
+              paddingBottom: insets.bottom + 18,
+            },
             onEndReached: () =>
-              hasNextPage && !isFetchingNextPage && fetchNextPage(),
+              hasNextPage &&
+              !isFetching &&
+              !isFetchNextPageError &&
+              fetchNextPage({ cancelRefetch: false }),
             onEndReachedThreshold: 0.5,
             ListFooterComponent: isFetchingNextPage ? (
               <ActivityIndicator style={{ padding: 20 }} color={tintColor} />
+            ) : isFetchNextPageError ? (
+              <QueryErrorView
+                compact
+                message="更多搜索结果加载失败"
+                onRetry={() => void fetchNextPage({ cancelRefetch: false })}
+              />
             ) : null,
             ListEmptyComponent: isError ? (
               <QueryErrorView
@@ -770,12 +794,7 @@ export default function SearchScreen() {
                     style={{ backgroundColor: surfaceColor }}
                   >
                     <BouncyButton
-                      onPress={() => {
-                        setQuery(item);
-                        addHistory(item);
-                        setIsSearching(true);
-                        Keyboard.dismiss();
-                      }}
+                      onPress={() => handleSearch(item)}
                       className="mr-1 px-1 py-0.5 rounded-full"
                     >
                       <Text className="text-sm">{item}</Text>

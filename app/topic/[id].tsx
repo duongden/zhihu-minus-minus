@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ActivityIndicator, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { FeedItem } from '@/api/zhihu/feed';
@@ -24,6 +24,7 @@ import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
+import { useRefreshAction } from '@/hooks/useRefreshAction';
 import { useZhihuInfiniteQuery } from '@/hooks/useZhihuInfiniteQuery';
 import type {
   ZhihuBestAnswerer,
@@ -37,9 +38,10 @@ export default function TopicDetail() {
   const queryClient = useQueryClient();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const _insets = useSafeAreaInsets();
+  const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const tintColor = useThemeColor({}, 'primary');
+  const onPrimary = useThemeColor({}, 'onPrimary');
   const textColor = useThemeColor({}, 'text');
   const backgroundColor = useThemeColor({}, 'background');
 
@@ -80,9 +82,10 @@ export default function TopicDetail() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isFetching,
+    isFetchNextPageError,
     isError: feedError,
     refetch,
-    isRefetching,
   } = useZhihuInfiniteQuery({
     queryKey: ['topic-feed', id, activeTab],
     queryFn: ({ pageParam = 0, signal }) =>
@@ -90,14 +93,6 @@ export default function TopicDetail() {
     initialPageParam: 0,
     enabled: activeTab !== 'structure',
   });
-
-  const handleRefresh = useCallback(() => {
-    return refreshInfiniteQuery(
-      queryClient,
-      ['topic-feed', id, activeTab],
-      refetch,
-    );
-  }, [queryClient, id, activeTab, refetch]);
 
   const {
     data: parentsData,
@@ -130,6 +125,15 @@ export default function TopicDetail() {
     queryKey: ['topic-best-answerers', id],
     queryFn: () => getBestAnswerers(id),
     enabled: activeTab === 'structure',
+  });
+
+  const { refresh: handleRefresh, refreshing } = useRefreshAction(async () => {
+    await Promise.all([
+      refetchTopic(),
+      ...(activeTab === 'structure'
+        ? [refetchParents(), refetchChildren(), refetchBestAnswerers()]
+        : [refreshInfiniteQuery(queryClient, ['topic-feed', id, activeTab])]),
+    ]);
   });
 
   const items = useMemo(() => {
@@ -190,7 +194,7 @@ export default function TopicDetail() {
               style={{
                 color: topic.is_following
                   ? Colors[colorScheme].textSecondary
-                  : Colors[colorScheme].textInverse,
+                  : onPrimary,
               }}
               className="font-bold text-sm"
             >
@@ -255,6 +259,7 @@ export default function TopicDetail() {
     topicError,
     activeTab,
     tintColor,
+    onPrimary,
     colorScheme,
     followMutation.mutate,
     followMutation.isPending,
@@ -282,6 +287,8 @@ export default function TopicDetail() {
 
       <FlashList
         data={activeTab === 'structure' ? [] : items}
+        keyExtractor={(item) => `${item.type}-${item.id}`}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
         renderItem={({ item }) => <FeedCard item={item} />}
         ListHeaderComponent={() => (
           <>
@@ -307,17 +314,25 @@ export default function TopicDetail() {
         onEndReached={() =>
           activeTab !== 'structure' &&
           hasNextPage &&
-          !isFetchingNextPage &&
+          !isFetching &&
+          !refreshing &&
+          !isFetchNextPageError &&
           fetchNextPage()
         }
         onEndReachedThreshold={0.5}
         onRefresh={handleRefresh}
-        refreshing={isRefetching}
+        refreshing={refreshing}
         ListFooterComponent={() =>
           isFetchingNextPage ? (
             <ActivityIndicator
               style={{ marginVertical: 20 }}
               color={tintColor}
+            />
+          ) : activeTab !== 'structure' && isFetchNextPageError ? (
+            <QueryErrorView
+              compact
+              message="更多话题内容加载失败"
+              onRetry={() => void fetchNextPage()}
             />
           ) : items.length > 0 && !hasNextPage ? (
             <Text type="secondary" className="text-center my-5">
@@ -500,7 +515,8 @@ function parseTopicFeedItem(item: ZhihuTopicFeedItem): FeedItem | null {
   else if (type === 'pin') appType = 'pins';
   else if (type === 'question') appType = 'questions';
 
-  if (!appType) return null;
+  if (!appType || target.id == null || String(target.id).trim() === '')
+    return null;
 
   // Extract content for pins (thoughts)
   let excerpt = target.excerpt || '';
@@ -525,7 +541,7 @@ function parseTopicFeedItem(item: ZhihuTopicFeedItem): FeedItem | null {
       : null);
 
   return {
-    id: target.id?.toString() || Math.random().toString(),
+    id: String(target.id),
     title: target.question?.title || target.title || target.excerpt_title || '',
     questionId:
       target.question?.id?.toString() ||

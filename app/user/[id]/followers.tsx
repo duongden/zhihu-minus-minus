@@ -21,6 +21,7 @@ export default function FollowersScreen() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isFetching,
     isError,
     refetch,
     isRefetching,
@@ -49,7 +50,7 @@ export default function FollowersScreen() {
           />
         )}
         onEndReached={() => {
-          if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+          if (hasNextPage && !isFetching) void fetchNextPage();
         }}
         onRefresh={() =>
           void refreshInfiniteQuery(

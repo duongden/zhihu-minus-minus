@@ -21,6 +21,7 @@ import { StableAvatar } from '@/components/StableAvatar';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { useRefreshAction } from '@/hooks/useRefreshAction';
 import type {
   ZhihuNotificationContent,
   ZhihuNotificationItem,
@@ -78,8 +79,9 @@ export default function NotificationScreen() {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isFetching,
+    isFetchNextPageError,
     refetch,
-    isRefetching,
     isError,
   } = useInfiniteQuery({
     queryKey: ['notifications', selectedType],
@@ -92,13 +94,13 @@ export default function NotificationScreen() {
     },
   });
 
-  const handleRefresh = useCallback(() => {
+  const { refresh: handleRefresh, refreshing } = useRefreshAction(() => {
     return refreshInfiniteQuery(
       queryClient,
       ['notifications', selectedType],
       refetch,
     );
-  }, [queryClient, selectedType, refetch]);
+  });
 
   const notifications = data?.pages.flatMap((page) => page.data) || [];
 
@@ -179,14 +181,14 @@ export default function NotificationScreen() {
 
         <View className="ml-[15px] flex-1 bg-transparent">
           <View className="flex-row items-center justify-between mb-1.5 bg-transparent">
-            <View className="flex-row items-center bg-transparent">
+            <View className="flex-row items-center bg-transparent flex-1 mr-2">
               {actor.avatar_url && (
                 <StableAvatar
                   uri={actor.avatar_url}
                   className="w-5 h-5 rounded-full mr-1.5"
                 />
               )}
-              <Text className="font-bold text-sm">
+              <Text className="font-bold text-sm flex-1" numberOfLines={1}>
                 {actor.name || '系统通知'}
               </Text>
             </View>
@@ -262,16 +264,22 @@ export default function NotificationScreen() {
 
       <FlashList
         data={notifications}
+        keyExtractor={(item) => String(item.id)}
         renderItem={renderItem}
-        {...({ estimatedItemSize: 120 } as object)}
         onEndReached={() => {
-          if (hasNextPage && !isFetchingNextPage) fetchNextPage();
+          if (
+            hasNextPage &&
+            !isFetching &&
+            !refreshing &&
+            !isFetchNextPageError
+          )
+            void fetchNextPage();
         }}
         onRefresh={handleRefresh}
-        refreshing={isRefetching}
+        refreshing={refreshing}
         contentContainerStyle={{ paddingBottom: 20 }}
         ListEmptyComponent={() => (
-          <View className="flex-1 p-[100px] items-center">
+          <View className="flex-1 px-6 py-20 items-center">
             {isLoading ? (
               <ActivityIndicator color={primaryColor} />
             ) : isError ? (
@@ -288,6 +296,12 @@ export default function NotificationScreen() {
         ListFooterComponent={() =>
           isFetchingNextPage ? (
             <ActivityIndicator style={{ margin: 20 }} color={primaryColor} />
+          ) : isFetchNextPageError ? (
+            <QueryErrorView
+              compact
+              message="更多通知加载失败"
+              onRetry={() => void fetchNextPage()}
+            />
           ) : null
         }
       />
