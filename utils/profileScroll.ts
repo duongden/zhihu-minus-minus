@@ -3,6 +3,22 @@ function nonNegativeFinite(value: number) {
   return Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
+export const PROFILE_COVER_SCROLL_DISTANCE = 112;
+
+/** Keep the same cover crop at toolbar height, then fade in its blurred image. */
+export function getProfileCoverState(offset: number) {
+  'worklet';
+  const scroll = nonNegativeFinite(offset);
+  return {
+    translateY:
+      scroll === 0 ? 0 : -Math.min(scroll, PROFILE_COVER_SCROLL_DISTANCE),
+    blurOpacity: Math.min(
+      1,
+      Math.max(0, scroll - PROFILE_COVER_SCROLL_DISTANCE) / 48,
+    ),
+  };
+}
+
 /**
  * Share the visible header position between tabs. A partially expanded header
  * must move both ways; once collapsed, each tab keeps its deeper reading offset.

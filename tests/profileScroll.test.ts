@@ -1,9 +1,48 @@
 import {
+  getProfileCoverState,
   getProfileHeaderOffset,
   getProfileMinContentHeight,
   getProfileResizedOffset,
   getProfileSyncedOffset,
 } from '../utils/profileScroll';
+
+describe('profile cover collapse', () => {
+  test('moves with the profile until it reaches toolbar height, then fades in blur', () => {
+    expect(getProfileCoverState(0)).toEqual({ translateY: 0, blurOpacity: 0 });
+    expect(getProfileCoverState(56)).toEqual({
+      translateY: -56,
+      blurOpacity: 0,
+    });
+    expect(getProfileCoverState(112)).toEqual({
+      translateY: -112,
+      blurOpacity: 0,
+    });
+    expect(getProfileCoverState(136)).toEqual({
+      translateY: -112,
+      blurOpacity: 0.5,
+    });
+    expect(getProfileCoverState(160)).toEqual({
+      translateY: -112,
+      blurOpacity: 1,
+    });
+    expect(getProfileCoverState(900)).toEqual(getProfileCoverState(160));
+  });
+
+  test('reverses smoothly while expanding and ignores overscroll or invalid offsets', () => {
+    expect([900, 136, 56, 0].map(getProfileCoverState)).toEqual([
+      { translateY: -112, blurOpacity: 1 },
+      { translateY: -112, blurOpacity: 0.5 },
+      { translateY: -56, blurOpacity: 0 },
+      { translateY: 0, blurOpacity: 0 },
+    ]);
+    for (const offset of [-80, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(getProfileCoverState(offset)).toEqual({
+        translateY: 0,
+        blurOpacity: 0,
+      });
+    }
+  });
+});
 
 describe('profile tab scroll coordination', () => {
   test('re-expands a previously scrolled tab to the current visible header', () => {

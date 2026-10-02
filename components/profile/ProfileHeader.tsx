@@ -1,13 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useMemo, useState } from 'react';
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import type { ZhihuMember } from '@/api/zhihu';
 import { BouncyButton } from '@/components/BouncyButton';
 import { FollowButton } from '@/components/FollowButton';
+import { ProfileCover } from '@/components/profile/ProfileCover';
 import { StableAvatar } from '@/components/StableAvatar';
 import { useRuntimeThemeColors } from '@/components/Themed';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import { PROFILE_COVER_SCROLL_DISTANCE } from '@/utils/profileScroll';
 
 interface ProfileHeaderProps {
   user: ZhihuMember;
@@ -52,7 +53,6 @@ export function ProfileHeader({
     [fontSizeScale, lineHeightScale],
   );
   const [expandedProfile, setExpandedProfile] = useState<string | null>(null);
-  const [failedCover, setFailedCover] = useState<string | null>(null);
   const identity = user.id || user.url_token || '';
   const isExpanded = expandedProfile === identity;
   const headline = user.headline?.trim();
@@ -61,12 +61,6 @@ export function ProfileHeader({
   const canExpandDescription =
     !!description &&
     (description.length > 110 || description.split('\n').length > 3);
-  const coverUrl = user.cover_url?.trim();
-  const coverSource = useMemo(
-    () => (coverUrl ? { uri: coverUrl } : undefined),
-    [coverUrl],
-  );
-  const showCover = !!coverUrl && failedCover !== coverUrl;
   const avatarUri = user.avatar_url || initialAvatar;
 
   return (
@@ -74,46 +68,10 @@ export function ProfileHeader({
       pointerEvents="box-none"
       style={{ backgroundColor: colors.background }}
     >
-      <View
-        pointerEvents="none"
-        style={[
-          styles.cover,
-          {
-            height: topInset + 112,
-            backgroundColor: colors.backgroundTertiary,
-          },
-        ]}
-        accessible={false}
-        importantForAccessibility="no-hide-descendants"
-      >
-        <LinearGradient
-          colors={[
-            `${colors.primary}78`,
-            `${colors.primary}24`,
-            colors.backgroundSecondary,
-          ]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={StyleSheet.absoluteFill}
-        />
-        <View
-          style={[styles.coverRing, { borderColor: `${colors.primary}30` }]}
-        />
-        <View
-          style={[styles.coverDisc, { backgroundColor: `${colors.primary}18` }]}
-        />
-        <View
-          style={[styles.coverLine, { backgroundColor: `${colors.primary}20` }]}
-        />
-        {showCover && (
-          <Image
-            source={coverSource}
-            resizeMode="cover"
-            style={StyleSheet.absoluteFill}
-            onError={() => setFailedCover(coverUrl)}
-          />
-        )}
-      </View>
+      <ProfileCover
+        coverUrl={user.cover_url}
+        height={topInset + PROFILE_COVER_SCROLL_DISTANCE}
+      />
 
       <View pointerEvents="box-none" style={styles.body}>
         <View pointerEvents="box-none" style={styles.identityRow}>
@@ -279,32 +237,6 @@ function createStyles(fontScale: number, lineHeightScale: number) {
     lineHeight: (lineHeight * fontScale * lineHeightScale) / 1.5,
   });
   return StyleSheet.create({
-    cover: { overflow: 'hidden' },
-    coverRing: {
-      position: 'absolute',
-      width: 250,
-      height: 250,
-      borderRadius: 125,
-      borderWidth: 36,
-      right: -60,
-      top: -58,
-    },
-    coverDisc: {
-      position: 'absolute',
-      width: 150,
-      height: 150,
-      borderRadius: 75,
-      left: -28,
-      bottom: -110,
-    },
-    coverLine: {
-      position: 'absolute',
-      height: 1,
-      width: '120%',
-      left: -30,
-      bottom: 50,
-      transform: [{ rotate: '-14deg' }],
-    },
     body: { paddingHorizontal: 20, paddingBottom: 6 },
     identityRow: {
       flexDirection: 'row',

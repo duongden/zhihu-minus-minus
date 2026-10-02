@@ -21,6 +21,8 @@ interface MockPagerProps extends PropsWithChildren {
 
 let mockPagerProps: MockPagerProps;
 const mockSetPage = jest.fn();
+const mockPush = jest.fn();
+const mockScrollToOffset = jest.fn();
 const mockPagerMount = jest.fn();
 const mockPagerUnmount = jest.fn();
 const mockListMount = jest.fn();
@@ -40,7 +42,7 @@ jest.mock('expo-router', () => ({
   Stack: { Screen: () => null },
   useLocalSearchParams: () => mockRoute,
   useRouter: () => ({
-    push: jest.fn(),
+    push: mockPush,
     back: jest.fn(),
     replace: jest.fn(),
     canGoBack: () => true,
@@ -95,6 +97,9 @@ jest.mock('../components/BouncyButton', () => ({
   BouncyButton: jest.requireActual('react-native').Pressable,
 }));
 jest.mock('../components/StableAvatar', () => ({ StableAvatar: () => null }));
+jest.mock('../components/profile/ProfileCover', () => ({
+  ProfileToolbarBackground: () => null,
+}));
 jest.mock('../components/profile/ProfileHeader', () => ({
   ProfileHeader: ({ isMe }: { isMe: boolean }) =>
     jest
@@ -152,7 +157,9 @@ jest.mock('../components/profile/ProfileTabList', () => {
   return {
     ProfileTabList: react.forwardRef((props: ProfileTabListProps, ref) => {
       mockListProps.set(props.label, props);
-      react.useImperativeHandle(ref, () => ({ scrollToOffset: jest.fn() }));
+      react.useImperativeHandle(ref, () => ({
+        scrollToOffset: mockScrollToOffset,
+      }));
       react.useEffect(() => {
         mockListMount(props.label);
         return () => mockListUnmount(props.label);
@@ -305,60 +312,29 @@ test('a failed profile refresh retains the cached header and native pager', asyn
   await host.unmount();
 });
 
-test('typing and clearing search preserve the pager, existing lists and input instance', async () => {
+test('search opens a separate route without altering the active tab or list offsets', async () => {
   mockRoute.tab = 'answers';
   client.setQueryData(['me'], member);
   const host = await render(screen());
-  const input = host.getByPlaceholderText('搜索 合成作者 的创作...');
   const pager = host.getByTestId('native-profile-pager');
-  await fireEvent.changeText(input, '  最近  ');
-  expect(host.getByPlaceholderText('搜索 合成作者 的创作...')).toBe(input);
-  expect(
-    host.getByTestId('native-profile-pager', { includeHiddenElements: true }),
-  ).toBe(pager);
-  expect(mockPagerMount).toHaveBeenCalledTimes(1);
+  expect(host.queryByPlaceholderText('搜索 合成作者 的创作...')).toBeNull();
+  await fireEvent.press(host.getByLabelText('搜索此用户的创作'));
+  expect(mockPush).toHaveBeenCalledWith({
+    pathname: '/user/[id]/search',
+    params: { id: 'member-readable-token' },
+  });
+  expect(host.getByTestId('native-profile-pager')).toBe(pager);
+  expect(host.getByRole('tab', { name: '回答' })).toBeSelected();
+  expect(mockListProps.get('回答')?.active).toBe(true);
+  expect(mockScrollToOffset).not.toHaveBeenCalled();
+  expect(mockSetPage).not.toHaveBeenCalled();
   expect(mockPagerUnmount).not.toHaveBeenCalled();
   expect(mockListUnmount).not.toHaveBeenCalled();
-  expect(mockListProps.get('回答')?.active).toBe(false);
-  await flushQueries(350);
-  expect(searchContent).toHaveBeenCalledWith('最近', 0, 20, 'general', {
-    restricted_scene: 'member',
-    restricted_field: 'member_hash_id',
-    restricted_value: member.id,
-  });
-
-  await fireEvent.press(host.getByLabelText('清空个人主页搜索'));
-  expect(host.getByPlaceholderText('搜索 合成作者 的创作...')).toBe(input);
-  expect(input.props.value).toBe('');
-  expect(host.getByTestId('native-profile-pager')).toBe(pager);
-  expect(mockPagerUnmount).not.toHaveBeenCalled();
-  expect(mockListUnmount.mock.calls).toEqual([['搜索结果']]);
-  expect(mockListProps.get('回答')?.active).toBe(true);
-  expect(host.getByRole('tab', { name: '回答' })).toBeSelected();
-  await host.unmount();
-});
-
-test('choosing creation from search clears the query and selects page one', async () => {
-  mockRoute.tab = 'answers';
-  client.setQueryData(['me'], member);
-  const host = await render(screen());
-  const input = host.getByPlaceholderText('搜索 合成作者 的创作...');
-  await fireEvent.changeText(input, '未提交的搜索');
-  await fireEvent.press(host.getByRole('tab', { name: '创作' }));
-  expect(mockSetPage).toHaveBeenLastCalledWith(1);
-  await act(() =>
-    mockPagerProps.onPageSelected({ nativeEvent: { position: 1 } }),
-  );
-  await flushQueries(350);
-  expect(input.props.value).toBe('');
-  expect(host.queryByTestId('profile-list-搜索结果')).toBeNull();
   expect(searchContent).not.toHaveBeenCalled();
-  expect(mockListProps.get('创作')?.active).toBe(true);
-  expect(getRecentMemberActivities).toHaveBeenCalledTimes(1);
   await host.unmount();
 });
 
-test('switching member routes resets visited tabs, pending search and the native pager', async () => {
+test('switching member routes resets visited tabs and the native pager', async () => {
   mockRoute.tab = 'answers';
   client.setQueryData(['me'], member);
   const host = await render(screen());
@@ -367,10 +343,6 @@ test('switching member routes resets visited tabs, pending search and the native
     mockPagerProps.onPageSelected({ nativeEvent: { position: 1 } }),
   );
   await flushQueries();
-  await fireEvent.changeText(
-    host.getByPlaceholderText('搜索 合成作者 的创作...'),
-    '尚未发出的旧主页搜索',
-  );
 
   const secondMember = {
     ...member,
@@ -383,9 +355,6 @@ test('switching member routes resets visited tabs, pending search and the native
   await host.rerender(screen());
   await flushQueries(350);
 
-  expect(
-    host.getByPlaceholderText('搜索 另一位作者 的创作...').props.value,
-  ).toBe('');
   expect(host.queryByTestId('profile-list-搜索结果')).toBeNull();
   expect(mockPagerProps.initialPage).toBe(1);
   expect(host.getByRole('tab', { name: '创作' })).toBeSelected();

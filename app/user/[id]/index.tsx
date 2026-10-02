@@ -5,14 +5,13 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   View as NativeView,
   ScrollView,
   StyleSheet,
-  TextInput,
 } from 'react-native';
 import PagerView, {
   type PagerViewOnPageScrollEvent,
@@ -37,7 +36,6 @@ import {
   getMemberRelations,
   getMemberWithFallback,
   MEMBER_ANSWERS_INCLUDE,
-  searchContent,
   unfollowMember,
   type ZhihuMember,
 } from '@/api/zhihu';
@@ -45,6 +43,7 @@ import { addReadHistory } from '@/api/zhihu/history';
 import { BouncyButton } from '@/components/BouncyButton';
 import { FeedCard } from '@/components/FeedCard';
 import { FollowButton } from '@/components/FollowButton';
+import { ProfileToolbarBackground } from '@/components/profile/ProfileCover';
 import { ProfileHeader } from '@/components/profile/ProfileHeader';
 import {
   ProfileTabList,
@@ -63,8 +62,9 @@ import Colors from '@/constants/Colors';
 import { useUserCreations } from '@/hooks/useUserCreations';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
-import type { ZhihuAuthor, ZhihuSearchResultItem } from '@/types/zhihu';
+import type { ZhihuAuthor } from '@/types/zhihu';
 import {
+  getProfileCoverState,
   getProfileHeaderOffset,
   getProfileSyncedOffset,
 } from '@/utils/profileScroll';
@@ -151,7 +151,6 @@ function getProfileListItemKey(item: unknown) {
 }
 
 const AnimatedPagerView = Reanimated.createAnimatedComponent(PagerView);
-const SEARCH_PAGE_INDEX = PROFILE_TABS.length;
 
 type ProfileRouteParams = {
   id: string;
@@ -180,11 +179,8 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
   });
   const [sortBy, setSortBy] = useState<'created' | 'voteups'>('created');
   const [followLoading, setFollowLoading] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const fontSizeScale = useSettingsStore((state) => state.fontSizeScale);
 
-  const isSearching = searchQuery.trim().length > 0;
   const [headerHeight, setHeaderHeight] = useState(0);
   const [tabBarHeight, setTabBarHeight] = useState(52);
   const [viewportHeight, setViewportHeight] = useState(0);
@@ -198,7 +194,6 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
   const [profileTabViewportWidth, setProfileTabViewportWidth] = useState(0);
   const [tabLayoutVersion, setTabLayoutVersion] = useState(0);
   const pagerRef = useRef<PagerView>(null);
-  const searchInputRef = useRef<TextInput>(null);
   const profileTabsScrollRef = useRef<ScrollView>(null);
   const profileTabLayoutsRef = useRef<
     Array<{ x: number; width: number } | undefined>
@@ -207,7 +202,7 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
   const activeIndexRef = useRef(initialTabIndex);
   const pagerProgress = useSharedValue(initialTabIndex);
   const scrollOffsets = useSharedValue<number[]>(
-    Array(PROFILE_TABS.length + 1).fill(0),
+    Array(PROFILE_TABS.length).fill(0),
   );
   const maxScroll = useSharedValue(0);
   const profileTabXs = useSharedValue<number[]>([]);
@@ -217,14 +212,12 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
     maxScroll.value = collapseDistance;
   }, [collapseDistance, maxScroll]);
 
-  const headerOffset = useDerivedValue(
-    () =>
-      getProfileHeaderOffset(
-        scrollOffsets.value,
-        isSearching ? SEARCH_PAGE_INDEX : pagerProgress.value,
-        maxScroll.value,
-      ),
-    [isSearching],
+  const headerOffset = useDerivedValue(() =>
+    getProfileHeaderOffset(
+      scrollOffsets.value,
+      pagerProgress.value,
+      maxScroll.value,
+    ),
   );
   const headerAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: -headerOffset.value }],
@@ -232,16 +225,16 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
   const compactOpacity = useDerivedValue(() => {
     const distance = maxScroll.value;
     if (distance <= 0) return 0;
-    return interpolate(
-      headerOffset.value,
-      [distance * 0.35, distance * 0.7],
-      [0, 1],
-      'clamp',
+    return Math.min(
+      getProfileCoverState(headerOffset.value).blurOpacity,
+      interpolate(
+        headerOffset.value,
+        [distance * 0.35, distance * 0.7],
+        [0, 1],
+        'clamp',
+      ),
     );
   });
-  const toolbarBackgroundStyle = useAnimatedStyle(() => ({
-    opacity: compactOpacity.value,
-  }));
   const toolbarIdentityStyle = useAnimatedStyle(() => ({
     opacity: compactOpacity.value,
     transform: [{ translateY: (1 - compactOpacity.value) * 8 }],
@@ -337,29 +330,12 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
   };
 
   const handleTabPress = (index: number) => {
-    if (isSearching) {
-      setSearchQuery('');
-      setDebouncedSearchQuery('');
-      searchInputRef.current?.blur();
-      syncLists(SEARCH_PAGE_INDEX);
-    } else {
-      syncLists(activeIndexRef.current);
-    }
+    syncLists(activeIndexRef.current);
     const tab = PROFILE_TABS[index].key;
     setVisitedTabs((previous) => ({ ...previous, [tab]: true }));
     pagerRef.current?.setPage(index);
     scrollProfileTabIntoView(index, true);
   };
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearchQuery(searchQuery.trim());
-      if (searchQuery.trim()) {
-        listRefs.current[SEARCH_PAGE_INDEX]?.scrollToOffset(0);
-      }
-    }, 350);
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
 
   const borderColor = Colors[colorScheme].border;
   const primaryColor = useThemeColor({}, 'primary');
@@ -589,124 +565,6 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
     }
   };
 
-  const {
-    data: searchResults,
-    fetchNextPage: fetchNextSearchPage,
-    hasNextPage: hasNextSearchPage,
-    isFetchingNextPage: isFetchingNextSearchPage,
-    isFetching: isFetchingSearch,
-    isLoading: searchLoading,
-    isError: isSearchError,
-    isFetchNextPageError: isFetchNextSearchPageError,
-    refetch: refetchSearch,
-  } = useInfiniteQuery({
-    queryKey: ['user-creations-search', user?.id, debouncedSearchQuery],
-    queryFn: ({ pageParam = 0 }) =>
-      searchContent(debouncedSearchQuery, pageParam, 20, 'general', {
-        restricted_scene: 'member',
-        restricted_field: 'member_hash_id',
-        restricted_value: user?.id,
-      }),
-    enabled: isSearching && debouncedSearchQuery.length > 0 && !!user?.id,
-    initialPageParam: 0,
-    getNextPageParam: (lastPage) => {
-      if (lastPage.paging?.is_end) return undefined;
-      return getNextPageOffset(lastPage.paging?.next);
-    },
-  });
-
-  const HighlightText = (text: string, highlightColor: string = linkColor) => {
-    if (!text) return '';
-    const decodedText = text
-      .replace(/&lt;em&gt;/g, '[[EM]]')
-      .replace(/&lt;\/em&gt;/g, '[[/EM]]')
-      .replace(/<em>/g, '[[EM]]')
-      .replace(/<\/em>/g, '[[/EM]]')
-      .replace(/&quot;/g, '"')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&nbsp;/g, ' ');
-    const parts = decodedText.split(/(\[\[EM\]\].*?\[\[\/EM\]\])/gs);
-    return (
-      <React.Fragment>
-        {parts.map((part, i) =>
-          part.startsWith('[[EM]]') && part.endsWith('[[/EM]]') ? (
-            <Text
-              // biome-ignore lint/suspicious/noArrayIndexKey: parts 是同一段文本按 [[EM]] 标记 split 出的片段,数量与顺序由该次渲染的文本唯一决定,不增删也不重排。
-              key={i}
-              type="primary"
-              className="font-bold"
-              style={{ color: highlightColor }}
-            >
-              {part.replace(/\[\[\/?EM\]\]/g, '')}
-            </Text>
-          ) : (
-            part
-          ),
-        )}
-      </React.Fragment>
-    );
-  };
-
-  const parseSearchResult = (item: ZhihuSearchResultItem): FeedItem | null => {
-    const obj = item.object as ProfileContentItem;
-    if (!obj || obj.id === null || obj.id === undefined) return null;
-    const feedType = normalizeUserFeedType(obj.type);
-    if (!feedType) return null;
-    const highlight = item.highlight || {};
-    return {
-      id: String(obj.id),
-      type: feedType,
-      title: highlight.title
-        ? HighlightText(highlight.title)
-        : obj.question?.name || obj.title || '无标题',
-      titleString: obj.question?.name || obj.title || '无标题',
-      excerpt: highlight.description
-        ? HighlightText(highlight.description)
-        : obj.excerpt || '',
-      image: obj.thumbnail_info?.thumbnails?.[0]?.url || null,
-      voteCount:
-        feedType === 'videos' ? 0 : (getContentVoteCount(feedType, obj) ?? 0),
-      commentCount: obj.comment_count || 0,
-      author: {
-        id: obj.author?.id || user?.id || '',
-        name: obj.author?.name || user?.name || '匿名用户',
-        avatar: obj.author?.avatar_url || user?.avatar_url || '',
-        url_token: obj.author?.url_token || user?.url_token,
-      },
-      questionId:
-        obj.question?.id !== undefined
-          ? String(obj.question.id)
-          : obj.id !== undefined
-            ? String(obj.id)
-            : undefined,
-      voted:
-        feedType === 'videos' ? 0 : (getContentVoteState(feedType, obj) ?? 0),
-      favlistsCount: obj.favlists_count || obj.favorite_count || 0,
-    };
-  };
-
-  const searchPending =
-    isSearching && searchQuery.trim() !== debouncedSearchQuery;
-  const currentListItems =
-    isSearching && !searchPending
-      ? searchResults?.pages.flatMap(
-          (page) =>
-            page.data
-              ?.map(parseSearchResult)
-              .filter((item): item is FeedItem => item !== null) || [],
-        ) || []
-      : [];
-
-  const refreshSearch = React.useCallback(() => {
-    return refreshInfiniteQuery(
-      queryClient,
-      ['user-creations-search', user?.id, debouncedSearchQuery],
-      refetchSearch,
-    );
-  }, [debouncedSearchQuery, queryClient, refetchSearch, user?.id]);
-
   const handleFollow = async () => {
     if (followLoading || !user) return;
     if (!cookies) {
@@ -781,62 +639,6 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
       />
     ) : null;
 
-  const renderSearchBar = () => (
-    <View pointerEvents="box-none" className="pb-2 pt-1 bg-transparent">
-      <View
-        className="flex-row items-center rounded-3xl mx-[15px] my-2.5 pr-2.5 min-h-[40px]"
-        style={{ backgroundColor: Colors[colorScheme].backgroundTertiary }}
-      >
-        <Ionicons
-          name="search"
-          size={16}
-          color={Colors[colorScheme].textTertiary}
-          className="ml-2.5"
-        />
-        <TextInput
-          ref={searchInputRef}
-          className="flex-1 text-sm px-2.5 py-2"
-          style={{
-            color: Colors[colorScheme].text,
-            fontSize: 14 * fontSizeScale,
-            textAlignVertical: 'center',
-          }}
-          placeholder={`搜索 ${user?.name || '用户'} 的创作...`}
-          placeholderTextColor={Colors[colorScheme].textTertiary}
-          value={searchQuery}
-          onChangeText={(value) => {
-            if (!searchQuery.trim() && value.trim()) {
-              scrollOffsets.value = scrollOffsets.value.map((offset, index) =>
-                index === SEARCH_PAGE_INDEX ? 0 : offset,
-              );
-              listRefs.current[SEARCH_PAGE_INDEX]?.scrollToOffset(0);
-            }
-            if (!value.trim() && isSearching) syncLists(SEARCH_PAGE_INDEX);
-            setSearchQuery(value);
-          }}
-          returnKeyType="search"
-        />
-        {searchQuery.length > 0 && (
-          <BouncyButton
-            accessibilityLabel="清空个人主页搜索"
-            onPress={() => {
-              syncLists(SEARCH_PAGE_INDEX);
-              setSearchQuery('');
-              setDebouncedSearchQuery('');
-            }}
-            className="p-[5px] rounded-full"
-          >
-            <Ionicons
-              name="close-circle"
-              size={16}
-              color={Colors[colorScheme].textTertiary}
-            />
-          </BouncyButton>
-        )}
-      </View>
-    </View>
-  );
-
   const renderTabsSelector = () => (
     <View
       style={{
@@ -866,7 +668,7 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
             const count = tab.countKey ? user?.[tab.countKey] : undefined;
             const countStr =
               count !== undefined && count > 0 ? ` ${count}` : '';
-            const isActive = !isSearching && activeTab === tab.key;
+            const isActive = activeTab === tab.key;
             return (
               <BouncyButton
                 key={tab.key}
@@ -920,7 +722,6 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
                 backgroundColor: primaryColor,
               },
               profileTabIndicatorStyle,
-              isSearching && { opacity: 0 },
             ]}
           />
         </NativeView>
@@ -1072,14 +873,7 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
         </View>
       ) : (
         <>
-          <NativeView
-            pointerEvents={isSearching ? 'none' : 'auto'}
-            accessibilityElementsHidden={isSearching}
-            importantForAccessibility={
-              isSearching ? 'no-hide-descendants' : 'auto'
-            }
-            style={[StyleSheet.absoluteFill, { opacity: isSearching ? 0 : 1 }]}
-          >
+          <NativeView style={StyleSheet.absoluteFill}>
             <AnimatedPagerView
               ref={pagerRef}
               style={{ flex: 1 }}
@@ -1134,7 +928,7 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
                       viewportHeight={viewportHeight}
                       bottomInset={insets.bottom}
                       offsets={scrollOffsets}
-                      active={!isSearching && activeTab === tab.key}
+                      active={activeTab === tab.key}
                       keyExtractor={(item) => {
                         if (tab.key === 'creations') {
                           const content = item as FeedItem;
@@ -1154,59 +948,6 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
               })}
             </AnimatedPagerView>
           </NativeView>
-          {isSearching && (
-            <NativeView
-              style={[
-                StyleSheet.absoluteFill,
-                { backgroundColor: Colors[colorScheme].background },
-              ]}
-            >
-              <ProfileTabList
-                ref={(ref) => {
-                  listRefs.current[SEARCH_PAGE_INDEX] = ref;
-                }}
-                index={SEARCH_PAGE_INDEX}
-                label="搜索结果"
-                query={{
-                  data: currentListItems,
-                  isLoading: searchPending || searchLoading,
-                  isError: !searchPending && isSearchError,
-                  isFetching: isFetchingSearch,
-                  isFetchingNextPage: isFetchingNextSearchPage,
-                  isFetchNextPageError: isFetchNextSearchPageError,
-                  hasNextPage: !searchPending && hasNextSearchPage,
-                  fetchNextPage: fetchNextSearchPage,
-                  refetch: refetchSearch,
-                  refresh: refreshSearch,
-                }}
-                headerHeight={headerHeight}
-                collapseDistance={collapseDistance}
-                viewportHeight={viewportHeight}
-                bottomInset={insets.bottom}
-                offsets={scrollOffsets}
-                active={!searchPending}
-                keyExtractor={(item) => {
-                  const content = item as FeedItem;
-                  return `user-search-${content.type}-${content.id}`;
-                }}
-                renderItem={(item) => <FeedCard item={item as FeedItem} />}
-                listHeader={
-                  <Text
-                    type="secondary"
-                    style={{
-                      paddingHorizontal: 20,
-                      paddingVertical: 12,
-                      fontSize: 12,
-                    }}
-                  >
-                    {searchPending
-                      ? '正在搜索…'
-                      : `“${debouncedSearchQuery}”的创作`}
-                  </Text>
-                }
-              />
-            </NativeView>
-          )}
           <Reanimated.View
             pointerEvents="box-none"
             testID="profile-collapsible-header"
@@ -1227,7 +968,6 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
             ]}
           >
             {renderHeader()}
-            {renderSearchBar()}
             {renderTabsSelector()}
           </Reanimated.View>
         </>
@@ -1243,18 +983,13 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
           paddingTop: insets.top,
         }}
       >
-        <Reanimated.View
-          pointerEvents="none"
-          style={[
-            StyleSheet.absoluteFill,
-            {
-              backgroundColor: Colors[colorScheme].background,
-              borderBottomColor: borderColor,
-              borderBottomWidth: StyleSheet.hairlineWidth,
-            },
-            toolbarBackgroundStyle,
-          ]}
-        />
+        {user ? (
+          <ProfileToolbarBackground
+            coverUrl={user.cover_url}
+            navigationHeight={navigationHeight}
+            headerOffset={headerOffset}
+          />
+        ) : null}
         <NativeView
           pointerEvents="box-none"
           onLayout={(event) =>
@@ -1320,9 +1055,7 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
                 type="secondary"
                 style={{ fontSize: 11, lineHeight: 17 * fontSizeScale }}
               >
-                {isSearching
-                  ? '搜索创作'
-                  : `${activeMeta?.label || '个人主页'}${activeCount === undefined ? '' : ` · ${activeCount}`}`}
+                {`${activeMeta?.label || '个人主页'}${activeCount === undefined ? '' : ` · ${activeCount}`}`}
               </Text>
             </View>
           </Reanimated.View>
@@ -1338,12 +1071,9 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
             accessibilityRole="button"
             accessibilityLabel="搜索此用户的创作"
             disabled={!user}
-            onPress={() => {
-              listRefs.current[
-                isSearching ? SEARCH_PAGE_INDEX : activeIndexRef.current
-              ]?.scrollToOffset(0, true);
-              searchInputRef.current?.focus();
-            }}
+            onPress={() =>
+              router.push({ pathname: '/user/[id]/search', params: { id } })
+            }
             style={{
               width: 40,
               height: 40,
