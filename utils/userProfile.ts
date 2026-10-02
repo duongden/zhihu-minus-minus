@@ -138,9 +138,25 @@ export function getNextRecentActivityCursor(
   if (!nextUrl) return undefined;
   try {
     const url = new URL(nextUrl, 'https://api.zhihu.com');
-    const offset = Number.parseInt(url.searchParams.get('offset') || '', 10);
-    const pageNum = Number.parseInt(url.searchParams.get('page_num') || '', 10);
-    if (!Number.isFinite(offset) || !Number.isFinite(pageNum)) return undefined;
+    const offsetValue = url.searchParams.get('offset');
+    const pageValue = url.searchParams.get('page_num');
+    if (
+      offsetValue === null ||
+      pageValue === null ||
+      !/^\d+$/.test(offsetValue) ||
+      !/^\d+$/.test(pageValue)
+    ) {
+      return undefined;
+    }
+    const offset = Number(offsetValue);
+    const pageNum = Number(pageValue);
+    if (
+      !Number.isSafeInteger(offset) ||
+      !Number.isSafeInteger(pageNum) ||
+      pageNum < 1
+    ) {
+      return undefined;
+    }
     return { offset, pageNum };
   } catch {
     return undefined;

@@ -79,6 +79,13 @@ export interface ZhihuMemberActivityTarget {
   reaction_count?: number;
   comment_count?: number;
   favlists_count?: number;
+  favorite_count?: number;
+  reaction?: {
+    statistics?: {
+      comments?: number;
+      favorites?: number;
+    };
+  };
   created?: number;
   created_time?: number;
   relationship?: { voting?: number };
@@ -178,11 +185,13 @@ export const getMemberActivities = async (
 export const getRecentMemberActivities = async (
   memberId: string | number,
   cursor: ZhihuRecentActivityCursor,
+  signal?: AbortSignal,
 ): Promise<ZhihuListResponse<ZhihuMemberActivity>> => {
   const url = `https://api.zhihu.com/moments/recent/people/${memberId}/activities`;
   const res = await apiClient.get<ZhihuListResponse<RawZhihuMemberActivity>>(
     url,
     {
+      signal,
       params: {
         action: 'down',
         offset: cursor.offset,

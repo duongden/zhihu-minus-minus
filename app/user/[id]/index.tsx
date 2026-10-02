@@ -1,18 +1,17 @@
 import { Ionicons } from '@expo/vector-icons';
-import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import {
   useInfiniteQuery,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Image,
   View as NativeView,
   ScrollView,
+  StyleSheet,
   TextInput,
 } from 'react-native';
 import PagerView, {
@@ -20,8 +19,10 @@ import PagerView, {
 } from 'react-native-pager-view';
 import Reanimated, {
   interpolate,
-  useAnimatedScrollHandler,
+  runOnJS,
+  useAnimatedReaction,
   useAnimatedStyle,
+  useDerivedValue,
   useEvent,
   useSharedValue,
 } from 'react-native-reanimated';
@@ -43,14 +44,29 @@ import {
 import { addReadHistory } from '@/api/zhihu/history';
 import { BouncyButton } from '@/components/BouncyButton';
 import { FeedCard } from '@/components/FeedCard';
+import { ProfileHeader } from '@/components/profile/ProfileHeader';
+import {
+  ProfileTabList,
+  type ProfileTabListHandle,
+} from '@/components/profile/ProfileTabList';
+import {
+  getInitialProfileTab,
+  PROFILE_TABS,
+  type ProfileTabKey,
+} from '@/components/profile/profileTabs';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { StableAvatar } from '@/components/StableAvatar';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { useUserCreations } from '@/hooks/useUserCreations';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import type { ZhihuAuthor, ZhihuSearchResultItem } from '@/types/zhihu';
+import {
+  getProfileHeaderOffset,
+  getProfileSyncedOffset,
+} from '@/utils/profileScroll';
 import { refreshInfiniteQuery } from '@/utils/query';
 import {
   getNextPageOffset,
@@ -58,8 +74,6 @@ import {
   normalizeUserFeedType,
   type UserFeedType,
 } from '@/utils/userProfile';
-
-const AnimatedFlashList = Reanimated.createAnimatedComponent(FlashList);
 
 interface ProfileContentSegment {
   type?: string;
@@ -135,38 +149,25 @@ function getProfileListItemKey(item: unknown) {
   );
 }
 
-const PROFILE_TABS = [
-  { key: 'activities', label: '动态', countKey: undefined },
-  { key: 'answers', label: '回答', countKey: 'answer_count' },
-  { key: 'articles', label: '文章', countKey: 'articles_count' },
-  { key: 'questions', label: '提问', countKey: 'question_count' },
-  { key: 'pins', label: '想法', countKey: 'pins_count' },
-] as const;
-const PROFILE_TAB_BAR_HEIGHT = 44;
 const AnimatedPagerView = Reanimated.createAnimatedComponent(PagerView);
+const SEARCH_PAGE_INDEX = PROFILE_TABS.length;
 
-type ProfileTabKey = (typeof PROFILE_TABS)[number]['key'];
-
-function getInitialProfileTab(tab: string | undefined): ProfileTabKey {
-  return PROFILE_TABS.some((profileTab) => profileTab.key === tab)
-    ? (tab as ProfileTabKey)
-    : 'answers';
-}
+type ProfileRouteParams = {
+  id: string;
+  avatar?: string;
+  tab?: string;
+};
 
 export default function UserDetailScreen() {
+  const params = useLocalSearchParams<ProfileRouteParams>();
+  return <UserProfileScreen key={params.id} params={params} />;
+}
+
+function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
   const colorScheme = useColorScheme();
-  const _insets = useSafeAreaInsets();
-  const {
-    id,
-    avatar: initialAvatar,
-    tab: initialTabParam,
-  } = useLocalSearchParams<{
-    id: string;
-    avatar?: string;
-    tab?: string;
-  }>();
+  const insets = useSafeAreaInsets();
+  const { id, avatar: initialAvatar, tab: initialTabParam } = params;
   const router = useRouter();
-  const navigation = useNavigation();
   const queryClient = useQueryClient();
   const initialTab = getInitialProfileTab(initialTabParam);
   const initialTabIndex = PROFILE_TABS.findIndex(
@@ -180,39 +181,76 @@ export default function UserDetailScreen() {
   const [followLoading, setFollowLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  const fontSizeScale = useSettingsStore((state) => state.fontSizeScale);
 
-  // 动态测量 Header 高度
-  const [headerHeight, setHeaderHeight] = useState(420);
+  const isSearching = searchQuery.trim().length > 0;
+  const [headerHeight, setHeaderHeight] = useState(0);
+  const [tabBarHeight, setTabBarHeight] = useState(52);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const [navigationRowHeight, setNavigationRowHeight] = useState(56);
+  const navigationHeight = insets.top + navigationRowHeight;
+  const collapseDistance = Math.max(
+    0,
+    headerHeight - navigationHeight - tabBarHeight,
+  );
+  const [compactHeader, setCompactHeader] = useState(false);
   const [profileTabViewportWidth, setProfileTabViewportWidth] = useState(0);
-  const maxScroll = useSharedValue(420 - PROFILE_TAB_BAR_HEIGHT);
-
+  const [tabLayoutVersion, setTabLayoutVersion] = useState(0);
   const pagerRef = useRef<PagerView>(null);
+  const searchInputRef = useRef<TextInput>(null);
   const profileTabsScrollRef = useRef<ScrollView>(null);
   const profileTabLayoutsRef = useRef<
     Array<{ x: number; width: number } | undefined>
   >([]);
-
-  // 1. 各个 Tab 的独立滚动高度 (Shared Value)
-  const scrollYActivities = useSharedValue(0);
-  const scrollYAnswers = useSharedValue(0);
-  const scrollYArticles = useSharedValue(0);
-  const scrollYQuestions = useSharedValue(0);
-  const scrollYPins = useSharedValue(0);
-
-  // 2. 列表引用，用于程序控制滚动以对齐 Header 高度
-  const listRefs = useRef<Array<FlashListRef<unknown> | null>>([
-    null,
-    null,
-    null,
-    null,
-    null,
-  ]);
-
-  // 3. 当前活跃的 Tab 索引与 PagerView 滑动状态
+  const listRefs = useRef<Array<ProfileTabListHandle | null>>([]);
   const activeIndexRef = useRef(initialTabIndex);
   const pagerProgress = useSharedValue(initialTabIndex);
+  const scrollOffsets = useSharedValue<number[]>(
+    Array(PROFILE_TABS.length + 1).fill(0),
+  );
+  const maxScroll = useSharedValue(0);
   const profileTabXs = useSharedValue<number[]>([]);
   const profileTabWidths = useSharedValue<number[]>([]);
+
+  useEffect(() => {
+    maxScroll.value = collapseDistance;
+  }, [collapseDistance, maxScroll]);
+
+  const headerOffset = useDerivedValue(
+    () =>
+      getProfileHeaderOffset(
+        scrollOffsets.value,
+        isSearching ? SEARCH_PAGE_INDEX : pagerProgress.value,
+        maxScroll.value,
+      ),
+    [isSearching],
+  );
+  const headerAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: -headerOffset.value }],
+  }));
+  const compactOpacity = useDerivedValue(() => {
+    const distance = maxScroll.value;
+    if (distance <= 0) return 0;
+    return interpolate(
+      headerOffset.value,
+      [distance * 0.35, distance * 0.7],
+      [0, 1],
+      'clamp',
+    );
+  });
+  const toolbarBackgroundStyle = useAnimatedStyle(() => ({
+    opacity: compactOpacity.value,
+  }));
+  const toolbarIdentityStyle = useAnimatedStyle(() => ({
+    opacity: compactOpacity.value,
+    transform: [{ translateY: (1 - compactOpacity.value) * 8 }],
+  }));
+  useAnimatedReaction(
+    () => compactOpacity.value > 0.7,
+    (value, previous) => {
+      if (value !== previous) runOnJS(setCompactHeader)(value);
+    },
+  );
 
   const pageScrollHandler = useEvent<PagerViewOnPageScrollEvent>(
     (event) => {
@@ -224,89 +262,6 @@ export default function UserDetailScreen() {
     ['onPageScroll'],
   );
 
-  // 获取对应 Tab 索引的 shared value
-  const getSharedValue = (idx: number) => {
-    if (idx === 0) return scrollYActivities;
-    if (idx === 1) return scrollYAnswers;
-    if (idx === 2) return scrollYArticles;
-    if (idx === 3) return scrollYQuestions;
-    return scrollYPins;
-  };
-
-  // 4. 绑定各 Tab 的 Scroll Handler
-  const scrollHandler0 = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      scrollYActivities.value = e.contentOffset.y;
-    },
-  });
-  const scrollHandler1 = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      scrollYAnswers.value = e.contentOffset.y;
-    },
-  });
-  const scrollHandler2 = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      scrollYArticles.value = e.contentOffset.y;
-    },
-  });
-  const scrollHandler3 = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      scrollYQuestions.value = e.contentOffset.y;
-    },
-  });
-  const scrollHandler4 = useAnimatedScrollHandler({
-    onScroll: (e) => {
-      scrollYPins.value = e.contentOffset.y;
-    },
-  });
-
-  // 5. 根据当前滑动进度和各个 Tab 的滚动高度，插值计算出 Header 的 translateY
-  const headerAnimatedStyle = useAnimatedStyle(() => {
-    const progress = Math.max(
-      0,
-      Math.min(PROFILE_TABS.length - 1, pagerProgress.value),
-    );
-    const idx1 = Math.floor(progress);
-    const idx2 = Math.ceil(progress);
-    const offset = progress - idx1;
-
-    const y1 =
-      idx1 === 0
-        ? scrollYActivities.value
-        : idx1 === 1
-          ? scrollYAnswers.value
-          : idx1 === 2
-            ? scrollYArticles.value
-            : idx1 === 3
-              ? scrollYQuestions.value
-              : scrollYPins.value;
-
-    const y2 =
-      idx2 === 0
-        ? scrollYActivities.value
-        : idx2 === 1
-          ? scrollYAnswers.value
-          : idx2 === 2
-            ? scrollYArticles.value
-            : idx2 === 3
-              ? scrollYQuestions.value
-              : scrollYPins.value;
-
-    // 滑动过程中平滑插值
-    const currentScrollY = y1 + (y2 - y1) * offset;
-
-    const translateY = interpolate(
-      currentScrollY,
-      [0, maxScroll.value],
-      [0, -maxScroll.value],
-      'clamp',
-    );
-
-    return {
-      transform: [{ translateY }],
-    };
-  });
-
   const profileTabIndicatorStyle = useAnimatedStyle(() => {
     const progress = Math.max(
       0,
@@ -314,29 +269,37 @@ export default function UserDetailScreen() {
     );
     const leftIndex = Math.floor(progress);
     const rightIndex = Math.ceil(progress);
-    const offset = progress - leftIndex;
+    const fraction = progress - leftIndex;
     const leftWidth = profileTabWidths.value[leftIndex] || 0;
     const rightWidth = profileTabWidths.value[rightIndex] || leftWidth;
     const leftX = profileTabXs.value[leftIndex] || 0;
     const rightX = profileTabXs.value[rightIndex] || leftX;
-
+    const width = leftWidth + (rightWidth - leftWidth) * fraction;
     return {
       opacity: leftWidth > 0 ? 1 : 0,
-      width: leftWidth + (rightWidth - leftWidth) * offset,
-      transform: [{ translateX: leftX + (rightX - leftX) * offset }],
+      width: Math.min(32, width),
+      transform: [
+        {
+          translateX:
+            leftX +
+            (rightX - leftX) * fraction +
+            (width - Math.min(32, width)) / 2,
+        },
+      ],
     };
   });
 
   const recordProfileTabLayout = (idx: number, x: number, width: number) => {
+    const previous = profileTabLayoutsRef.current[idx];
+    if (previous?.x === x && previous.width === width) return;
     profileTabLayoutsRef.current[idx] = { x, width };
-    // 多个 onLayout 会在同一批次触发。始终从同步 ref 重建完整数组，
-    // 避免连续读取 SharedValue 的旧快照时互相覆盖，只留下最后一个 Tab。
     profileTabXs.value = PROFILE_TABS.map(
-      (_, tabIndex) => profileTabLayoutsRef.current[tabIndex]?.x || 0,
+      (_, i) => profileTabLayoutsRef.current[i]?.x || 0,
     );
     profileTabWidths.value = PROFILE_TABS.map(
-      (_, tabIndex) => profileTabLayoutsRef.current[tabIndex]?.width || 0,
+      (_, i) => profileTabLayoutsRef.current[i]?.width || 0,
     );
+    setTabLayoutVersion((version) => version + 1);
   };
 
   const scrollProfileTabIntoView = (idx: number, animated: boolean) => {
@@ -348,56 +311,59 @@ export default function UserDetailScreen() {
     });
   };
 
-  // 6. 同步滚动高度以防止跳动
-  const syncLists = (currentIdx: number) => {
-    const currentScrollY = getSharedValue(currentIdx).value;
-    const collapsedHeight = Math.min(currentScrollY, maxScroll.value);
+  // Recenter after rotation, font changes or newly loaded counts resize tabs.
+  useEffect(() => {
+    if (tabLayoutVersion === 0 || profileTabViewportWidth <= 0) return;
+    const layout = profileTabLayoutsRef.current[activeIndexRef.current];
+    if (!layout) return;
+    profileTabsScrollRef.current?.scrollTo({
+      x: Math.max(0, layout.x + layout.width / 2 - profileTabViewportWidth / 2),
+      animated: false,
+    });
+  }, [profileTabViewportWidth, tabLayoutVersion]);
 
-    // 将其他未达到当前折叠高度的 Tab 列表，程序滚动到对应的折叠高度上
-    for (let i = 0; i < PROFILE_TABS.length; i++) {
-      if (i !== currentIdx) {
-        const val = getSharedValue(i);
-        if (val.value < collapsedHeight) {
-          val.value = collapsedHeight;
-          listRefs.current[i]?.scrollToOffset({
-            offset: collapsedHeight,
-            animated: false,
-          });
-        }
-      }
+  const syncLists = (sourceIndex: number) => {
+    const offsets = scrollOffsets.value;
+    for (let index = 0; index < PROFILE_TABS.length; index += 1) {
+      if (index === sourceIndex) continue;
+      const offset = getProfileSyncedOffset(
+        offsets[sourceIndex],
+        offsets[index],
+        collapseDistance,
+      );
+      listRefs.current[index]?.scrollToOffset(offset);
     }
   };
 
-  // Tapping tab button sync & transition
-  const handleTabPress = (idx: number) => {
-    const currentIdx = activeIndexRef.current;
-    const currentScrollY = getSharedValue(currentIdx).value;
-    const collapsedHeight = Math.min(currentScrollY, maxScroll.value);
-
-    const val = getSharedValue(idx);
-    if (val.value < collapsedHeight) {
-      val.value = collapsedHeight;
-      listRefs.current[idx]?.scrollToOffset({
-        offset: collapsedHeight,
-        animated: false,
-      });
+  const handleTabPress = (index: number) => {
+    if (isSearching) {
+      setSearchQuery('');
+      setDebouncedSearchQuery('');
+      searchInputRef.current?.blur();
+      syncLists(SEARCH_PAGE_INDEX);
+    } else {
+      syncLists(activeIndexRef.current);
     }
-
-    pagerRef.current?.setPage(idx);
-    scrollProfileTabIntoView(idx, true);
+    const tab = PROFILE_TABS[index].key;
+    setVisitedTabs((previous) => ({ ...previous, [tab]: true }));
+    pagerRef.current?.setPage(index);
+    scrollProfileTabIntoView(index, true);
   };
 
   useEffect(() => {
-    const timer = setTimeout(() => setDebouncedSearchQuery(searchQuery), 500);
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim());
+      if (searchQuery.trim()) {
+        listRefs.current[SEARCH_PAGE_INDEX]?.scrollToOffset(0);
+      }
+    }, 350);
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  useEffect(() => {
-    navigation.setOptions({ title: '个人主页' });
-  }, [navigation]);
-
   const borderColor = Colors[colorScheme].border;
   const primaryColor = useThemeColor({}, 'primary');
+  const linkColor = useThemeColor({}, 'link');
+  const onPrimary = useThemeColor({}, 'onPrimary');
 
   const { cookies, me: storedMe } = useAuthStore();
   const { data: fetchedMe } = useQuery({
@@ -410,17 +376,12 @@ export default function UserDetailScreen() {
   const {
     data: user,
     isLoading: isUserLoading,
-    isError: isUserError,
     refetch: refetchUser,
   } = useQuery({
     queryKey: ['user-detail', id],
     queryFn: () => getMemberWithFallback(id),
     enabled: !!id,
   });
-  const profileAvatarSource = useMemo(
-    () => ({ uri: user?.avatar_url || (initialAvatar as string) }),
-    [initialAvatar, user?.avatar_url],
-  );
   const isMe = isOwnMemberProfile(id, me, user);
 
   const enableBrowseHistory = useSettingsStore((s) => s.enableBrowseHistory);
@@ -450,6 +411,11 @@ export default function UserDetailScreen() {
     },
     enabled: !!user && (visitedTabs.activities || activeTab === 'activities'),
   });
+
+  const creationsQuery = useUserCreations(
+    user,
+    Boolean(visitedTabs.creations || activeTab === 'creations'),
+  );
 
   // 2. 回答 Query
   const answersQuery = useInfiniteQuery({
@@ -546,11 +512,24 @@ export default function UserDetailScreen() {
           isLoading: activitiesQuery.isLoading,
           isError: activitiesQuery.isError,
           isFetchingNextPage: activitiesQuery.isFetchingNextPage,
+          isFetchNextPageError: activitiesQuery.isFetchNextPageError,
           isFetching: activitiesQuery.isFetching,
           hasNextPage: activitiesQuery.hasNextPage,
           fetchNextPage: activitiesQuery.fetchNextPage,
           refetch: activitiesQuery.refetch,
-          isRefetching: activitiesQuery.isRefetching,
+        };
+      case 'creations':
+        return {
+          queryKey: creationsQuery.queryKey,
+          data: creationsQuery.feedItems,
+          isLoading: creationsQuery.isLoading,
+          isError: creationsQuery.isError,
+          isFetchingNextPage: creationsQuery.isFetchingNextPage,
+          isFetchNextPageError: creationsQuery.isFetchNextPageError,
+          isFetching: creationsQuery.isFetching,
+          hasNextPage: creationsQuery.hasNextPage,
+          fetchNextPage: creationsQuery.fetchNextPage,
+          refetch: creationsQuery.refetch,
         };
       case 'answers':
         return {
@@ -560,11 +539,11 @@ export default function UserDetailScreen() {
           isLoading: answersQuery.isLoading,
           isError: answersQuery.isError,
           isFetchingNextPage: answersQuery.isFetchingNextPage,
+          isFetchNextPageError: answersQuery.isFetchNextPageError,
           isFetching: answersQuery.isFetching,
           hasNextPage: answersQuery.hasNextPage,
           fetchNextPage: answersQuery.fetchNextPage,
           refetch: answersQuery.refetch,
-          isRefetching: answersQuery.isRefetching,
         };
       case 'articles':
         return {
@@ -574,11 +553,11 @@ export default function UserDetailScreen() {
           isLoading: articlesQuery.isLoading,
           isError: articlesQuery.isError,
           isFetchingNextPage: articlesQuery.isFetchingNextPage,
+          isFetchNextPageError: articlesQuery.isFetchNextPageError,
           isFetching: articlesQuery.isFetching,
           hasNextPage: articlesQuery.hasNextPage,
           fetchNextPage: articlesQuery.fetchNextPage,
           refetch: articlesQuery.refetch,
-          isRefetching: articlesQuery.isRefetching,
         };
       case 'questions':
         return {
@@ -588,11 +567,11 @@ export default function UserDetailScreen() {
           isLoading: questionsQuery.isLoading,
           isError: questionsQuery.isError,
           isFetchingNextPage: questionsQuery.isFetchingNextPage,
+          isFetchNextPageError: questionsQuery.isFetchNextPageError,
           isFetching: questionsQuery.isFetching,
           hasNextPage: questionsQuery.hasNextPage,
           fetchNextPage: questionsQuery.fetchNextPage,
           refetch: questionsQuery.refetch,
-          isRefetching: questionsQuery.isRefetching,
         };
       case 'pins':
         return {
@@ -601,11 +580,11 @@ export default function UserDetailScreen() {
           isLoading: pinsQuery.isLoading,
           isError: pinsQuery.isError,
           isFetchingNextPage: pinsQuery.isFetchingNextPage,
+          isFetchNextPageError: pinsQuery.isFetchNextPageError,
           isFetching: pinsQuery.isFetching,
           hasNextPage: pinsQuery.hasNextPage,
           fetchNextPage: pinsQuery.fetchNextPage,
           refetch: pinsQuery.refetch,
-          isRefetching: pinsQuery.isRefetching,
         };
     }
   };
@@ -618,7 +597,7 @@ export default function UserDetailScreen() {
     isFetching: isFetchingSearch,
     isLoading: searchLoading,
     isError: isSearchError,
-    isRefetching: isRefetchingSearch,
+    isFetchNextPageError: isFetchNextSearchPageError,
     refetch: refetchSearch,
   } = useInfiniteQuery({
     queryKey: ['user-creations-search', user?.id, debouncedSearchQuery],
@@ -628,7 +607,7 @@ export default function UserDetailScreen() {
         restricted_field: 'member_hash_id',
         restricted_value: user?.id,
       }),
-    enabled: debouncedSearchQuery.length > 0 && !!user?.id,
+    enabled: isSearching && debouncedSearchQuery.length > 0 && !!user?.id,
     initialPageParam: 0,
     getNextPageParam: (lastPage) => {
       if (lastPage.paging?.is_end) return undefined;
@@ -636,10 +615,7 @@ export default function UserDetailScreen() {
     },
   });
 
-  const HighlightText = (
-    text: string,
-    highlightColor: string = primaryColor,
-  ) => {
+  const HighlightText = (text: string, highlightColor: string = linkColor) => {
     if (!text) return '';
     const decodedText = text
       .replace(/&lt;em&gt;/g, '[[EM]]')
@@ -711,15 +687,17 @@ export default function UserDetailScreen() {
     };
   };
 
-  const isSearching = debouncedSearchQuery.length > 0;
-  const currentListItems = isSearching
-    ? searchResults?.pages.flatMap(
-        (page) =>
-          page.data
-            ?.map(parseSearchResult)
-            .filter((item): item is FeedItem => item !== null) || [],
-      ) || []
-    : [];
+  const searchPending =
+    isSearching && searchQuery.trim() !== debouncedSearchQuery;
+  const currentListItems =
+    isSearching && !searchPending
+      ? searchResults?.pages.flatMap(
+          (page) =>
+            page.data
+              ?.map(parseSearchResult)
+              .filter((item): item is FeedItem => item !== null) || [],
+        ) || []
+      : [];
 
   const refreshSearch = React.useCallback(() => {
     return refreshInfiniteQuery(
@@ -784,136 +762,29 @@ export default function UserDetailScreen() {
     }
   };
 
-  const renderHeader = () => (
-    <View className="bg-transparent">
-      <Image
-        source={{
-          uri:
-            user?.cover_url ||
-            'https://picx.zhimg.com/v2-3975ba668e1c6670e309228892697843_b.jpg',
-        }}
-        className="h-[120px] w-full"
+  const renderHeader = () =>
+    user ? (
+      <ProfileHeader
+        user={user}
+        initialAvatar={initialAvatar}
+        isMe={isMe}
+        followLoading={followLoading}
+        topInset={navigationHeight}
+        onFollow={() => void handleFollow()}
+        onFollowers={() =>
+          router.push(`/user/${user.url_token || id}/followers`)
+        }
+        onFollowing={() =>
+          router.push(`/user/${user.url_token || id}/following`)
+        }
+        onMutual={() => router.push(`/user/${user.url_token || id}/mutual`)}
       />
-      <View type="surface" className="px-5 pt-0 pb-4 rounded-b-[24px]">
-        <View className="flex-row justify-between items-end -mt-10">
-          <Reanimated.Image
-            source={profileAvatarSource}
-            className="w-20 h-20 rounded-[40px] border-4 border-white dark:border-[#1e1e22]"
-            sharedTransitionTag={`avatar-${user?.url_token || id}`}
-          />
-          {!isMe && (
-            <BouncyButton
-              className="px-5 h-9 rounded-full justify-center items-center mb-1.5"
-              style={[
-                user?.is_following
-                  ? {
-                      backgroundColor: 'transparent',
-                      borderColor: borderColor,
-                      borderWidth: 1,
-                    }
-                  : { backgroundColor: primaryColor },
-              ]}
-              onPress={handleFollow}
-              disabled={followLoading}
-            >
-              {followLoading ? (
-                <ActivityIndicator
-                  size="small"
-                  color={
-                    user?.is_following
-                      ? Colors[colorScheme].textSecondary
-                      : Colors[colorScheme].onPrimary
-                  }
-                />
-              ) : (
-                <Text
-                  className="font-bold text-sm"
-                  style={[
-                    { color: Colors[colorScheme].onPrimary },
-                    user?.is_following && {
-                      color: Colors[colorScheme].textSecondary,
-                    },
-                  ]}
-                >
-                  {user?.is_following ? '已关注' : '关注'}
-                </Text>
-              )}
-            </BouncyButton>
-          )}
-        </View>
-        <Text className="text-[22px] font-bold mt-2.5">{user?.name}</Text>
-        <Text type="secondary" className="mt-1.5 text-sm">
-          {user?.headline || '知乎用户'}
-        </Text>
-
-        {user?.description ? (
-          <Text
-            type="secondary"
-            className="mt-2.5 text-[13px] leading-[18px]"
-            numberOfLines={3}
-          >
-            {user.description}
-          </Text>
-        ) : null}
-
-        {!isMe && (user?.mutual_followees_count || 0) > 0 && (
-          <BouncyButton
-            className="flex-row items-center mt-[15px] p-2.5 rounded-lg bg-black/5 dark:bg-white/5"
-            onPress={() => router.push(`/user/${user?.url_token || id}/mutual`)}
-          >
-            <Text className="text-[13px]">
-              <Text className="font-bold">{user?.mutual_followees_count}</Text>{' '}
-              位共同关注
-            </Text>
-            <StableAvatar
-              uri="https://pic1.zhimg.com/v2-abed1a8c04702bc9e7ba3d3d82bc7591_s.jpg"
-              className="w-5 h-5 rounded-full ml-2"
-            />
-          </BouncyButton>
-        )}
-
-        <View className="flex-row mt-5 pt-[15px] bg-transparent">
-          <BouncyButton
-            className="mr-[30px] items-center"
-            onPress={() =>
-              router.push(`/user/${user?.url_token || id}/followers`)
-            }
-          >
-            <Text className="font-bold text-lg">
-              {user?.follower_count || 0}
-            </Text>
-            <Text type="secondary" className="text-xs mt-0.5">
-              关注者
-            </Text>
-          </BouncyButton>
-          <BouncyButton
-            className="mr-[30px] items-center"
-            onPress={() =>
-              router.push(`/user/${user?.url_token || id}/following`)
-            }
-          >
-            <Text className="font-bold text-lg">
-              {user?.following_count || 0}
-            </Text>
-            <Text type="secondary" className="text-xs mt-0.5">
-              关注
-            </Text>
-          </BouncyButton>
-          <View className="items-center">
-            <Text className="font-bold text-lg">{user?.voteup_count || 0}</Text>
-            <Text type="secondary" className="text-xs mt-0.5">
-              赞同
-            </Text>
-          </View>
-        </View>
-      </View>
-    </View>
-  );
+    ) : null;
 
   const renderSearchBar = () => (
-    <View className="pb-1 pt-1 bg-transparent">
+    <View pointerEvents="box-none" className="pb-2 pt-1 bg-transparent">
       <View
-        className="flex-row items-center rounded-3xl mx-[15px] my-2.5 pr-2.5 h-9"
+        className="flex-row items-center rounded-3xl mx-[15px] my-2.5 pr-2.5 min-h-[40px]"
         style={{ backgroundColor: Colors[colorScheme].backgroundTertiary }}
       >
         <Ionicons
@@ -923,20 +794,36 @@ export default function UserDetailScreen() {
           className="ml-2.5"
         />
         <TextInput
-          className="flex-1 text-sm px-2.5 h-full py-0"
+          ref={searchInputRef}
+          className="flex-1 text-sm px-2.5 py-2"
           style={{
             color: Colors[colorScheme].text,
+            fontSize: 14 * fontSizeScale,
             textAlignVertical: 'center',
           }}
           placeholder={`搜索 ${user?.name || '用户'} 的创作...`}
           placeholderTextColor={Colors[colorScheme].textTertiary}
           value={searchQuery}
-          onChangeText={setSearchQuery}
+          onChangeText={(value) => {
+            if (!searchQuery.trim() && value.trim()) {
+              scrollOffsets.value = scrollOffsets.value.map((offset, index) =>
+                index === SEARCH_PAGE_INDEX ? 0 : offset,
+              );
+              listRefs.current[SEARCH_PAGE_INDEX]?.scrollToOffset(0);
+            }
+            if (!value.trim() && isSearching) syncLists(SEARCH_PAGE_INDEX);
+            setSearchQuery(value);
+          }}
           returnKeyType="search"
         />
         {searchQuery.length > 0 && (
           <BouncyButton
-            onPress={() => setSearchQuery('')}
+            accessibilityLabel="清空个人主页搜索"
+            onPress={() => {
+              syncLists(SEARCH_PAGE_INDEX);
+              setSearchQuery('');
+              setDebouncedSearchQuery('');
+            }}
             className="p-[5px] rounded-full"
           >
             <Ionicons
@@ -952,10 +839,15 @@ export default function UserDetailScreen() {
 
   const renderTabsSelector = () => (
     <View
-      className="bg-transparent border-b border-gray-100 dark:border-gray-800"
-      style={{ height: PROFILE_TAB_BAR_HEIGHT }}
+      style={{
+        backgroundColor: Colors[colorScheme].background,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: borderColor,
+        minHeight: 52,
+      }}
       onLayout={(event) => {
-        const width = event.nativeEvent.layout.width;
+        const { width, height } = event.nativeEvent.layout;
+        if (height > 0) setTabBarHeight(height);
         if (width !== profileTabViewportWidth) {
           setProfileTabViewportWidth(width);
         }
@@ -965,6 +857,7 @@ export default function UserDetailScreen() {
         ref={profileTabsScrollRef}
         horizontal
         bounces={false}
+        keyboardShouldPersistTaps="handled"
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{ minWidth: '100%' }}
       >
@@ -973,19 +866,26 @@ export default function UserDetailScreen() {
             const count = tab.countKey ? user?.[tab.countKey] : undefined;
             const countStr =
               count !== undefined && count > 0 ? ` ${count}` : '';
-            const isActive = activeTab === tab.key;
+            const isActive = !isSearching && activeTab === tab.key;
             return (
               <BouncyButton
                 key={tab.key}
+                accessibilityRole="tab"
+                accessibilityLabel={tab.label}
+                accessibilityState={{ selected: isActive }}
                 onPress={() => handleTabPress(idx)}
                 onLayout={(event) => {
                   const { x, width } = event.nativeEvent.layout;
                   recordProfileTabLayout(idx, x, width);
                 }}
                 style={{
-                  minWidth: profileTabViewportWidth / PROFILE_TABS.length,
-                  height: PROFILE_TAB_BAR_HEIGHT,
-                  paddingHorizontal: 12,
+                  minWidth: Math.max(
+                    72,
+                    profileTabViewportWidth / PROFILE_TABS.length,
+                  ),
+                  minHeight: 52,
+                  paddingVertical: 12,
+                  paddingHorizontal: 16,
                   flexShrink: 0,
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -995,8 +895,10 @@ export default function UserDetailScreen() {
                   numberOfLines={1}
                   className="font-bold text-[14px]"
                   style={{
+                    fontSize: 14,
+                    lineHeight: 21 * fontSizeScale,
                     color: isActive
-                      ? primaryColor
+                      ? linkColor
                       : Colors[colorScheme].textSecondary,
                   }}
                 >
@@ -1018,6 +920,7 @@ export default function UserDetailScreen() {
                 backgroundColor: primaryColor,
               },
               profileTabIndicatorStyle,
+              isSearching && { opacity: 0 },
             ]}
           />
         </NativeView>
@@ -1043,14 +946,17 @@ export default function UserDetailScreen() {
             className="px-3 py-1 mr-2.5 rounded"
             style={[
               sortBy === item.key && {
-                backgroundColor: 'rgba(0,132,255,0.08)',
+                backgroundColor: Colors[colorScheme].primaryTransparent,
               },
             ]}
           >
             <Text
               type={sortBy === item.key ? 'primary' : 'secondary'}
               className="text-[13px]"
-              style={[sortBy === item.key && { fontWeight: 'bold' }]}
+              style={[
+                { fontSize: 13, lineHeight: 20 * fontSizeScale },
+                sortBy === item.key && { fontWeight: 'bold' },
+              ]}
             >
               {item.label}
             </Text>
@@ -1061,6 +967,7 @@ export default function UserDetailScreen() {
   };
 
   const renderItemContent = (item: unknown, tabKey: ProfileTabKey) => {
+    if (tabKey === 'creations') return <FeedCard item={item as FeedItem} />;
     const displayItem = getProfileContentItem(item, tabKey);
     if (!displayItem) return null;
 
@@ -1139,216 +1046,349 @@ export default function UserDetailScreen() {
     return <FeedCard item={feedItem} />;
   };
 
+  const activeMeta = PROFILE_TABS.find((tab) => tab.key === activeTab);
+  const activeCount = activeMeta?.countKey
+    ? user?.[activeMeta.countKey]
+    : undefined;
+
   return (
-    <View
-      className="flex-1"
-      style={{ backgroundColor: Colors[colorScheme].background }}
+    <NativeView
+      style={{ flex: 1, backgroundColor: Colors[colorScheme].background }}
+      onLayout={(event) => setViewportHeight(event.nativeEvent.layout.height)}
     >
+      <Stack.Screen
+        options={{ headerShown: false, title: user?.name || '个人主页' }}
+      />
       {isUserLoading ? (
         <View className="flex-1 items-center justify-center bg-transparent">
           <ActivityIndicator color={primaryColor} />
         </View>
-      ) : isUserError || !user ? (
-        <QueryErrorView
-          message="用户资料加载失败"
-          onRetry={() => void refetchUser()}
-        />
-      ) : isSearching ? (
-        <FlashList<FeedItem>
-          data={currentListItems}
-          renderItem={({ item }) => <FeedCard item={item} />}
-          keyExtractor={(item) => `user-search-item-${item.type}-${item.id}`}
-          scrollEventThrottle={16}
-          ListHeaderComponent={
-            <View className="bg-transparent">
-              {renderHeader()}
-              {renderSearchBar()}
-            </View>
-          }
-          ListFooterComponent={
-            <View className="bg-transparent">
-              {searchLoading || isFetchingNextSearchPage ? (
-                <ActivityIndicator
-                  style={{ margin: 20 }}
-                  color={primaryColor}
-                />
-              ) : currentListItems.length > 0 && !hasNextSearchPage ? (
-                <Text type="secondary" className="text-center p-5 text-xs">
-                  — 已经到底了喵 —
-                </Text>
-              ) : null}
-            </View>
-          }
-          ListEmptyComponent={
-            searchLoading ? null : isSearchError ? (
-              <QueryErrorView
-                message="搜索结果加载失败"
-                onRetry={() => void refreshSearch()}
-              />
-            ) : (
-              <View className="items-center py-20 bg-transparent">
-                <Text type="secondary">没有找到相关创作</Text>
-              </View>
-            )
-          }
-          onEndReached={() => {
-            if (hasNextSearchPage && !isFetchingSearch) fetchNextSearchPage();
-          }}
-          onEndReachedThreshold={0.5}
-          onRefresh={() => void refreshSearch()}
-          refreshing={isRefetchingSearch}
-        />
+      ) : !user ? (
+        <View style={{ paddingTop: navigationHeight }}>
+          <QueryErrorView
+            message="用户资料加载失败"
+            onRetry={() => void refetchUser()}
+          />
+        </View>
       ) : (
-        <View style={{ flex: 1 }}>
-          {/* Header 绝对定位在最顶层，且水平完全不跟随 PagerView 滑动 */}
+        <>
+          <NativeView
+            pointerEvents={isSearching ? 'none' : 'auto'}
+            accessibilityElementsHidden={isSearching}
+            importantForAccessibility={
+              isSearching ? 'no-hide-descendants' : 'auto'
+            }
+            style={[StyleSheet.absoluteFill, { opacity: isSearching ? 0 : 1 }]}
+          >
+            <AnimatedPagerView
+              ref={pagerRef}
+              style={{ flex: 1 }}
+              initialPage={initialTabIndex}
+              onPageScroll={pageScrollHandler}
+              onPageScrollStateChanged={(event) => {
+                if (event.nativeEvent.pageScrollState === 'dragging')
+                  syncLists(activeIndexRef.current);
+              }}
+              onPageSelected={(event) => {
+                const index = event.nativeEvent.position;
+                const tab = PROFILE_TABS[index]?.key;
+                if (!tab) return;
+                activeIndexRef.current = index;
+                setActiveTab(tab);
+                setVisitedTabs((previous) =>
+                  previous[tab] ? previous : { ...previous, [tab]: true },
+                );
+                scrollProfileTabIntoView(index, true);
+              }}
+            >
+              {PROFILE_TABS.map((tab, index) => {
+                const query = getTabQueryState(tab.key);
+                return (
+                  <NativeView
+                    key={tab.key}
+                    collapsable={false}
+                    style={{ width: '100%', height: '100%' }}
+                  >
+                    <ProfileTabList
+                      ref={(ref) => {
+                        listRefs.current[index] = ref;
+                      }}
+                      index={index}
+                      label={tab.label}
+                      query={{
+                        ...query,
+                        isLoading: query.isLoading || !visitedTabs[tab.key],
+                        refresh: () =>
+                          Promise.all([
+                            refetchUser(),
+                            tab.key === 'creations'
+                              ? creationsQuery.refresh()
+                              : refreshInfiniteQuery(
+                                  queryClient,
+                                  query.queryKey,
+                                ),
+                          ]),
+                      }}
+                      headerHeight={headerHeight}
+                      collapseDistance={collapseDistance}
+                      viewportHeight={viewportHeight}
+                      bottomInset={insets.bottom}
+                      offsets={scrollOffsets}
+                      active={!isSearching && activeTab === tab.key}
+                      keyExtractor={(item) => {
+                        if (tab.key === 'creations') {
+                          const content = item as FeedItem;
+                          return `user-creation-${content.type}-${content.id}`;
+                        }
+                        return `user-item-${tab.key}-${getProfileListItemKey(item)}`;
+                      }}
+                      renderItem={(item) => renderItemContent(item, tab.key)}
+                      listHeader={
+                        tab.key === 'answers'
+                          ? renderAnswersSortSelector()
+                          : undefined
+                      }
+                    />
+                  </NativeView>
+                );
+              })}
+            </AnimatedPagerView>
+          </NativeView>
+          {isSearching && (
+            <NativeView
+              style={[
+                StyleSheet.absoluteFill,
+                { backgroundColor: Colors[colorScheme].background },
+              ]}
+            >
+              <ProfileTabList
+                ref={(ref) => {
+                  listRefs.current[SEARCH_PAGE_INDEX] = ref;
+                }}
+                index={SEARCH_PAGE_INDEX}
+                label="搜索结果"
+                query={{
+                  data: currentListItems,
+                  isLoading: searchPending || searchLoading,
+                  isError: !searchPending && isSearchError,
+                  isFetching: isFetchingSearch,
+                  isFetchingNextPage: isFetchingNextSearchPage,
+                  isFetchNextPageError: isFetchNextSearchPageError,
+                  hasNextPage: !searchPending && hasNextSearchPage,
+                  fetchNextPage: fetchNextSearchPage,
+                  refetch: refetchSearch,
+                  refresh: refreshSearch,
+                }}
+                headerHeight={headerHeight}
+                collapseDistance={collapseDistance}
+                viewportHeight={viewportHeight}
+                bottomInset={insets.bottom}
+                offsets={scrollOffsets}
+                active={!searchPending}
+                keyExtractor={(item) => {
+                  const content = item as FeedItem;
+                  return `user-search-${content.type}-${content.id}`;
+                }}
+                renderItem={(item) => <FeedCard item={item as FeedItem} />}
+                listHeader={
+                  <Text
+                    type="secondary"
+                    style={{
+                      paddingHorizontal: 20,
+                      paddingVertical: 12,
+                      fontSize: 12,
+                    }}
+                  >
+                    {searchPending
+                      ? '正在搜索…'
+                      : `“${debouncedSearchQuery}”的创作`}
+                  </Text>
+                }
+              />
+            </NativeView>
+          )}
           <Reanimated.View
-            onLayout={(e) => {
-              const height = e.nativeEvent.layout.height;
-              if (height > 0 && height !== headerHeight) {
-                setHeaderHeight(height);
-                // 只保留固定高度的 Tab 栏悬停在顶部。
-                maxScroll.value = Math.max(0, height - PROFILE_TAB_BAR_HEIGHT);
-              }
+            pointerEvents="box-none"
+            testID="profile-collapsible-header"
+            onLayout={(event) => {
+              const height = event.nativeEvent.layout.height;
+              if (height > 0) setHeaderHeight(height);
             }}
             style={[
-              headerAnimatedStyle,
               {
                 position: 'absolute',
                 top: 0,
                 left: 0,
                 right: 0,
-                zIndex: 100,
+                zIndex: 10,
                 backgroundColor: Colors[colorScheme].background,
               },
+              headerAnimatedStyle,
             ]}
           >
             {renderHeader()}
             {renderSearchBar()}
             {renderTabsSelector()}
           </Reanimated.View>
-
-          {/* 底部 PagerView 进行左右切屏，Header 不会参与左右平移 */}
-          <AnimatedPagerView
-            ref={pagerRef}
-            style={{ flex: 1 }}
-            initialPage={initialTabIndex}
-            onPageScroll={pageScrollHandler}
-            onPageScrollStateChanged={(e) => {
-              const state = e.nativeEvent.pageScrollState;
-              if (state === 'dragging') {
-                syncLists(activeIndexRef.current);
-              } else if (state === 'idle') {
-                const tab = PROFILE_TABS[activeIndexRef.current].key;
-                setVisitedTabs((prev) => {
-                  if (prev[tab]) return prev;
-                  return { ...prev, [tab]: true };
-                });
-              }
-            }}
-            onPageSelected={(e) => {
-              const idx = e.nativeEvent.position;
-              const tab = PROFILE_TABS[idx].key;
-              setActiveTab(tab);
-              activeIndexRef.current = idx;
-              requestAnimationFrame(() => {
-                scrollProfileTabIntoView(idx, true);
-              });
-
-              // 亚像素微调滚动，强行触发 FlashList 的可见区重绘，防止显示空白
-              const currentScrollY = getSharedValue(idx).value;
-              if (currentScrollY > 0) {
-                requestAnimationFrame(() => {
-                  listRefs.current[idx]?.scrollToOffset({
-                    offset: currentScrollY + 0.1,
-                    animated: false,
-                  });
-                });
-              }
+        </>
+      )}
+      <NativeView
+        pointerEvents="box-none"
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          top: 0,
+          zIndex: 20,
+          paddingTop: insets.top,
+        }}
+      >
+        <Reanimated.View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              backgroundColor: Colors[colorScheme].background,
+              borderBottomColor: borderColor,
+              borderBottomWidth: StyleSheet.hairlineWidth,
+            },
+            toolbarBackgroundStyle,
+          ]}
+        />
+        <NativeView
+          pointerEvents="box-none"
+          onLayout={(event) =>
+            setNavigationRowHeight(event.nativeEvent.layout.height)
+          }
+          style={{
+            minHeight: 56,
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            gap: 10,
+          }}
+        >
+          <BouncyButton
+            accessibilityRole="button"
+            accessibilityLabel="返回"
+            onPress={() =>
+              router.canGoBack() ? router.back() : router.replace('/(tabs)')
+            }
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: `${Colors[colorScheme].backgroundSecondary}E8`,
             }}
           >
-            {PROFILE_TABS.map((tab, idx) => {
-              const query = getTabQueryState(tab.key);
-              return (
-                <NativeView key={tab.key} className="flex-1">
-                  <AnimatedFlashList
-                    ref={(ref: FlashListRef<unknown> | null) => {
-                      listRefs.current[idx] = ref;
-                    }}
-                    data={query.data}
-                    renderItem={({ item }: { item: unknown }) =>
-                      renderItemContent(item, tab.key)
-                    }
-                    keyExtractor={(item: unknown) =>
-                      `user-item-${tab.key}-${getProfileListItemKey(item)}`
-                    }
-                    contentContainerStyle={{ paddingTop: headerHeight }}
-                    scrollEventThrottle={16}
-                    drawDistance={1000}
-                    removeClippedSubviews={false}
-                    onScroll={
-                      idx === 0
-                        ? scrollHandler0
-                        : idx === 1
-                          ? scrollHandler1
-                          : idx === 2
-                            ? scrollHandler2
-                            : idx === 3
-                              ? scrollHandler3
-                              : scrollHandler4
-                    }
-                    ListHeaderComponent={
-                      tab.key === 'answers' ? renderAnswersSortSelector() : null
-                    }
-                    ListFooterComponent={
-                      <View className="bg-transparent">
-                        {query.isLoading || query.isFetchingNextPage ? (
-                          <ActivityIndicator
-                            style={{ margin: 20 }}
-                            color={primaryColor}
-                          />
-                        ) : query.data.length > 0 && !query.hasNextPage ? (
-                          <Text
-                            type="secondary"
-                            className="text-center p-5 text-xs"
-                          >
-                            — 已经到底了喵 —
-                          </Text>
-                        ) : null}
-                      </View>
-                    }
-                    ListEmptyComponent={
-                      query.isLoading ? null : query.isError ? (
-                        <QueryErrorView
-                          message={`${tab.label}加载失败`}
-                          onRetry={() => void query.refetch()}
-                        />
-                      ) : (
-                        <View className="items-center py-20 bg-transparent">
-                          <Text type="secondary">暂无{tab.label}内容</Text>
-                        </View>
-                      )
-                    }
-                    onEndReached={() => {
-                      if (query.hasNextPage && !query.isFetching) {
-                        query.fetchNextPage();
-                      }
-                    }}
-                    onEndReachedThreshold={0.5}
-                    onRefresh={() =>
-                      void refreshInfiniteQuery(
-                        queryClient,
-                        query.queryKey,
-                        query.refetch,
-                      )
-                    }
-                    refreshing={query.isRefetching}
-                  />
-                </NativeView>
-              );
-            })}
-          </AnimatedPagerView>
-        </View>
-      )}
-    </View>
+            <Ionicons
+              name="arrow-back"
+              size={23}
+              color={Colors[colorScheme].text}
+            />
+          </BouncyButton>
+          <Reanimated.View
+            pointerEvents="none"
+            accessibilityElementsHidden={!compactHeader}
+            style={[
+              { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 9 },
+              toolbarIdentityStyle,
+            ]}
+          >
+            {user?.avatar_url ? (
+              <StableAvatar
+                uri={user.avatar_url}
+                style={{ width: 30, height: 30, borderRadius: 15 }}
+              />
+            ) : null}
+            <View style={{ flex: 1 }}>
+              <Text
+                numberOfLines={1}
+                style={{
+                  fontSize: 15,
+                  lineHeight: 23 * fontSizeScale,
+                  fontWeight: '700',
+                }}
+              >
+                {user?.name || '个人主页'}
+              </Text>
+              <Text
+                numberOfLines={1}
+                type="secondary"
+                style={{ fontSize: 11, lineHeight: 17 * fontSizeScale }}
+              >
+                {isSearching
+                  ? '搜索创作'
+                  : `${activeMeta?.label || '个人主页'}${activeCount === undefined ? '' : ` · ${activeCount}`}`}
+              </Text>
+            </View>
+          </Reanimated.View>
+          {compactHeader && user && !isMe && (
+            <BouncyButton
+              accessibilityRole="button"
+              accessibilityLabel={user.is_following ? '取消关注' : '关注用户'}
+              disabled={followLoading}
+              onPress={() => void handleFollow()}
+              style={{
+                paddingHorizontal: 13,
+                minHeight: 34,
+                justifyContent: 'center',
+                borderRadius: 20,
+                borderWidth: 1,
+                borderColor: user.is_following ? borderColor : primaryColor,
+                backgroundColor: user.is_following
+                  ? Colors[colorScheme].background
+                  : primaryColor,
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 12,
+                  lineHeight: 18 * fontSizeScale,
+                  fontWeight: '700',
+                  color: user.is_following
+                    ? Colors[colorScheme].text
+                    : onPrimary,
+                }}
+              >
+                {followLoading
+                  ? '处理中'
+                  : user.is_following
+                    ? '已关注'
+                    : '关注'}
+              </Text>
+            </BouncyButton>
+          )}
+          <BouncyButton
+            accessibilityRole="button"
+            accessibilityLabel="搜索此用户的创作"
+            disabled={!user}
+            onPress={() => {
+              listRefs.current[
+                isSearching ? SEARCH_PAGE_INDEX : activeIndexRef.current
+              ]?.scrollToOffset(0, true);
+              searchInputRef.current?.focus();
+            }}
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: `${Colors[colorScheme].backgroundSecondary}E8`,
+            }}
+          >
+            <Ionicons
+              name="search"
+              size={20}
+              color={Colors[colorScheme].text}
+            />
+          </BouncyButton>
+        </NativeView>
+      </NativeView>
+    </NativeView>
   );
 }

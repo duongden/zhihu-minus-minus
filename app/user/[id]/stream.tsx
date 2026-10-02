@@ -1,19 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { FlashList } from '@shopify/flash-list';
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  type FeedItem,
-  getContentVoteCount,
-  getContentVoteState,
-  getMemberWithFallback,
-  getRecentMemberActivities,
-  type ZhihuMember,
-  type ZhihuMemberActivity,
-} from '@/api/zhihu';
+import { type FeedItem, getMemberWithFallback } from '@/api/zhihu';
 import { BouncyButton } from '@/components/BouncyButton';
 import { FeedCard } from '@/components/FeedCard';
 import { QueryErrorView } from '@/components/QueryErrorView';
@@ -21,77 +13,9 @@ import { StableAvatar } from '@/components/StableAvatar';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
-import {
-  getNextRecentActivityCursor,
-  getRecentActivityReadBoundary,
-  normalizeUserFeedType,
-  type RecentActivityCursor,
-} from '@/utils/userProfile';
-
-function getPublishedExcerpt(
-  target: NonNullable<ZhihuMemberActivity['target']>,
-) {
-  if (Array.isArray(target.content)) {
-    return target.content
-      .filter((segment) => segment.type === 'text')
-      .map((segment) => segment.content || segment.own_text || '')
-      .join('')
-      .replace(/<[^>]+>/g, '')
-      .slice(0, 150);
-  }
-  const text = target.excerpt || target.excerpt_title || target.content || '';
-  return typeof text === 'string'
-    ? text.replace(/<[^>]+>/g, '').slice(0, 150)
-    : '';
-}
-
-function toFeedItem(
-  activity: ZhihuMemberActivity,
-  member: ZhihuMember,
-): FeedItem | null {
-  const target = activity.target;
-  if (!target?.id) return null;
-
-  const type = normalizeUserFeedType(target.type);
-  if (!type) return null;
-
-  const contentImage = Array.isArray(target.content)
-    ? target.content.find((segment) => segment.type === 'image')
-    : undefined;
-  const author = target.author;
-
-  return {
-    id: String(target.id),
-    title: target.question?.title || target.title || '',
-    actionText: activity.source?.action_text,
-    questionId:
-      target.question?.id !== undefined
-        ? String(target.question.id)
-        : type === 'questions'
-          ? String(target.id)
-          : undefined,
-    author: {
-      id: author?.id || member.id,
-      url_token: author?.url_token || member.url_token,
-      name: author?.name || member.name,
-      avatar: author?.avatar_url || member.avatar_url,
-      headline: author?.headline || member.headline,
-    },
-    excerpt: getPublishedExcerpt(target),
-    content: target.content,
-    image:
-      target.image_url ||
-      target.thumbnail ||
-      contentImage?.url ||
-      contentImage?.data_draft_cover ||
-      null,
-    voteCount: type === 'videos' ? 0 : (getContentVoteCount(type, target) ?? 0),
-    commentCount: target.comment_count || 0,
-    favlistsCount: target.favlists_count || 0,
-    voted: type === 'videos' ? 0 : (getContentVoteState(type, target) ?? 0),
-    type,
-  };
-}
+import { useUserCreations } from '@/hooks/useUserCreations';
+import { toUserCreationFeedItem } from '@/utils/userCreations';
+import { getRecentActivityReadBoundary } from '@/utils/userProfile';
 
 type PublishedStreamRow =
   | {
@@ -119,11 +43,10 @@ export default function UserStreamScreen() {
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const primaryColor = useThemeColor({}, 'primary');
-  const initialCursor = useRef<RecentActivityCursor>({
-    offset: Date.now(),
-    pageNum: 1,
-  });
-  const initialUnreadCount = useRef(parseUnreadCount(unreadCount));
+  const [entryUnreadCount, setEntryUnreadCount] = useState(() =>
+    parseUnreadCount(unreadCount),
+  );
+  const refreshPending = useRef(false);
 
   const {
     data: member,
@@ -136,38 +59,41 @@ export default function UserStreamScreen() {
   });
 
   const {
-    data,
+    activities,
     isLoading,
     isError,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isFetchNextPageError,
     isFetching,
+    refresh,
+    refreshing,
     refetch,
-  } = useInfiniteQuery({
-    queryKey: ['user-recent-published-activities', member?.id],
-    queryFn: ({ pageParam }) =>
-      getRecentMemberActivities(member?.id || '', pageParam),
-    initialPageParam: initialCursor.current,
-    getNextPageParam: (lastPage) => {
-      if (lastPage.paging?.is_end) return undefined;
-      return getNextRecentActivityCursor(lastPage.paging?.next);
-    },
-    enabled: !!member?.id,
-  });
+  } = useUserCreations(member);
 
-  const activities = data?.pages.flatMap((page) => page.data) || [];
-  const isEnd = data?.pages.at(-1)?.paging?.is_end ?? false;
+  const isEnd = !isLoading && !isError && !hasNextPage;
   const readBoundary = getRecentActivityReadBoundary(
-    initialUnreadCount.current,
+    entryUnreadCount,
     activities.length,
     isEnd,
   );
   const rows: PublishedStreamRow[] = [];
+  const handleRefresh = () => {
+    if (refreshPending.current || refreshing) return;
+    refreshPending.current = true;
+    // The entry count describes the old snapshot, not newly arrived creations.
+    setEntryUnreadCount(0);
+    void refresh()
+      .catch(() => undefined)
+      .finally(() => {
+        refreshPending.current = false;
+      });
+  };
 
   if (member) {
     activities.forEach((activity, index) => {
-      const item = toFeedItem(activity, member);
+      const item = toUserCreationFeedItem(activity, member);
       if (item) {
         rows.push({
           key: `published-${item.type}-${item.id}`,
@@ -244,8 +170,17 @@ export default function UserStreamScreen() {
             )
           }
           contentContainerStyle={{ paddingVertical: 10, paddingBottom: 50 }}
+          onRefresh={handleRefresh}
+          refreshing={refreshing}
           onEndReached={() => {
-            if (hasNextPage && !isFetching) void fetchNextPage();
+            if (
+              hasNextPage &&
+              !isFetching &&
+              !isFetchNextPageError &&
+              !refreshing &&
+              !refreshPending.current
+            )
+              void fetchNextPage();
           }}
           onEndReachedThreshold={0.5}
           ListEmptyComponent={
@@ -268,6 +203,11 @@ export default function UserStreamScreen() {
           ListFooterComponent={
             isFetchingNextPage ? (
               <ActivityIndicator style={{ margin: 20 }} color={primaryColor} />
+            ) : isFetchNextPageError ? (
+              <QueryErrorView
+                message="更多创作加载失败"
+                onRetry={() => void fetchNextPage()}
+              />
             ) : rows.length > 0 && !hasNextPage ? (
               <Text type="secondary" className="text-center p-5 text-xs">
                 — 已经到底了喵 —
