@@ -65,6 +65,7 @@ interface AnswerDetailViewProps {
   activeScopeVersion?: SharedValue<number>;
   scopeVersion?: number;
   isFocused?: boolean;
+  isPreloading?: boolean;
 }
 
 export const AnswerDetailView = ({
@@ -79,6 +80,7 @@ export const AnswerDetailView = ({
   activeScopeVersion,
   scopeVersion,
   isFocused = false,
+  isPreloading = false,
 }: AnswerDetailViewProps) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -154,6 +156,8 @@ export const AnswerDetailView = ({
   const dimensions = useWindowDimensions();
   const waitForNativeLayout =
     richContentRenderer === 'native-v2' && isRichTextNativeAvailable();
+  const shouldRenderBody =
+    isFocused || hasBeenFocused || (isPreloading && Boolean(answer));
   const contentLayoutSource = React.useMemo(
     () => ({
       id,
@@ -163,6 +167,8 @@ export const AnswerDetailView = ({
       width: dimensions.width,
       fontScale: dimensions.fontScale,
       waitForNativeLayout,
+      // Leaving the preload window unmounts an unread body and its measurements.
+      shouldRenderBody,
     }),
     [
       id,
@@ -172,15 +178,20 @@ export const AnswerDetailView = ({
       dimensions.width,
       dimensions.fontScale,
       waitForNativeLayout,
+      shouldRenderBody,
     ],
   );
   const [readyLayoutSource, setReadyLayoutSource] = React.useState<
     typeof contentLayoutSource | null
   >(null);
+  const latestLayoutSource = useRef(contentLayoutSource);
+  latestLayoutSource.current = contentLayoutSource;
   const handleContentLayoutReady = React.useCallback(() => {
-    setReadyLayoutSource(contentLayoutSource);
+    if (latestLayoutSource.current === contentLayoutSource)
+      setReadyLayoutSource(contentLayoutSource);
   }, [contentLayoutSource]);
   const contentLayoutReady =
+    shouldRenderBody &&
     Boolean(answer) &&
     (!waitForNativeLayout || readyLayoutSource === contentLayoutSource);
 
@@ -395,7 +406,7 @@ export const AnswerDetailView = ({
     [primaryColor],
   );
 
-  if (!hasBeenFocused) {
+  if (!shouldRenderBody) {
     return <View className="flex-1" />;
   }
 

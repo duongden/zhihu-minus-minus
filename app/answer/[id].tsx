@@ -384,6 +384,7 @@ export default function AnswerDetailScreen() {
               initialTitle={aid === id ? (initialTitle as string) : undefined}
               questionId={questionId as string}
               isFocused={index === currentPage}
+              isPreloading={Math.abs(index - currentPage) === 1}
               headerProgress={headerState.headerProgress}
               activeAnswerId={headerState.activeAnswerId}
               activeScrollY={headerState.activeScrollY}

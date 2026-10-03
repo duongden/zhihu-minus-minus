@@ -18,6 +18,7 @@ interface PagerProps {
 interface AnswerProps {
   id: string;
   isFocused: boolean;
+  isPreloading: boolean;
   onScroll?: (offset: number) => void;
   onHeaderLayout?: (collapseOffset: number) => void;
   headerProgress?: { value: number };
@@ -343,6 +344,27 @@ afterEach(() => {
 });
 
 describe('answer pager list transitions', () => {
+  it('prepares only the immediate neighbors and moves that window with the selected answer', async () => {
+    setList(['11', '42', '99', '100', '101']);
+    await render(React.createElement(AnswerDetailScreen));
+    expect(
+      [...mockAnswerProps.values()]
+        .filter((answer) => answer.isPreloading)
+        .map((answer) => answer.id),
+    ).toEqual(['11', '99']);
+    expect(mockAnswerProps.get('42')?.isFocused).toBe(true);
+
+    await selectPage(2);
+    expect(
+      [...mockAnswerProps.values()]
+        .filter((answer) => answer.isPreloading)
+        .map((answer) => answer.id),
+    ).toEqual(['42', '100']);
+    expect(mockAnswerProps.get('99')?.isFocused).toBe(true);
+    expect(mockAnswerProps.get('100')?.isFocused).toBe(false);
+    expect(mockAnswerProps.get('101')?.isPreloading).toBe(false);
+  });
+
   it('keeps the feed-seeded answer mounted when the question answer list arrives', async () => {
     const page = await render(React.createElement(AnswerDetailScreen));
     const initialPager = mockPagerProps;
