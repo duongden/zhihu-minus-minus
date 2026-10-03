@@ -45,12 +45,12 @@
         <b>搜索</b><br />
       </td>
       <td align="center" valign="top">
-        <img src="./screenshot/v0.1.3/Screenshot_20260705_190342.jpg" width="160" style="border-radius: 16px; border: 1px solid #eee; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" />
+        <img src="./screenshot/v0.7.1/photo_2026-10-03 14.37.26.jpeg" width="160" style="border-radius: 16px; border: 1px solid #eee; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" />
         <br /><br />
         <b>问题详情</b><br />
       </td>
       <td align="center" valign="top">
-        <img src="./screenshot/v0.6.1/IMG_0376.PNG" width="160" style="border-radius: 16px; border: 1px solid #eee; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" />
+        <img src="./screenshot/v0.7.1/photo_2026-10-03 14.41.21.jpeg" width="160" style="border-radius: 16px; border: 1px solid #eee; box-shadow: 0 4px 12px rgba(0,0,0,0.1);" />
         <br /><br />
         <b>夜间模式</b><br />
       </td>
@@ -182,4 +182,4 @@ npm run check
 </a>
 
 ---
-**Version**: v0.7.0 | **Last Updated**: 2026-10-01
+**Version**: v0.7.1 | **Last Updated**: 2026-10-03
