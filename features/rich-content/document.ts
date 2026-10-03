@@ -237,6 +237,8 @@ export interface ZhihuHeadingBlock extends ZhihuDocumentNode {
 
 export interface ZhihuImageBlock extends ZhihuDocumentNode {
   readonly type: 'image';
+  /** Observed structured-content layout; small retains the source display width. */
+  readonly layout?: 'normal' | 'small';
   /** 省略时为正文图片；日报作者头像需要独立布局。 */
   readonly role?: ZhihuImageRole;
   readonly resource: ZhihuImageResource;

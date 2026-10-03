@@ -136,7 +136,9 @@ xcrun simctl openurl booted 'zhihu--:///dev/rich-content/prototype?caseId=attach
 
 `caseId`限页面内的selection、decorations、attachments、segments、media、typography六个合成案例；忽略无效值，初次打开默认selection，其他query不注入正文。开发URL解析只保留合法且不超过64字符的caseId，生产构建继续隐藏和重定向开发页面。CLI可用于启动和截图，不能据此宣称系统选区拖柄、附件长按或父滚动手势已人工验收。
 
-公共推荐入口为 `ZhihuContent`，默认采用用户正文偏好，需要固定后端时可传 `renderer="native-v2"`；该外壳已封装完整RNRH fallback。直接使用 `ZhihuNativeContent` 必须提供 `renderFallback` callback，由宿主返回RNRH正文与原有图片/链接交互；V2选区和知识点事件仅在native模块可用时生效。
+公共推荐入口为 `ZhihuContent`，默认采用用户正文偏好，需要固定后端时可传 `renderer="native-v2"`；该外壳已封装完整RNRH fallback。直接使用 `ZhihuNativeContent` 必须提供 `renderFallback` callback，由宿主返回完整正文与图片/链接交互；HTML 宿主使用 RNRH，结构化宿主使用 JSON 分段组件。V2选区和知识点事件仅在native模块可用时生效。
+
+`structured_content` 的渲染对照位于“我的 → 富文本测试案例 → structured_content 渲染对照”。独立 `ZhihuStructuredContent` 直接按 JSON 分段展开收起，可比较 React Native 分段节点和 tiqian 原生文本流。后者直接向 `ZhihuNativeContent.document` 传递 `ZhihuDocument`；未提供该属性时，原 HTML normalization 路径保持不变，结构化模式在缺少原生模块时回退分段节点。五个主要案例来自附件中的真实回答，保持全部分段、marks 与分页状态，身份、ID、业务链接和不透明上下文已脱敏；公开正文与公式图片地址保留并在运行时加载，图片不下载进仓库。原附件缺少真实续页，另有合成案例演示追加；测试页不请求正文或互动接口、不更改持久阅读设置。样本来自 `features/rich-content/fixtures/inbox/structured-content/`，原始请求与字段结构见 [next-render 记录](./docs/ZHIHU_NEXT_RENDER.md)。
 
 正文后端偏好保存为 `richContentRenderer`，默认 `rnrh`。settings持久化版本递增到13，并从旧 `useWebView` 迁移：原值为true时保留网页排版，否则使用经典排版，不静默替用户开启tiqian-super-mini。原生模块缺失或平台不是Android/iOS时，只对本次渲染回退RNRH，保留用户选择供可用客户端继续使用。
 

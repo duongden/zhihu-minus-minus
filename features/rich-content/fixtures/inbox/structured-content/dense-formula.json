@@ -1,0 +1,164 @@
+{
+  "source": "synthetic",
+  "pages": [
+    {
+      "paging": "{\"is_end\":true,\"next\":\"https://example.invalid/next-content-render?url_token=synthetic-c&content_type=answer&version_id=synthetic-v1&offset=20\",\"is_start\":true,\"previous\":\"https://example.invalid/next-content-render?url_token=synthetic-c&content_type=answer&version_id=synthetic-v1&offset=0\",\"totals\":0}",
+      "segments": [
+        {
+          "id": "c-intro",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-c-intro",
+            "text": "公式密集案例：公式占位符来自原始文字范围。",
+            "marks": []
+          }
+        },
+        {
+          "id": "c-formula-1",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-c-formula-1",
+            "text": "公式 1：[公式] 与正文中的普通文字连续排布。",
+            "marks": [
+              {
+                "type": "formula",
+                "start_index": 5,
+                "end_index": 9,
+                "formula": {
+                  "content": "\\int_0^1 x^2\\,dx=\\frac{1}{3}",
+                  "width": 80,
+                  "height": 24,
+                  "img_url": "https://example.invalid/formula/10.png",
+                  "url": "https://example.invalid/answer/synthetic"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "c-formula-2",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-c-formula-2",
+            "text": "公式 2：[公式] 与正文中的普通文字连续排布。",
+            "marks": [
+              {
+                "type": "formula",
+                "start_index": 5,
+                "end_index": 9,
+                "formula": {
+                  "content": "\\sum_{k=1}^{n}k=\\frac{n(n+1)}{2}",
+                  "width": 80,
+                  "height": 24,
+                  "img_url": "https://example.invalid/formula/11.png",
+                  "url": "https://example.invalid/answer/synthetic"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "c-formula-3",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-c-formula-3",
+            "text": "公式 3：[公式] 与正文中的普通文字连续排布。",
+            "marks": [
+              {
+                "type": "formula",
+                "start_index": 5,
+                "end_index": 9,
+                "formula": {
+                  "content": "a^2+b^2=c^2",
+                  "width": 80,
+                  "height": 24,
+                  "img_url": "https://example.invalid/formula/12.png",
+                  "url": "https://example.invalid/answer/synthetic"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "c-formula-4",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-c-formula-4",
+            "text": "公式 4：[公式] 与正文中的普通文字连续排布。",
+            "marks": [
+              {
+                "type": "formula",
+                "start_index": 5,
+                "end_index": 9,
+                "formula": {
+                  "content": "\\frac{d}{dx}x^2=2x",
+                  "width": 80,
+                  "height": 24,
+                  "img_url": "https://example.invalid/formula/13.png",
+                  "url": "https://example.invalid/answer/synthetic"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "c-formula-5",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-c-formula-5",
+            "text": "公式 5：[公式] 与正文中的普通文字连续排布。",
+            "marks": [
+              {
+                "type": "formula",
+                "start_index": 5,
+                "end_index": 9,
+                "formula": {
+                  "content": "\\lim_{n\\to\\infty}\\frac{1}{n}=0",
+                  "width": 80,
+                  "height": 24,
+                  "img_url": "https://example.invalid/formula/14.png",
+                  "url": "https://example.invalid/answer/synthetic"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "c-formula-6",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-c-formula-6",
+            "text": "公式 6：[公式] 与正文中的普通文字连续排布。",
+            "marks": [
+              {
+                "type": "formula",
+                "start_index": 5,
+                "end_index": 9,
+                "formula": {
+                  "content": "\\begin{pmatrix}1&0\\\\0&1\\end{pmatrix}",
+                  "width": 80,
+                  "height": 24,
+                  "img_url": "https://example.invalid/formula/15.png",
+                  "url": "https://example.invalid/answer/synthetic"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "c-divider",
+          "type": "hr"
+        },
+        {
+          "id": "c-end",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-c-end",
+            "text": "分隔线之后仍然是一个普通段落。",
+            "marks": []
+          }
+        }
+      ]
+    }
+  ]
+}

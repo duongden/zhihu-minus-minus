@@ -1,0 +1,57 @@
+{
+  "source": "synthetic",
+  "pages": [
+    {
+      "paging": "{\"is_end\":true,\"next\":\"https://example.invalid/next-content-render?url_token=synthetic-e&content_type=answer&version_id=synthetic-v1&offset=20\",\"is_start\":true,\"previous\":\"https://example.invalid/next-content-render?url_token=synthetic-e&content_type=answer&version_id=synthetic-v1&offset=0\",\"totals\":0}",
+      "segments": [
+        {
+          "id": "e-intro",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-e-intro",
+            "text": "普通段落与 text 类型链接。",
+            "marks": []
+          }
+        },
+        {
+          "id": "e-link",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-e-link",
+            "text": "点击合成链接只会在此页面显示链接信息。",
+            "marks": [
+              {
+                "type": "link",
+                "start_index": 2,
+                "end_index": 6,
+                "link": {
+                  "href": "https://example.invalid/reading",
+                  "icon_name": "link",
+                  "link_type": "text"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "e-lines",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-e-lines",
+            "text": "同一段文字中保留换行。\n下一行仍属于这个段落。",
+            "marks": []
+          }
+        },
+        {
+          "id": "e-end",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-e-end",
+            "text": "这个案例没有图片或公式，也可以检查分段预览。",
+            "marks": []
+          }
+        }
+      ]
+    }
+  ]
+}

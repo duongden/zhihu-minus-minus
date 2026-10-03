@@ -1,0 +1,132 @@
+{
+  "source": "synthetic",
+  "pages": [
+    {
+      "paging": "{\"is_end\":true,\"next\":\"https://example.invalid/next-content-render?url_token=synthetic-a&content_type=answer&version_id=synthetic-v1&offset=20\",\"is_start\":true,\"previous\":\"https://example.invalid/next-content-render?url_token=synthetic-a&content_type=answer&version_id=synthetic-v1&offset=0\",\"totals\":0}",
+      "segments": [
+        {
+          "id": "a-intro",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-a-intro",
+            "text": "合成用户提供了列表说明。",
+            "marks": [
+              {
+                "type": "link",
+                "start_index": 0,
+                "end_index": 4,
+                "link": {
+                  "href": "https://example.invalid/people/synthetic",
+                  "icon_name": "",
+                  "link_type": "member_mention"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "a-list",
+          "type": "list_node",
+          "list_node": {
+            "type": "unordered",
+            "items": [
+              {
+                "indent_level": 1,
+                "text": "第一项：[公式] 是一个分数。",
+                "marks": [
+                  {
+                    "type": "formula",
+                    "start_index": 4,
+                    "end_index": 8,
+                    "formula": {
+                      "content": "\\frac{1}{2}",
+                      "width": 80,
+                      "height": 24,
+                      "img_url": "https://example.invalid/formula/1.png",
+                      "url": "https://example.invalid/answer/synthetic"
+                    }
+                  }
+                ]
+              },
+              {
+                "indent_level": 1,
+                "text": "第二项：[公式] 与前后文字同处一行。",
+                "marks": [
+                  {
+                    "type": "formula",
+                    "start_index": 4,
+                    "end_index": 8,
+                    "formula": {
+                      "content": "E=mc^2",
+                      "width": 80,
+                      "height": 24,
+                      "img_url": "https://example.invalid/formula/2.png",
+                      "url": "https://example.invalid/answer/synthetic"
+                    }
+                  }
+                ]
+              },
+              {
+                "indent_level": 2,
+                "text": "第三项：[公式] 使用二级缩进。",
+                "marks": [
+                  {
+                    "type": "formula",
+                    "start_index": 4,
+                    "end_index": 8,
+                    "formula": {
+                      "content": "\\sqrt{x}",
+                      "width": 80,
+                      "height": 24,
+                      "img_url": "https://example.invalid/formula/3.png",
+                      "url": "https://example.invalid/answer/synthetic"
+                    }
+                  }
+                ]
+              },
+              {
+                "indent_level": 1,
+                "text": "第四项：普通文字保留列表语义。",
+                "marks": []
+              }
+            ]
+          }
+        },
+        {
+          "id": "a-after",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-a-after",
+            "text": "列表后的说明继续进入同一个结构化正文。",
+            "marks": []
+          }
+        },
+        {
+          "id": "a-image",
+          "type": "image",
+          "image": {
+            "description": "合成图片：本地应用图标",
+            "height": 192,
+            "is_gif": false,
+            "layout": "normal",
+            "original_token": "original-a-image",
+            "original_urls": ["https://example.invalid/images/icon.png"],
+            "status": "normal",
+            "token": "token-a-image",
+            "urls": ["https://example.invalid/images/icon.png"],
+            "width": 192
+          }
+        },
+        {
+          "id": "a-end",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-a-end",
+            "text": "最后一段用于检查按分段数量展开和收起。",
+            "marks": []
+          }
+        }
+      ]
+    }
+  ]
+}

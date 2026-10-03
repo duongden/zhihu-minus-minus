@@ -1,0 +1,675 @@
+{
+  "source": "capture-derived",
+  "originalArrayIndex": 2,
+  "sanitization": "Identity spans keep their UTF-16 lengths; IDs, opaque metadata and navigation/paging URLs are replaced. Public image CDN URLs, body order, mark ranges and formula source are retained.",
+  "pages": [
+    {
+      "paging": "{\"is_end\":true,\"next\":\"https://example.invalid/next-content-render?offset=20&url_token=captured-c&content_type=answer&version_id=captured-version-c\",\"is_start\":true,\"previous\":\"https://example.invalid/next-content-render?offset=0&url_token=captured-c&content_type=answer&version_id=captured-version-c\",\"totals\":0}",
+      "segments": [
+        {
+          "id": "captured-c-segment-001",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 17,
+                "entity_word": {
+                  "attach_info_bytes": "AAEC",
+                  "id": "captured-c-entity-1-1-1",
+                  "type": "search",
+                  "url": "https://example.invalid/search?q=captured-term",
+                  "word": "加法交换律"
+                },
+                "start_index": 12,
+                "type": "entity_word"
+              }
+            ],
+            "pid": "captured-c-paragraph-001",
+            "text": "很少有人会证明自然数上的加法交换律和结合律，进一步也很少有人知道自然数上的加法是如何定义的。"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-c-segment-002",
+          "paragraph": {
+            "marks": [],
+            "pid": "captured-c-paragraph-002",
+            "text": "定义一个运算有两个问题，第一个问题是确保定义无矛盾，第二个是确保满足定义的运算唯一。第二点相对来讲比较容易判断，但是第一点非常玄学，因为一旦涉及无矛盾性，由于证明总是基于某个公理系统，所以虽然我们能够“在某个公理系统下证明它的无矛盾性”，但是我们“不能确信它是无矛盾的”。"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-c-segment-003",
+          "paragraph": {
+            "marks": [],
+            "pid": "captured-c-paragraph-003",
+            "text": "一般采用的加法定义是这样的："
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-c-segment-004",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 9,
+                "formula": {
+                  "content": "n\\in \\mathbb N",
+                  "height": 16,
+                  "img_url": "https://pica.zhimg.com/v2-c1d311a6a6411215d3884eeb6133297b.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 44
+                },
+                "start_index": 5,
+                "type": "formula"
+              },
+              {
+                "end_index": 16,
+                "formula": {
+                  "content": "n+0=n",
+                  "height": 18,
+                  "img_url": "https://pica.zhimg.com/v2-af1c795aea7872172290487ba280d3ce.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 74
+                },
+                "start_index": 12,
+                "type": "formula"
+              },
+              {
+                "end_index": 27,
+                "formula": {
+                  "content": "n\\in \\mathbb N",
+                  "height": 16,
+                  "img_url": "https://picx.zhimg.com/v2-c1d311a6a6411215d3884eeb6133297b.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 44
+                },
+                "start_index": 23,
+                "type": "formula"
+              },
+              {
+                "end_index": 34,
+                "formula": {
+                  "content": "m\\in \\mathbb N",
+                  "height": 16,
+                  "img_url": "https://picx.zhimg.com/v2-70b30c39bd41d55f8b81574e3a0f9ab7.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 49
+                },
+                "start_index": 30,
+                "type": "formula"
+              },
+              {
+                "end_index": 41,
+                "formula": {
+                  "content": "n+(m+1)=(n+m)+1",
+                  "height": 21,
+                  "img_url": "https://picx.zhimg.com/v2-56520ea06370b8cacc0dafa4ea70b4fd.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 205
+                },
+                "start_index": 37,
+                "type": "formula"
+              }
+            ],
+            "pid": "captured-c-paragraph-004",
+            "text": "对于任意 [公式] ， [公式] \n对于任意 [公式] 与 [公式] ， [公式] "
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-c-segment-005",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 7,
+                "formula": {
+                  "content": "+1",
+                  "height": 18,
+                  "img_url": "https://picx.zhimg.com/v2-c5062bc7b0a39bee321b3ec49fca743a.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 22
+                },
+                "start_index": 3,
+                "type": "formula"
+              },
+              {
+                "end_index": 34,
+                "formula": {
+                  "content": "0",
+                  "height": 16,
+                  "img_url": "https://pica.zhimg.com/v2-235f616a08f285c155f1b7c1da8e7272.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 9
+                },
+                "start_index": 30,
+                "type": "formula"
+              },
+              {
+                "end_index": 51,
+                "formula": {
+                  "content": "m+1=(m+0)+1=m+(0+1)=m+(1)",
+                  "height": 21,
+                  "img_url": "https://pic1.zhimg.com/v2-02ad5b90de5155aefb4364b9f8c5d687.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 352
+                },
+                "start_index": 47,
+                "type": "formula"
+              }
+            ],
+            "pid": "captured-c-paragraph-005",
+            "text": "其中 [公式] 是自然数上本身就有的运算，它又称作后继，而 [公式] 是自然数中的常数。由于 [公式] ，所以后继与加法混用不会带来矛盾。证明无矛盾性和唯一性的过程同样非常繁琐，所以迫不得已略去。但是加法的交换律和结合律可以在自然数理论内部得到证明。"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-c-segment-006",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 7,
+                "start_index": 4,
+                "type": "bold"
+              },
+              {
+                "end_index": 18,
+                "formula": {
+                  "content": "m,n,k\\in \\mathbb N",
+                  "height": 19,
+                  "img_url": "https://pic1.zhimg.com/v2-8a28128b35b93c5ace8495055d031023.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 84
+                },
+                "start_index": 14,
+                "type": "formula"
+              },
+              {
+                "end_index": 27,
+                "formula": {
+                  "content": "(m+n)+k=m+(n+k)",
+                  "height": 21,
+                  "img_url": "https://picx.zhimg.com/v2-d67db256eceafa890b44ed3318471afb.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 205
+                },
+                "start_index": 23,
+                "type": "formula"
+              },
+              {
+                "end_index": 38,
+                "formula": {
+                  "content": "k=0",
+                  "height": 16,
+                  "img_url": "https://pic1.zhimg.com/v2-5a00f7a0eb5453a1f60cdbf72c8d38de.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 41
+                },
+                "start_index": 34,
+                "type": "formula"
+              },
+              {
+                "end_index": 59,
+                "formula": {
+                  "content": "k",
+                  "height": 16,
+                  "img_url": "https://picx.zhimg.com/v2-a3a807dc491aa46049aa2cdb2e4484f2.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 9
+                },
+                "start_index": 55,
+                "type": "formula"
+              },
+              {
+                "end_index": 72,
+                "formula": {
+                  "content": "(m+n)+k=m+(n+k)",
+                  "height": 21,
+                  "img_url": "https://picx.zhimg.com/v2-d67db256eceafa890b44ed3318471afb.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 205
+                },
+                "start_index": 68,
+                "type": "formula"
+              },
+              {
+                "end_index": 81,
+                "formula": {
+                  "content": "m,n",
+                  "height": 15,
+                  "img_url": "https://picx.zhimg.com/v2-bfdddf1844b3d6e5a202764def972638.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 34
+                },
+                "start_index": 77,
+                "type": "formula"
+              },
+              {
+                "end_index": 93,
+                "formula": {
+                  "content": "\\begin{array}{} (m+n)+(k+1)&=[(m+n)+k]+1\\\\ &=[m+(n+k)]+1\\\\ &=m+[(n+k)+1]\\\\ &=m+[n+(k+1)] \\end{array}",
+                  "height": 99,
+                  "img_url": "https://pic1.zhimg.com/v2-dbe0360a91379a7674a2bcdf517725f1.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 307
+                },
+                "start_index": 89,
+                "type": "formula"
+              }
+            ],
+            "pid": "captured-c-paragraph-006",
+            "text": "首先证明结合律。证明，任意 [公式] ，总有 [公式] 成立。因为 [公式] 的时候命题平凡成立，因此只需对 [公式] 归纳即可。假定 [公式] 对任意 [公式] 成立，那么\n [公式] \n综上得证。"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-c-segment-007",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 7,
+                "start_index": 4,
+                "type": "bold"
+              },
+              {
+                "end_index": 22,
+                "formula": {
+                  "content": "m\\in \\mathbb N",
+                  "height": 16,
+                  "img_url": "https://picx.zhimg.com/v2-70b30c39bd41d55f8b81574e3a0f9ab7.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 49
+                },
+                "start_index": 18,
+                "type": "formula"
+              },
+              {
+                "end_index": 29,
+                "formula": {
+                  "content": "0+m=m",
+                  "height": 18,
+                  "img_url": "https://picx.zhimg.com/v2-1f394caf69d1561250d56bbdc3ffede5.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 84
+                },
+                "start_index": 25,
+                "type": "formula"
+              },
+              {
+                "end_index": 37,
+                "formula": {
+                  "content": "m",
+                  "height": 13,
+                  "img_url": "https://picx.zhimg.com/v2-c0ba273aa56732cc5f1caad0ec4b4caa.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 15
+                },
+                "start_index": 33,
+                "type": "formula"
+              },
+              {
+                "end_index": 47,
+                "formula": {
+                  "content": "m=0",
+                  "height": 16,
+                  "img_url": "https://picx.zhimg.com/v2-8120e8f2138b98e48be9f4b0a7c5f244.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 47
+                },
+                "start_index": 43,
+                "type": "formula"
+              },
+              {
+                "end_index": 65,
+                "formula": {
+                  "content": "0+m=m",
+                  "height": 18,
+                  "img_url": "https://pic1.zhimg.com/v2-1f394caf69d1561250d56bbdc3ffede5.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 84
+                },
+                "start_index": 61,
+                "type": "formula"
+              },
+              {
+                "end_index": 74,
+                "formula": {
+                  "content": "0+(m+1)=(0+m)+1=m+1",
+                  "height": 21,
+                  "img_url": "https://pica.zhimg.com/v2-349cfeb4473b8721b79177381092ac02.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 270
+                },
+                "start_index": 70,
+                "type": "formula"
+              },
+              {
+                "end_index": 95,
+                "formula": {
+                  "content": "m\\in \\mathbb N",
+                  "height": 16,
+                  "img_url": "https://pica.zhimg.com/v2-70b30c39bd41d55f8b81574e3a0f9ab7.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 49
+                },
+                "start_index": 91,
+                "type": "formula"
+              },
+              {
+                "end_index": 102,
+                "formula": {
+                  "content": "1+m=m+1",
+                  "height": 18,
+                  "img_url": "https://pica.zhimg.com/v2-def11cbd001e06b9306a0a8fdbd43dc8.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 114
+                },
+                "start_index": 98,
+                "type": "formula"
+              },
+              {
+                "end_index": 110,
+                "formula": {
+                  "content": "m",
+                  "height": 13,
+                  "img_url": "https://pic1.zhimg.com/v2-c0ba273aa56732cc5f1caad0ec4b4caa.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 15
+                },
+                "start_index": 106,
+                "type": "formula"
+              },
+              {
+                "end_index": 120,
+                "formula": {
+                  "content": "m=0",
+                  "height": 16,
+                  "img_url": "https://picx.zhimg.com/v2-8120e8f2138b98e48be9f4b0a7c5f244.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 47
+                },
+                "start_index": 116,
+                "type": "formula"
+              },
+              {
+                "end_index": 138,
+                "formula": {
+                  "content": "1+m=m+1",
+                  "height": 18,
+                  "img_url": "https://pica.zhimg.com/v2-def11cbd001e06b9306a0a8fdbd43dc8.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 114
+                },
+                "start_index": 134,
+                "type": "formula"
+              },
+              {
+                "end_index": 147,
+                "formula": {
+                  "content": "1+(m+1)=(1+m)+1=(m+1)+1",
+                  "height": 21,
+                  "img_url": "https://picx.zhimg.com/v2-760f01442dc5145b04d41e9753807a05.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 313
+                },
+                "start_index": 143,
+                "type": "formula"
+              },
+              {
+                "end_index": 168,
+                "formula": {
+                  "content": "m,n\\in \\mathbb N",
+                  "height": 19,
+                  "img_url": "https://picx.zhimg.com/v2-8d23971e8900c5fd5af52ea8c9f949ff.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 67
+                },
+                "start_index": 164,
+                "type": "formula"
+              },
+              {
+                "end_index": 175,
+                "formula": {
+                  "content": "m+n=n+m",
+                  "height": 16,
+                  "img_url": "https://picx.zhimg.com/v2-32801a54c7d3e686766fb4dbf1654d3e.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 117
+                },
+                "start_index": 171,
+                "type": "formula"
+              },
+              {
+                "end_index": 186,
+                "formula": {
+                  "content": "n",
+                  "height": 13,
+                  "img_url": "https://picx.zhimg.com/v2-0117edff8e23efdd5f215b9d097f0bb5.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 10
+                },
+                "start_index": 182,
+                "type": "formula"
+              },
+              {
+                "end_index": 198,
+                "formula": {
+                  "content": "m\\in \\mathbb N",
+                  "height": 16,
+                  "img_url": "https://picx.zhimg.com/v2-70b30c39bd41d55f8b81574e3a0f9ab7.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 49
+                },
+                "start_index": 194,
+                "type": "formula"
+              },
+              {
+                "end_index": 205,
+                "formula": {
+                  "content": "m+n=n+m",
+                  "height": 16,
+                  "img_url": "https://pic1.zhimg.com/v2-32801a54c7d3e686766fb4dbf1654d3e.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 117
+                },
+                "start_index": 201,
+                "type": "formula"
+              },
+              {
+                "end_index": 214,
+                "formula": {
+                  "content": "n",
+                  "height": 13,
+                  "img_url": "https://pic1.zhimg.com/v2-0117edff8e23efdd5f215b9d097f0bb5.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 10
+                },
+                "start_index": 210,
+                "type": "formula"
+              },
+              {
+                "end_index": 224,
+                "formula": {
+                  "content": "n=0",
+                  "height": 16,
+                  "img_url": "https://picx.zhimg.com/v2-d2537fb3fd3e578aaf2adadde0d23391.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 42
+                },
+                "start_index": 220,
+                "type": "formula"
+              },
+              {
+                "end_index": 244,
+                "formula": {
+                  "content": "n",
+                  "height": 13,
+                  "img_url": "https://picx.zhimg.com/v2-0117edff8e23efdd5f215b9d097f0bb5.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 10
+                },
+                "start_index": 240,
+                "type": "formula"
+              },
+              {
+                "end_index": 255,
+                "formula": {
+                  "content": "\\begin{array}{} m+(n+1)&=m+(1+n)\\\\ &=(m+1)+n\\\\ &=n+(m+1)\\\\ &=n+(1+m)\\\\ &=(n+1)+m \\end{array}",
+                  "height": 124,
+                  "img_url": "https://picx.zhimg.com/v2-91cfd029f1b27a06fd6d258dde356130.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 223
+                },
+                "start_index": 251,
+                "type": "formula"
+              }
+            ],
+            "pid": "captured-c-paragraph-007",
+            "text": "之后证明交换律。\n第一步证明，任意 [公式] ， [公式] .对 [公式] 归纳，当 [公式] 时命题平凡成立，之后假定 [公式] ，那么 [公式] ，命题得证。\n第二步证明，任意 [公式] ， [公式] .对 [公式] 归纳，当 [公式] 时命题平凡成立，之后假定 [公式] ，那么 [公式] ，命题得证。\n接下来，证明任意 [公式] ， [公式] .考虑关于 [公式] 的命题，任意 [公式] ， [公式] ，并对 [公式] 归纳，当 [公式] 时已知成立，接下来假定命题对 [公式] 成立，则\n [公式] \n综上得证。"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-c-segment-008",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 22,
+                "entity_word": {
+                  "attach_info_bytes": "AAEC",
+                  "id": "captured-c-entity-8-1-1",
+                  "type": "search",
+                  "url": "https://example.invalid/search?q=captured-term",
+                  "word": "交换性"
+                },
+                "start_index": 19,
+                "type": "entity_word"
+              }
+            ],
+            "pid": "captured-c-paragraph-008",
+            "text": "有人可能会问为什么不直接定义加法是满足交换性的某种运算。其实这样就加大了无矛盾性的证明负担，本质是没有区别的。"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-c-segment-009",
+          "type": "hr"
+        },
+        {
+          "id": "captured-c-segment-010",
+          "paragraph": {
+            "marks": [],
+            "pid": "captured-c-paragraph-010",
+            "text": "唯一性的证明似乎可以在自然数理论内完成，而且挺简单。"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-c-segment-011",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 7,
+                "formula": {
+                  "content": "+_1,+_2",
+                  "height": 18,
+                  "img_url": "https://pic1.zhimg.com/v2-2c45e58a1233abcb0f58822ebe3d9555.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 51
+                },
+                "start_index": 3,
+                "type": "formula"
+              },
+              {
+                "end_index": 29,
+                "formula": {
+                  "content": "m+_1n=m+_2n",
+                  "height": 18,
+                  "img_url": "https://picx.zhimg.com/v2-f5fced5a0af0c5c3bc65befd06104a9a.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 133
+                },
+                "start_index": 25,
+                "type": "formula"
+              },
+              {
+                "end_index": 39,
+                "formula": {
+                  "content": "n",
+                  "height": 13,
+                  "img_url": "https://pica.zhimg.com/v2-0117edff8e23efdd5f215b9d097f0bb5.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 10
+                },
+                "start_index": 35,
+                "type": "formula"
+              },
+              {
+                "end_index": 49,
+                "formula": {
+                  "content": "n=0",
+                  "height": 16,
+                  "img_url": "https://picx.zhimg.com/v2-d2537fb3fd3e578aaf2adadde0d23391.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 42
+                },
+                "start_index": 45,
+                "type": "formula"
+              },
+              {
+                "end_index": 65,
+                "formula": {
+                  "content": "m+_1n=m+_2n",
+                  "height": 18,
+                  "img_url": "https://picx.zhimg.com/v2-f5fced5a0af0c5c3bc65befd06104a9a.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 133
+                },
+                "start_index": 61,
+                "type": "formula"
+              },
+              {
+                "end_index": 75,
+                "formula": {
+                  "content": "m+_1(n+1)=(m+_1n)+1=(m+_2n)+1=m+_2(n+1)",
+                  "height": 21,
+                  "img_url": "https://picx.zhimg.com/v2-20bf2cedcef14b7c353ef0d7e6eaf747.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 464
+                },
+                "start_index": 71,
+                "type": "formula"
+              },
+              {
+                "end_index": 84,
+                "formula": {
+                  "content": "+_1",
+                  "height": 18,
+                  "img_url": "https://picx.zhimg.com/v2-9b6c66aaee33e357e28ce3624c335219.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 21
+                },
+                "start_index": 80,
+                "type": "formula"
+              },
+              {
+                "end_index": 91,
+                "formula": {
+                  "content": "+_2",
+                  "height": 18,
+                  "img_url": "https://picx.zhimg.com/v2-822dce07f4b51dfb061323d2577935e7.jpg?source=7e7ef6e2&needBackground=1",
+                  "url": "https://example.invalid/answer/captured-c",
+                  "width": 21
+                },
+                "start_index": 87,
+                "type": "formula"
+              }
+            ],
+            "pid": "captured-c-paragraph-011",
+            "text": "假设 [公式] 是满足条件的两个函数，只需要证明 [公式] 即可。对 [公式] 归纳，当 [公式] 时等式平凡成立，假定 [公式] ，那么\n [公式] \n因此 [公式] 和 [公式] 是同一个函数。"
+          },
+          "type": "paragraph"
+        }
+      ]
+    }
+  ]
+}

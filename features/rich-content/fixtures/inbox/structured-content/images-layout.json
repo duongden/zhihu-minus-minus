@@ -1,0 +1,85 @@
+{
+  "source": "synthetic",
+  "pages": [
+    {
+      "paging": "{\"is_end\":true,\"next\":\"https://example.invalid/next-content-render?url_token=synthetic-d&content_type=answer&version_id=synthetic-v1&offset=20\",\"is_start\":true,\"previous\":\"https://example.invalid/next-content-render?url_token=synthetic-d&content_type=answer&version_id=synthetic-v1&offset=0\",\"totals\":0}",
+      "segments": [
+        {
+          "id": "d-intro",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-d-intro",
+            "text": "图片使用本地 PNG 资源，原始 JSON 保留合成的资源地址。",
+            "marks": []
+          }
+        },
+        {
+          "id": "d-normal",
+          "type": "image",
+          "image": {
+            "description": "normal：本地默认图标",
+            "height": 192,
+            "is_gif": false,
+            "layout": "normal",
+            "original_token": "original-d-normal",
+            "original_urls": ["https://example.invalid/images/icon.png"],
+            "status": "normal",
+            "token": "token-d-normal",
+            "urls": ["https://example.invalid/images/icon.png"],
+            "width": 192
+          }
+        },
+        {
+          "id": "d-between",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-d-between",
+            "text": "中间的文字可以单独参与展开和收起。",
+            "marks": []
+          }
+        },
+        {
+          "id": "d-small",
+          "type": "image",
+          "image": {
+            "description": "small：本地暮色图标",
+            "height": 192,
+            "is_gif": false,
+            "layout": "small",
+            "original_token": "original-d-small",
+            "original_urls": ["https://example.invalid/images/sunset.png"],
+            "status": "normal",
+            "token": "token-d-small",
+            "urls": ["https://example.invalid/images/sunset.png"],
+            "width": 192
+          }
+        },
+        {
+          "id": "d-normal-two",
+          "type": "image",
+          "image": {
+            "description": "normal：本地极光图标",
+            "height": 192,
+            "is_gif": false,
+            "layout": "normal",
+            "original_token": "original-d-normal-two",
+            "original_urls": ["https://example.invalid/images/aurora.png"],
+            "status": "normal",
+            "token": "token-d-normal-two",
+            "urls": ["https://example.invalid/images/aurora.png"],
+            "width": 192
+          }
+        },
+        {
+          "id": "d-end",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-d-end",
+            "text": "图片布局与资源身份分别保留。",
+            "marks": []
+          }
+        }
+      ]
+    }
+  ]
+}

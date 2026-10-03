@@ -1,0 +1,196 @@
+{
+  "source": "capture-derived",
+  "originalArrayIndex": 3,
+  "sanitization": "Identity spans keep their UTF-16 lengths; IDs, opaque metadata and navigation/paging URLs are replaced. Public image CDN URLs, body order, mark ranges and formula source are retained.",
+  "pages": [
+    {
+      "paging": "{\"is_end\":true,\"next\":\"https://example.invalid/next-content-render?offset=20&url_token=captured-d&content_type=answer&version_id=captured-version-d\",\"is_start\":true,\"previous\":\"https://example.invalid/next-content-render?offset=0&url_token=captured-d&content_type=answer&version_id=captured-version-d\",\"totals\":0}",
+      "segments": [
+        {
+          "id": "captured-d-segment-001",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 21,
+                "entity_word": {
+                  "attach_info_bytes": "AAEC",
+                  "id": "captured-d-entity-1-1-1",
+                  "type": "search",
+                  "url": "https://example.invalid/search?q=captured-term",
+                  "word": "TCR"
+                },
+                "start_index": 18,
+                "type": "entity_word"
+              },
+              {
+                "end_index": 81,
+                "entity_word": {
+                  "attach_info_bytes": "AAEC",
+                  "id": "captured-d-entity-1-1-2",
+                  "type": "search",
+                  "url": "https://example.invalid/search?q=captured-term",
+                  "word": "信号分子"
+                },
+                "start_index": 77,
+                "type": "entity_word"
+              }
+            ],
+            "pid": "captured-d-paragraph-001",
+            "text": "T和B淋巴细胞产生时，抗原结合受体（TCR，BCR）的基因会发生重排，产生各种结合不同抗原的细胞，数学上可能的组合大约有两亿种。重排不是完全随机的，是受到信号分子导向的。重排以后一个淋巴细胞只能结合一种抗原，这个产生的TCR/BCR就成为它的身份证。"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-d-segment-002",
+          "image": {
+            "description": "",
+            "height": 590,
+            "is_gif": false,
+            "layout": "normal",
+            "original_token": "captured-d-original-image-1",
+            "original_urls": [
+              "https://pic1.zhimg.com/v2-caa735419e218ea7fce59f4c84bb0939.jpg?source=7e7ef6e2&needBackground=1"
+            ],
+            "status": "normal",
+            "token": "captured-d-image-1",
+            "urls": [
+              "https://picx.zhimg.com/v2-caa735419e218ea7fce59f4c84bb0939.jpg?source=7e7ef6e2&needBackground=1"
+            ],
+            "width": 520
+          },
+          "type": "image"
+        },
+        {
+          "id": "captured-d-segment-003",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 41,
+                "entity_word": {
+                  "attach_info_bytes": "AAEC",
+                  "id": "captured-d-entity-3-1-1",
+                  "type": "search",
+                  "url": "https://example.invalid/search?q=captured-term",
+                  "word": "自身抗原"
+                },
+                "start_index": 37,
+                "type": "entity_word"
+              },
+              {
+                "end_index": 83,
+                "entity_word": {
+                  "attach_info_bytes": "AAEC",
+                  "id": "captured-d-entity-3-1-2",
+                  "type": "search",
+                  "url": "https://example.invalid/search?q=captured-term",
+                  "word": "特异性免疫反应"
+                },
+                "start_index": 76,
+                "type": "entity_word"
+              }
+            ],
+            "pid": "captured-d-paragraph-003",
+            "text": "接下来要经过反复的正反向选择，凋亡淘汰掉抗原结合能力不够强的和能够强烈结合自身抗原的细胞，才能产生成熟淋巴细胞。所以正常情况下淋巴细胞不会对自身细胞发动特异性免疫反应。"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-d-segment-004",
+          "image": {
+            "description": "",
+            "height": 597,
+            "is_gif": false,
+            "layout": "normal",
+            "original_token": "captured-d-original-image-2",
+            "original_urls": [
+              "https://pic1.zhimg.com/v2-46b3ce3b448c8609d8b8f8fb80da3de0.jpg?source=7e7ef6e2&needBackground=1"
+            ],
+            "status": "normal",
+            "token": "captured-d-image-2",
+            "urls": [
+              "https://pica.zhimg.com/v2-46b3ce3b448c8609d8b8f8fb80da3de0.jpg?source=7e7ef6e2&needBackground=1"
+            ],
+            "width": 514
+          },
+          "type": "image"
+        },
+        {
+          "id": "captured-d-segment-005",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 35,
+                "entity_word": {
+                  "attach_info_bytes": "AAEC",
+                  "id": "captured-d-entity-5-1-1",
+                  "type": "search",
+                  "url": "https://example.invalid/search?q=captured-term",
+                  "word": "抗原呈递细胞"
+                },
+                "start_index": 29,
+                "type": "entity_word"
+              }
+            ],
+            "pid": "captured-d-paragraph-005",
+            "text": "但这个体系有例外，有一些抗原直到出生也永远不接触循环系统，抗原呈递细胞接触不到，所以无法参与淋巴细胞的选择，会成为自身抗原，比如椎间盘的髓核和自身的精子。它们一旦与免疫系统接触，就会引发免疫反应。"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-d-segment-006",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 16,
+                "entity_word": {
+                  "attach_info_bytes": "AAEC",
+                  "id": "captured-d-entity-6-1-1",
+                  "type": "search",
+                  "url": "https://example.invalid/search?q=captured-term",
+                  "word": "免疫豁免"
+                },
+                "start_index": 12,
+                "type": "entity_word"
+              },
+              {
+                "end_index": 31,
+                "entity_word": {
+                  "attach_info_bytes": "AAEC",
+                  "id": "captured-d-entity-6-1-2",
+                  "type": "search",
+                  "url": "https://example.invalid/search?q=captured-term",
+                  "word": "免疫调控"
+                },
+                "start_index": 27,
+                "type": "entity_word"
+              }
+            ],
+            "pid": "captured-d-paragraph-006",
+            "text": "当然，这只是个大体原理，免疫豁免、免疫逃逸、自身免疫和免疫调控在医学和生理学实践上比这复杂得多，仍然有很多未解之谜。"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-d-segment-007",
+          "image": {
+            "description": "",
+            "height": 515,
+            "is_gif": false,
+            "layout": "small",
+            "original_token": "captured-d-original-image-3",
+            "original_urls": [
+              "https://pica.zhimg.com/v2-e3543c30af02105cfe15c08508157eb2.jpg?source=7e7ef6e2&needBackground=1"
+            ],
+            "status": "normal",
+            "token": "captured-d-image-3",
+            "urls": [
+              "https://picx.zhimg.com/v2-e3543c30af02105cfe15c08508157eb2.jpg?source=7e7ef6e2&needBackground=1"
+            ],
+            "width": 286
+          },
+          "type": "image"
+        }
+      ]
+    }
+  ]
+}

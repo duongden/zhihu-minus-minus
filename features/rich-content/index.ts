@@ -14,6 +14,10 @@ export {
   type ZhihuNativeSegmentAction,
   type ZhihuNativeTypographyOptions,
 } from './components/ZhihuNativeContent';
+export {
+  ZhihuStructuredContent,
+  type ZhihuStructuredContentProps,
+} from './components/ZhihuStructuredContent';
 export type {
   ZhihuBlock,
   ZhihuBlockFormula,
@@ -93,6 +97,14 @@ export type {
   RichTextSpan,
 } from './richText';
 export { parseZhihuSegmentHighlight } from './segmentHighlight';
+export {
+  getStructuredContentTextRuns,
+  normalizeZhihuStructuredContent,
+  parseStructuredContentPaging,
+  parseZhihuStructuredContent,
+  type ZhihuStructuredContentInlineRun,
+  type ZhihuStructuredContentNormalizationOptions,
+} from './structuredContent';
 export type {
   LinkCardProps,
   RichContentObjectType,

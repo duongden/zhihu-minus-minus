@@ -160,6 +160,8 @@ export interface ZhihuReaction {
 export interface ZhihuAnswer {
   id: string | number;
   content: string;
+  /** 原生结构化正文；是否返回取决于接口与渲染模式。 */
+  structured_content?: ZhihuStructuredContent;
   excerpt: string;
   created_time: number;
   updated_time: number;
@@ -686,3 +688,189 @@ export interface ZhihuBestAnswerer {
 export interface ZhihuBestAnswerersResponse {
   data: ZhihuBestAnswerer[];
 }
+
+/**
+ * `/next-render` 的 structured_content 观测结构，独立于应用的 ZhihuDocument。
+ *
+ * 以下联合仅覆盖已提供样本中的段与标记。HTTP 边界仍接收 unknown，
+ * 未观测到的 type 或未经验证的字段不能直接断言为这些类型。
+ */
+export interface ZhihuStructuredContent {
+  /** 序列化的 JSON 字符串，解析、验证后才是 ZhihuStructuredContentPaging。 */
+  paging: string;
+  segments: ZhihuStructuredContentSegment[];
+}
+
+/** structured_content.paging 解码后的结构；与外层回答列表分页分别维护。 */
+export interface ZhihuStructuredContentPaging {
+  /** 以此字段判断是否需要续取；next 非空本身不足以证明存在下一页。 */
+  is_end: boolean;
+  /** 样本指向 /next-content-render，应按返回链接续取，不能重构为 /next-render。 */
+  next: string;
+  is_start: boolean;
+  previous: string;
+  /** 样本中全部为 0，即使已返回多个 segments；不能当作已返回段数。 */
+  totals: number;
+}
+
+/** 所有 segment 的 id 都是字符串；paragraph 的 id 与其 pid 在样本中不同。 */
+export interface ZhihuStructuredContentSegmentIdentity {
+  id: string;
+}
+
+/** 文字与范围标记；marks 可为空，也可包含重叠范围。 */
+export interface ZhihuStructuredContentTextPayload {
+  text: string;
+  marks: ZhihuStructuredContentMark[];
+}
+
+export interface ZhihuStructuredContentParagraphPayload
+  extends ZhihuStructuredContentTextPayload {
+  /** 段落源身份，不应以外层 segment.id 代替。 */
+  pid: string;
+}
+
+export interface ZhihuStructuredContentHeadingPayload
+  extends ZhihuStructuredContentTextPayload {
+  /** 样本仅出现 2，不能据此认定其他标题级别不存在。 */
+  level: number;
+}
+
+export interface ZhihuStructuredContentListItemPayload
+  extends ZhihuStructuredContentTextPayload {
+  /** 样本仅出现 1，缩进层级的完整取值范围尚未验证。 */
+  indent_level: number;
+}
+
+export interface ZhihuStructuredContentListPayload {
+  /** unordered 仅为已观测列表类型，完整服务器枚举未知。 */
+  type: 'unordered';
+  items: ZhihuStructuredContentListItemPayload[];
+}
+
+export interface ZhihuStructuredContentImagePayload {
+  /** 可为空字符串。 */
+  description: string;
+  height: number;
+  /** 样本全部为 false，不据此排除 GIF。 */
+  is_gif: boolean;
+  /** normal、small 仅为已观测布局，完整服务器枚举未知。 */
+  layout: 'normal' | 'small';
+  original_token: string;
+  original_urls: string[];
+  /** normal 仅为已观测状态，完整服务器枚举未知。 */
+  status: 'normal';
+  token: string;
+  urls: string[];
+  width: number;
+}
+
+export interface ZhihuStructuredContentParagraphSegment
+  extends ZhihuStructuredContentSegmentIdentity {
+  type: 'paragraph';
+  paragraph: ZhihuStructuredContentParagraphPayload;
+}
+
+export interface ZhihuStructuredContentHeadingSegment
+  extends ZhihuStructuredContentSegmentIdentity {
+  type: 'heading';
+  heading: ZhihuStructuredContentHeadingPayload;
+}
+
+export interface ZhihuStructuredContentListSegment
+  extends ZhihuStructuredContentSegmentIdentity {
+  type: 'list_node';
+  list_node: ZhihuStructuredContentListPayload;
+}
+
+export interface ZhihuStructuredContentImageSegment
+  extends ZhihuStructuredContentSegmentIdentity {
+  type: 'image';
+  image: ZhihuStructuredContentImagePayload;
+}
+
+/** 样本中的分隔线没有额外 payload。 */
+export interface ZhihuStructuredContentHorizontalRuleSegment
+  extends ZhihuStructuredContentSegmentIdentity {
+  type: 'hr';
+}
+
+export type ZhihuStructuredContentSegment =
+  | ZhihuStructuredContentParagraphSegment
+  | ZhihuStructuredContentHeadingSegment
+  | ZhihuStructuredContentListSegment
+  | ZhihuStructuredContentImageSegment
+  | ZhihuStructuredContentHorizontalRuleSegment;
+
+/**
+ * 标记作用于同一文字 payload.text 的半开范围 [start_index, end_index)。
+ * 样本符合字符偏移且排除 UTF-8 字节偏移，但没有非 BMP 字符，
+ * 因而尚不能区分 Unicode 码点与 UTF-16 code unit；不要据此直接提交业务选区。
+ * 范围不互斥，已观测到 bold 与 entity_word 重叠。
+ */
+export interface ZhihuStructuredContentMarkRange {
+  start_index: number;
+  end_index: number;
+}
+
+export interface ZhihuStructuredContentLinkPayload {
+  href: string;
+  /** member_mention 样本为空字符串，普通文字链接样本为图标名。 */
+  icon_name: string;
+  /** 仅为已观测链接类型，完整服务器枚举未知。 */
+  link_type: 'member_mention' | 'text';
+}
+
+export interface ZhihuStructuredContentEntityWordPayload {
+  /**
+   * 不透明附加信息。样本字符串可 Base64 解码，但结果为非 UTF-8 二进制，
+   * 协议未知；不能视为 JSON 文本。
+   */
+  attach_info_bytes: string;
+  id: string;
+  /** search 仅为已观测词条类型，完整服务器枚举未知。 */
+  type: 'search';
+  url: string;
+  word: string;
+}
+
+export interface ZhihuStructuredContentFormulaPayload {
+  /** 公式源码，部分包含 LaTeX 命令；不能以 text 中的 [公式] 占位符代替。 */
+  content: string;
+  height: number;
+  /** 公式图片资源 URL；与 url 的来源页语义不同。 */
+  img_url: string;
+  /** 样本全部指向所属回答的网页地址，不是公式图片地址。 */
+  url: string;
+  width: number;
+}
+
+export interface ZhihuStructuredContentBoldMark
+  extends ZhihuStructuredContentMarkRange {
+  type: 'bold';
+}
+
+export interface ZhihuStructuredContentLinkMark
+  extends ZhihuStructuredContentMarkRange {
+  type: 'link';
+  link: ZhihuStructuredContentLinkPayload;
+}
+
+export interface ZhihuStructuredContentEntityWordMark
+  extends ZhihuStructuredContentMarkRange {
+  type: 'entity_word';
+  entity_word: ZhihuStructuredContentEntityWordPayload;
+}
+
+/** 样本中范围对应固定四字符 [公式]，应消费 formula payload 渲染。 */
+export interface ZhihuStructuredContentFormulaMark
+  extends ZhihuStructuredContentMarkRange {
+  type: 'formula';
+  formula: ZhihuStructuredContentFormulaPayload;
+}
+
+export type ZhihuStructuredContentMark =
+  | ZhihuStructuredContentBoldMark
+  | ZhihuStructuredContentLinkMark
+  | ZhihuStructuredContentEntityWordMark
+  | ZhihuStructuredContentFormulaMark;

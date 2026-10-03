@@ -1,0 +1,364 @@
+{
+  "source": "capture-derived",
+  "originalArrayIndex": 1,
+  "sanitization": "Identity spans keep their UTF-16 lengths; IDs, opaque metadata and navigation/paging URLs are replaced. Public image CDN URLs, body order, mark ranges and formula source are retained.",
+  "pages": [
+    {
+      "paging": "{\"is_end\":false,\"next\":\"https://example.invalid/next-content-render?offset=20&url_token=captured-b&content_type=answer&version_id=captured-version-b\",\"is_start\":true,\"previous\":\"https://example.invalid/next-content-render?offset=0&url_token=captured-b&content_type=answer&version_id=captured-version-b\",\"totals\":0}",
+      "segments": [
+        {
+          "heading": {
+            "level": 2,
+            "marks": [
+              {
+                "end_index": 39,
+                "start_index": 0,
+                "type": "bold"
+              }
+            ],
+            "text": "结论: 如果一个整数各位上面的数之和能整除3(或9)，那么这个数整除3(或9)"
+          },
+          "id": "captured-b-segment-001",
+          "type": "heading"
+        },
+        {
+          "id": "captured-b-segment-002",
+          "paragraph": {
+            "marks": [],
+            "pid": "captured-b-paragraph-002",
+            "text": "这个结论应该是各位在读小学的时候就学过的，但是他的证明我是大三的时候在柯朗·罗宾的《什么是数学》上第一次看到的，当时就觉得很漂亮。涉及一点数论知识，但是简单易懂。我在知乎上贴一个简单易懂版本的证明。"
+          },
+          "type": "paragraph"
+        },
+        {
+          "heading": {
+            "level": 2,
+            "marks": [],
+            "text": "证明:"
+          },
+          "id": "captured-b-segment-003",
+          "type": "heading"
+        },
+        {
+          "id": "captured-b-segment-004",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 5,
+                "start_index": 3,
+                "type": "bold"
+              },
+              {
+                "end_index": 5,
+                "entity_word": {
+                  "attach_info_bytes": "AAEC",
+                  "id": "captured-b-entity-4-1-2",
+                  "type": "search",
+                  "url": "https://example.invalid/search?q=captured-term",
+                  "word": "同余"
+                },
+                "start_index": 3,
+                "type": "entity_word"
+              }
+            ],
+            "pid": "captured-b-paragraph-004",
+            "text": "先引入同余的概念:"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-b-segment-005",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 9,
+                "start_index": 8,
+                "type": "bold"
+              },
+              {
+                "end_index": 15,
+                "start_index": 14,
+                "type": "bold"
+              },
+              {
+                "end_index": 17,
+                "start_index": 16,
+                "type": "bold"
+              },
+              {
+                "end_index": 19,
+                "start_index": 18,
+                "type": "bold"
+              },
+              {
+                "end_index": 31,
+                "start_index": 30,
+                "type": "bold"
+              },
+              {
+                "end_index": 33,
+                "start_index": 32,
+                "type": "bold"
+              },
+              {
+                "end_index": 38,
+                "start_index": 34,
+                "type": "bold"
+              },
+              {
+                "end_index": 47,
+                "start_index": 46,
+                "type": "bold"
+              },
+              {
+                "end_index": 55,
+                "start_index": 49,
+                "type": "bold"
+              },
+              {
+                "end_index": 62,
+                "start_index": 60,
+                "type": "bold"
+              },
+              {
+                "end_index": 64,
+                "start_index": 63,
+                "type": "bold"
+              },
+              {
+                "end_index": 67,
+                "start_index": 66,
+                "type": "bold"
+              }
+            ],
+            "pid": "captured-b-paragraph-005",
+            "text": "对于一个固定整数d，如果整数a和b用d整除有相同的余数，则称a和b是模d同余的。即存在一整数n使得a-b=nd成立。比如10和1是模3同余的:"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-b-segment-006",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 14,
+                "start_index": 0,
+                "type": "bold"
+              },
+              {
+                "end_index": 39,
+                "start_index": 27,
+                "type": "bold"
+              }
+            ],
+            "pid": "captured-b-paragraph-006",
+            "text": "     10÷3=3……1                1÷3=0……1    "
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-b-segment-007",
+          "paragraph": {
+            "marks": [],
+            "pid": "captured-b-paragraph-007",
+            "text": "同余的概念可以记作:"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-b-segment-008",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 33,
+                "start_index": 0,
+                "type": "bold"
+              }
+            ],
+            "pid": "captured-b-paragraph-008",
+            "text": "                      a≡b(mod d) "
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-b-segment-009",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 9,
+                "start_index": 2,
+                "type": "bold"
+              },
+              {
+                "end_index": 22,
+                "start_index": 19,
+                "type": "bold"
+              }
+            ],
+            "pid": "captured-b-paragraph-009",
+            "text": "一般(mod d)可以省略，记作   a≡b"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-b-segment-010",
+          "paragraph": {
+            "marks": [],
+            "pid": "captured-b-paragraph-010",
+            "text": "那么关于同余有以下几个推论:"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-b-segment-011",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 13,
+                "start_index": 0,
+                "type": "bold"
+              }
+            ],
+            "pid": "captured-b-paragraph-011",
+            "text": " 1.a≡a(mod d)"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-b-segment-012",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 27,
+                "start_index": 0,
+                "type": "bold"
+              }
+            ],
+            "pid": "captured-b-paragraph-012",
+            "text": " 2.如果a≡b(mod d)，则b≡a(mod d)"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-b-segment-013",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 29,
+                "start_index": 0,
+                "type": "bold"
+              }
+            ],
+            "pid": "captured-b-paragraph-013",
+            "text": " 3.如果a≡b(mod d)，b≡c(mod d)，那么"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-b-segment-014",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 14,
+                "start_index": 0,
+                "type": "bold"
+              }
+            ],
+            "pid": "captured-b-paragraph-014",
+            "text": "    a≡c(mod d)"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-b-segment-015",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 29,
+                "start_index": 0,
+                "type": "bold"
+              }
+            ],
+            "pid": "captured-b-paragraph-015",
+            "text": "如果a≡a'(mod d)，b≡b'(mod d)，那么:"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-b-segment-016",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 19,
+                "start_index": 0,
+                "type": "bold"
+              }
+            ],
+            "pid": "captured-b-paragraph-016",
+            "text": " 4.a+b≡a'+b'(mod d)"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-b-segment-017",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 19,
+                "start_index": 0,
+                "type": "bold"
+              }
+            ],
+            "pid": "captured-b-paragraph-017",
+            "text": " 5.a-b≡a'-b'(mod d)"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-b-segment-018",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 17,
+                "start_index": 0,
+                "type": "bold"
+              }
+            ],
+            "pid": "captured-b-paragraph-018",
+            "text": " 6.ab≡a'b'(mod d)"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-b-segment-019",
+          "paragraph": {
+            "marks": [],
+            "pid": "captured-b-paragraph-019",
+            "text": "那么对于任何一个整数:"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-b-segment-020",
+          "image": {
+            "description": "",
+            "height": 22,
+            "is_gif": false,
+            "layout": "small",
+            "original_token": "captured-b-original-image-1",
+            "original_urls": [
+              "https://pic1.zhimg.com/v2-a5abaa6b5f8cdaed426c00153f5e0108.jpg?source=7e7ef6e2&needBackground=1"
+            ],
+            "status": "normal",
+            "token": "captured-b-image-1",
+            "urls": [
+              "https://pica.zhimg.com/v2-a5abaa6b5f8cdaed426c00153f5e0108.jpg?source=7e7ef6e2&needBackground=1"
+            ],
+            "width": 323
+          },
+          "type": "image"
+        }
+      ]
+    }
+  ]
+}

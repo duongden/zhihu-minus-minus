@@ -7,11 +7,24 @@ import {
   analyzeFixtureDirectory,
   analyzeHtml,
   analyzeSegmentInfos,
+  analyzeStructuredContentPages,
   loadManifest,
   normalizeFixtureHtml,
 } from '../tools/fixture-lib.mjs';
 
 const manifestPath = path.join(__dirname, '../fixtures/manifest.json');
+
+function structuredStats(
+  result:
+    | Awaited<ReturnType<typeof analyzeFixtureDirectory>>[number]
+    | undefined,
+) {
+  assert.ok(result);
+  assert.equal(result.sourceType, 'structured_content');
+  return result.stats as ReturnType<
+    typeof analyzeStructuredContentPages
+  >['stats'];
+}
 
 test('normalizes captured escaped HTML values', () => {
   assert.equal(
@@ -85,6 +98,90 @@ test('excludes noscript fallback images from active image counts', () => {
   assert.equal(stats.totalImages, 2);
   assert.equal(stats.activeImages, 1);
   assert.equal(stats.noscripts, 1);
+});
+
+test('scans every bundled structured case directly with counts and sanitized paging metadata', async () => {
+  const results = await analyzeFixtureDirectory(
+    path.join(__dirname, '../fixtures/inbox/structured-content'),
+  );
+  const synthetic = results.filter((result: { traits: string[] }) =>
+    result.traits.includes('synthetic'),
+  );
+  const captured = results.filter((result: { traits: string[] }) =>
+    result.traits.includes('capture-derived'),
+  );
+  assert.equal(synthetic.length, 5);
+  assert.equal(captured.length, 5);
+  for (const result of results) {
+    assert.equal(result.sourceType, 'structured_content');
+    assert.deepEqual(result.errors, [], result.id);
+    const stats = structuredStats(result);
+    assert.ok(stats.structuredSegments >= 4);
+    assert.equal(stats.segmentInfos, 0);
+    assert.ok(
+      stats.paging.every(
+        (paging: Record<string, unknown>) =>
+          !('next' in paging) && !('previous' in paging),
+      ),
+    );
+  }
+  const list = structuredStats(
+    results.find((result) => result.id.endsWith('list-formula.json')),
+  );
+  assert.equal(list.lists, 1);
+  assert.equal(list.listItems, 4);
+  assert.equal(list.formulaImages, 3);
+  const overlap = structuredStats(
+    results.find((result) => result.id.endsWith('heading-overlap.json')),
+  );
+  assert.equal(overlap.structuredPages, 2);
+  assert.equal(overlap.structuredSegments, 8);
+  assert.equal(overlap.mergedStructuredSegments, 7);
+  assert.deepEqual(overlap.markTypes, {
+    bold: 2,
+    link: 0,
+    entity_word: 1,
+    formula: 0,
+  });
+  assert.equal(overlap.paging[0].is_end, false);
+  assert.equal(overlap.paging[1].is_end, true);
+  const dense = structuredStats(
+    results.find((result) => result.id.endsWith('dense-formula.json')),
+  );
+  assert.equal(dense.horizontalRules, 1);
+  assert.equal(dense.formulaImages, 6);
+  assert.equal(
+    captured.reduce(
+      (sum, result) => sum + structuredStats(result).structuredSegments,
+      0,
+    ),
+    48,
+  );
+  assert.equal(
+    captured.reduce((sum, result) => sum + structuredStats(result).marks, 0),
+    99,
+  );
+});
+
+test('structured analysis reports malformed paging and ranges without leaking payload values', () => {
+  const secret = 'synthetic-private-value';
+  const analysis = analyzeStructuredContentPages([
+    {
+      paging: secret,
+      segments: [
+        {
+          id: secret,
+          type: 'paragraph',
+          paragraph: {
+            text: secret,
+            marks: [{ type: 'bold', start_index: 0, end_index: 1000 }],
+          },
+        },
+      ],
+    },
+  ]);
+  assert.equal(analysis.errors.length, 2);
+  assert.equal(JSON.stringify(analysis).includes(secret), false);
 });
 
 test('counts member mentions and topic tags in pin HTML', () => {

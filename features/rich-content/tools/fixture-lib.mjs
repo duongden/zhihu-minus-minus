@@ -86,7 +86,11 @@ export function compareExpectedMetadata(document, expected = {}) {
   });
 }
 
-async function loadFixtureSource(filePath, contentPath) {
+async function loadFixtureSource(
+  filePath,
+  contentPath,
+  allowStructuredPages = false,
+) {
   const raw = await readFile(filePath, 'utf8');
   if (path.extname(filePath).toLowerCase() !== JSON_FIXTURE_EXTENSION) {
     throw new Error(`Fixture must be a JSON API envelope: ${filePath}`);
@@ -99,6 +103,15 @@ async function loadFixtureSource(filePath, contentPath) {
     throw new Error(
       `Invalid JSON fixture ${filePath}: ${error instanceof Error ? error.message : String(error)}`,
     );
+  }
+
+  if (
+    allowStructuredPages &&
+    isRecord(document) &&
+    ['synthetic', 'capture-derived'].includes(document.source) &&
+    Array.isArray(document.pages)
+  ) {
+    return { document, structuredPages: document.pages };
   }
 
   const selectedContentPath =
@@ -167,6 +180,157 @@ export function analyzeHtml(html) {
       /<a\b[^>]*class=(?:"|')[^"']*\bhash_tag\b[^"']*(?:"|')[^>]*>/gi,
     ),
   };
+}
+
+/** Count bundled structured input directly; no HTML serialization or parsing. */
+export function analyzeStructuredContentPages(pages) {
+  const serialized = JSON.stringify(pages);
+  /** @type {Array<{is_end: boolean, is_start: boolean, totals: number, hasNext: boolean, hasPrevious: boolean}>} */
+  const pagingStates = [];
+  const stats = {
+    characters: serialized.length,
+    bytes: Buffer.byteLength(serialized),
+    paragraphs: 0,
+    headings: 0,
+    figures: 0,
+    figcaptions: 0,
+    lists: 0,
+    totalImages: 0,
+    activeImages: 0,
+    avatarImages: 0,
+    formulaImages: 0,
+    noscripts: 0,
+    videoBoxes: 0,
+    linkCards: 0,
+    memberMentions: 0,
+    topicTags: 0,
+    segmentInfos: 0,
+    structuredPages: pages.length,
+    structuredSegments: 0,
+    mergedStructuredSegments: 0,
+    horizontalRules: 0,
+    listItems: 0,
+    marks: 0,
+    markTypes: { bold: 0, link: 0, entity_word: 0, formula: 0 },
+    paging: pagingStates,
+  };
+  const errors = [];
+  const mergedIds = new Set();
+
+  function analyzeText(payload, location) {
+    if (
+      !isRecord(payload) ||
+      typeof payload.text !== 'string' ||
+      !Array.isArray(payload.marks)
+    ) {
+      errors.push(`${location} must contain text and marks`);
+      return;
+    }
+    for (const mark of payload.marks) {
+      stats.marks += 1;
+      if (!isRecord(mark) || !Object.hasOwn(stats.markTypes, mark.type)) {
+        errors.push(`${location} contains an unsupported mark`);
+        continue;
+      }
+      stats.markTypes[mark.type] += 1;
+      if (
+        !Number.isSafeInteger(mark.start_index) ||
+        !Number.isSafeInteger(mark.end_index) ||
+        mark.start_index < 0 ||
+        mark.end_index < mark.start_index ||
+        mark.end_index > payload.text.length
+      ) {
+        errors.push(`${location} contains an invalid mark range`);
+      }
+      if (mark.type === 'formula') stats.formulaImages += 1;
+      if (mark.type === 'link' && mark.link?.link_type === 'member_mention')
+        stats.memberMentions += 1;
+    }
+  }
+
+  pages.forEach((page, pageIndex) => {
+    const location = `pages.${pageIndex}`;
+    if (!isRecord(page) || !Array.isArray(page.segments)) {
+      errors.push(`${location} must contain segments`);
+      return;
+    }
+    let paging;
+    try {
+      paging = typeof page.paging === 'string' ? JSON.parse(page.paging) : null;
+    } catch {
+      paging = null;
+    }
+    if (
+      !isRecord(paging) ||
+      typeof paging.is_end !== 'boolean' ||
+      typeof paging.is_start !== 'boolean' ||
+      typeof paging.next !== 'string' ||
+      typeof paging.previous !== 'string' ||
+      !Number.isFinite(paging.totals) ||
+      (!paging.is_end && !paging.next.trim())
+    ) {
+      errors.push(`${location} contains invalid serialized paging`);
+    } else {
+      // Never include continuation URLs, opaque IDs or original prose in output.
+      stats.paging.push({
+        is_end: paging.is_end,
+        is_start: paging.is_start,
+        totals: paging.totals,
+        hasNext: Boolean(paging.next),
+        hasPrevious: Boolean(paging.previous),
+      });
+    }
+    const pageIds = new Set();
+    page.segments.forEach((segment, segmentIndex) => {
+      const segmentLocation = `${location}.segments.${segmentIndex}`;
+      if (!isRecord(segment) || typeof segment.id !== 'string' || !segment.id) {
+        errors.push(`${segmentLocation} must contain an ID`);
+        return;
+      }
+      if (pageIds.has(segment.id))
+        errors.push(`${segmentLocation} repeats an ID within one page`);
+      pageIds.add(segment.id);
+      mergedIds.add(segment.id);
+      stats.structuredSegments += 1;
+      switch (segment.type) {
+        case 'paragraph':
+          stats.paragraphs += 1;
+          analyzeText(segment.paragraph, segmentLocation);
+          break;
+        case 'heading':
+          stats.headings += 1;
+          analyzeText(segment.heading, segmentLocation);
+          break;
+        case 'list_node':
+          stats.lists += 1;
+          if (
+            !isRecord(segment.list_node) ||
+            !Array.isArray(segment.list_node.items)
+          ) {
+            errors.push(`${segmentLocation} must contain list items`);
+          } else {
+            stats.listItems += segment.list_node.items.length;
+            segment.list_node.items.forEach((item, itemIndex) => {
+              analyzeText(item, `${segmentLocation}.items.${itemIndex}`);
+            });
+          }
+          break;
+        case 'image':
+          stats.activeImages += 1;
+          stats.totalImages += 1;
+          if (!isRecord(segment.image))
+            errors.push(`${segmentLocation} must contain an image payload`);
+          break;
+        case 'hr':
+          stats.horizontalRules += 1;
+          break;
+        default:
+          errors.push(`${segmentLocation} contains an unsupported segment`);
+      }
+    });
+  });
+  stats.mergedStructuredSegments = mergedIds.size;
+  return { stats, errors };
 }
 
 function isRecord(value) {
@@ -343,8 +507,23 @@ export async function analyzeFixtureDirectory(directoryPath) {
   const results = [];
 
   for (const filePath of filePaths) {
-    const { content, document } = await loadFixtureSource(filePath);
+    const { content, document, structuredPages } = await loadFixtureSource(
+      filePath,
+      undefined,
+      true,
+    );
     const relativePath = path.relative(directoryPath, filePath);
+    if (structuredPages) {
+      const analysis = analyzeStructuredContentPages(structuredPages);
+      results.push({
+        id: `inbox:${relativePath}`,
+        filePath,
+        sourceType: 'structured_content',
+        traits: [document.source, 'structured-content'],
+        ...analysis,
+      });
+      continue;
+    }
     const segmentAnalysis = analyzeSegmentInfos(
       document,
       document?.type,
