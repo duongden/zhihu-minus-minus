@@ -88,14 +88,21 @@ beforeEach(() => {
 });
 
 test.each([
-  ['light', '#ffffff'],
-  ['light', '#001144'],
-  ['dark', '#ffffff'],
-  ['dark', '#001144'],
-] as const)('filled vote controls keep text, icons and pending spinners readable in %s with %s', async (scheme, primaryColor) => {
+  ['light', null, '#ffffff'],
+  ['dark', null, '#ffffff'],
+  ['light', '#0084ff', '#ffffff'],
+  ['dark', '#0084ff', '#ffffff'],
+  ['light', '#ffffff', '#000000'],
+  ['dark', '#ffffff', '#000000'],
+  ['light', '#eeee00', '#000000'],
+  ['dark', '#eeee00', '#000000'],
+  ['light', '#001144', '#ffffff'],
+  ['dark', '#001144', '#ffffff'],
+] as const)('filled vote controls match their text, icons and pending spinners to %s fill %s', async (scheme, primaryColor, foreground) => {
   mockColorScheme = scheme;
   useSettingsStore.setState({ primaryColor });
   const palette = currentPalette();
+  expect(palette.onPrimary).toBe(foreground);
   const like = await render(<LikeButton id="synthetic" count={5} voted={1} />);
   expect(like.getByRole('button')).toHaveStyle({
     backgroundColor: palette.primary,
@@ -106,7 +113,7 @@ test.each([
   });
   expect(
     contrastRatio(palette.onPrimary, palette.primary),
-  ).toBeGreaterThanOrEqual(4.5);
+  ).toBeGreaterThanOrEqual(3);
   await fireEvent.press(like.getByRole('button'));
   expect(like.getByRole('button')).toBeDisabled();
   expect(

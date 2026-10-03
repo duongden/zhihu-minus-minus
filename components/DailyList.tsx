@@ -113,6 +113,7 @@ export const DailyList = React.forwardRef<
   const router = useRouter();
   const colorScheme = useColorScheme();
   const primaryColor = useThemeColor({}, 'primary');
+  const onPrimary = useThemeColor({}, 'onPrimary');
   const backgroundColor = useThemeColor({}, 'background');
   const indicatorTrackColor = useThemeColor({}, 'border');
   const [isRefreshing, setIsRefreshing] = React.useState(false);
@@ -213,7 +214,9 @@ export const DailyList = React.forwardRef<
           style={{ backgroundColor: primaryColor }}
           onPress={() => refetch()}
         >
-          <Text className="text-on-primary font-bold">重试一下</Text>
+          <Text className="font-bold" style={{ color: onPrimary }}>
+            重试一下
+          </Text>
         </BouncyButton>
       </View>
     );

@@ -358,7 +358,10 @@ export default function ArticleDetail() {
               className="absolute bottom-0 p-5 w-full"
               style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}
             >
-              <Text className="text-white text-[22px] font-bold">
+              <Text
+                className="text-[22px] font-bold"
+                style={{ color: '#ffffff' }}
+              >
                 {data.title}
               </Text>
               {data.image_source && (

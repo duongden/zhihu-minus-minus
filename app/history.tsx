@@ -31,6 +31,7 @@ export default function HistoryScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const primaryColor = useThemeColor({}, 'primary');
+  const onPrimary = useThemeColor({}, 'onPrimary');
   const queryClient = useQueryClient();
   const cookies = useAuthStore((state) => state.cookies);
   const isAuthenticated = hasAuthenticationCookie(cookies);
@@ -290,7 +291,7 @@ export default function HistoryScreen() {
           className="absolute bottom-8 left-8 right-8 py-3 rounded-xl items-center"
           style={{ backgroundColor: primaryColor }}
         >
-          <Text className="text-on-primary text-base font-bold">
+          <Text className="text-base font-bold" style={{ color: onPrimary }}>
             {isDeleting ? '正在删除…' : `删除选中 (${selectedIds.size})`}
           </Text>
         </BouncyButton>

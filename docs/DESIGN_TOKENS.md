@@ -11,7 +11,9 @@
 - `themeAdjustments.textContrast.high` 指定高对比文字明度。
 - `typography / radii / opacity / effects` 继续定义静态排版、形状和交互效果；遮罩的 alpha 形状可以固定，实际表面颜色应来自运行时 token。
 
-解析顺序为：规范化种子与预设 → HCT 低彩度中性色阶 → 分层或扁平表面 → 文字对比度 → 实心前景校验。正文、次要文字、三级文字和链接在页面、卡片及中性控件上至少满足 4.5:1；高对比正文至少 7:1。实心按钮按实际背景选择黑或白，使对比度至少 4.5:1。原有强调色与透明底不纳入这项文字对比度保证。解析结果不可变，缓存上限 64 套，避免取色器拖动造成无限缓存。
+解析顺序为：规范化种子与预设 → HCT 低彩度中性色阶 → 分层或扁平表面 → 文字对比度 → 实心前景选择。正文、次要文字、三级文字和链接在页面、卡片及中性控件上至少满足 4.5:1；高对比正文至少 7:1。`onPrimary` 使用 Material 的 `DynamicColor.tonePrefersLightForeground`：主色 HCT 明度四舍五入后低于 60 时使用白色，否则使用黑色。判断仅依赖实际填充色，与明暗主题、阅读背景、正文对比度及表面层次无关。默认蓝色 `#0084ff` 使用白字，白色、亮黄、亮绿等填充使用黑字；用户选定的主色原值保持不变。
+
+主色实心前景至少保持 3:1，默认蓝底白字约为 3.66:1；这是一项控件视觉取色偏好，不能声称符合 [WCAG 普通文字 4.5:1](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)。危险、成功、警告等实心前景仍按最大黑白对比度选择，至少保持 4.5:1。原有强调色与透明底不纳入这项文字对比度保证。解析结果不可变，缓存上限 64 套，避免取色器拖动造成无限缓存。
 
 ## 配对使用颜色
 
@@ -40,7 +42,7 @@ const foreground = useThemeColor({}, 'onPrimary');
 
 批量读取可用 `useRuntimeThemeColors()`。旧 `Colors` getter 解析同一 palette；旧组件通过 `useColorScheme` 订阅颜色偏好。不要在模块级 StyleSheet 中保存运行时颜色，避免打开页面后切换主色仍保留旧值。
 
-NativeWind 根级 `vars` 同步同一 palette。不透明颜色以六位 HEX 转 RGB 通道，透明 token 直接传 CSS 颜色字符串；`bg-primary text-on-primary`、`bg-danger text-on-danger` 等实心填充使用成对语义 class。富文本仅从统一公共入口读取运行时主题。
+NativeWind 根级 `vars` 同步同一 palette。不透明颜色以六位 HEX 转 RGB 通道，透明 token 直接传 CSS 颜色字符串；原生 `Text` 的 `bg-primary text-on-primary`、`bg-danger text-on-danger` 等实心填充使用成对语义 class。`Themed.Text` 自带行内文字颜色，按钮前景应显式传入 `style={{ color: onPrimary }}`，避免默认颜色覆盖普通 class。富文本仅从统一公共入口读取运行时主题。
 
 主题模式仍由 `store/useThemeStore.ts` 管理 `system / light / dark`，现有原生 Appearance 与 NativeWind 同步路径不变。本实现从应用内主色生成配色，没有接入 Android 壁纸颜色提取；纯 JS 算法在各平台共用，不新增原生模块。
 

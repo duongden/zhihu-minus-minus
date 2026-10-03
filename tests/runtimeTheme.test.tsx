@@ -50,6 +50,11 @@ const seeds = [
   '#ffffff',
   '#000000',
   '#777777',
+  '#8f8f8f',
+  '#909090',
+  '#ff0000',
+  '#00ff00',
+  '#00ffff',
 ] as const;
 const neutralSurfaces = [
   'background',
@@ -125,7 +130,7 @@ describe.each(['light', 'dark'] as const)('%s runtime palette', (scheme) => {
             expect(palette[foreground]).toMatch(/^#[\da-f]{6}$/i);
             expect(
               contrastRatio(palette[foreground], palette[background]),
-            ).toBeGreaterThanOrEqual(4.5);
+            ).toBeGreaterThanOrEqual(foreground === 'onPrimary' ? 3 : 4.5);
           }
           expect(
             contrastRatio(palette.text, palette.background),
@@ -137,6 +142,39 @@ describe.each(['light', 'dark'] as const)('%s runtime palette', (scheme) => {
           ).toBeGreaterThanOrEqual(
             contrastRatio(palette.textTertiary, palette.background),
           );
+        }
+      }
+    }
+  });
+
+  test.each([
+    [null, '#ffffff'],
+    ['#0084ff', '#ffffff'],
+    ['#0084FF', '#ffffff'],
+    ['#001144', '#ffffff'],
+    ['#ff0000', '#ffffff'],
+    ['#8f8f8f', '#ffffff'],
+    ['#909090', '#000000'],
+    ['#eeee00', '#000000'],
+    ['#ffffff', '#000000'],
+    ['#00ff00', '#000000'],
+    ['#00ffff', '#000000'],
+    ['#000000', '#ffffff'],
+    ['invalid', '#ffffff'],
+  ])('primary %s chooses %s regardless of reading preferences', (primaryColor, foreground) => {
+    for (const readingBackground of presets) {
+      for (const textContrast of ['standard', 'high'] as const) {
+        for (const surfaceStyle of ['layered', 'flat'] as const) {
+          const palette = resolveThemeColors(
+            scheme,
+            preferences({
+              primaryColor,
+              readingBackground,
+              textContrast,
+              surfaceStyle,
+            }),
+          );
+          expect(palette.onPrimary).toBe(foreground);
         }
       }
     }
@@ -296,6 +334,10 @@ describe.each(['light', 'dark'] as const)('%s runtime palette', (scheme) => {
       if (next.primaryColor === '#ffff00') {
         expect(data.palette.onPrimary).toBe('#000000');
         expect(data.variables['--theme-primary']).toBe('255 255 0');
+      }
+      if (next.primaryColor === null) {
+        expect(data.palette.onPrimary).toBe('#ffffff');
+        expect(data.variables['--theme-onPrimary']).toBe('255 255 255');
       }
     }
     await host.unmount();

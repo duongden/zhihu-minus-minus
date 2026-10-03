@@ -22,6 +22,7 @@ export default function RichContentFixtureDetailScreen() {
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme() ?? 'light';
   const primaryColor = useThemeColor({}, 'primary');
+  const onPrimary = useThemeColor({}, 'onPrimary');
   const backgroundColor = useThemeColor({}, 'background');
   const surfaceColor = useThemeColor({}, 'backgroundSecondary');
   const borderColor = useThemeColor({}, 'border');
@@ -123,7 +124,7 @@ export default function RichContentFixtureDetailScreen() {
                     style={[
                       styles.rendererButtonText,
                       renderer === 'rnrh' && !usesStructuredPinContent
-                        ? { color: Colors[colorScheme].textInverse }
+                        ? { color: onPrimary }
                         : undefined,
                     ]}
                   >
@@ -144,7 +145,7 @@ export default function RichContentFixtureDetailScreen() {
                     style={[
                       styles.rendererButtonText,
                       renderer === 'webview' && !usesStructuredPinContent
-                        ? { color: Colors[colorScheme].textInverse }
+                        ? { color: onPrimary }
                         : undefined,
                     ]}
                   >
@@ -165,7 +166,7 @@ export default function RichContentFixtureDetailScreen() {
                     style={[
                       styles.rendererButtonText,
                       renderer === 'native-v2' && !usesStructuredPinContent
-                        ? { color: Colors[colorScheme].textInverse }
+                        ? { color: onPrimary }
                         : undefined,
                     ]}
                   >

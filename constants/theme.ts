@@ -1,6 +1,7 @@
 import {
   argbFromHex,
   Blend,
+  DynamicColor,
   Hct,
   hexFromArgb,
   TonalPalette,
@@ -169,7 +170,12 @@ export function resolveThemeColors(
 
   const palette: RuntimeThemeColors = Object.freeze({
     ...resolved,
-    onPrimary: contrastingText(primary),
+    // Match the fill's perceptual tone, independent of page appearance. Material
+    // prefers white below rounded T60, including the unchanged brand blue.
+    // This visual preference guarantees 3:1, not the 4.5:1 used for body text.
+    onPrimary: DynamicColor.tonePrefersLightForeground(seedHct.tone)
+      ? '#ffffff'
+      : '#000000',
     onDanger: contrastingText(resolved.danger),
     onSuccess: contrastingText(resolved.success),
     onWarning: contrastingText(resolved.warning),
