@@ -49,6 +49,7 @@ describe('source-paired actual Native reading measurements', () => {
 
   async function renderHost(initialProps: HostProps) {
     const scrollTo = jest.fn();
+    const onContentMeasured = jest.fn();
     const scrollRef = { current: { scrollTo } };
     const measurements: MeasureOnSuccessCallback[] = [];
     const contentRef = {
@@ -66,6 +67,7 @@ describe('source-paired actual Native reading measurements', () => {
           ready,
           enabled,
           scrollRef,
+          onContentMeasured,
         });
         const onHostContentSizeChange = useReadingContentMeasurement({
           enabled,
@@ -82,7 +84,14 @@ describe('source-paired actual Native reading measurements', () => {
     const complete = async (index: number, height = 3800) => {
       await act(() => measurements[index](0, 0, 320, height, 0, 0));
     };
-    return { ...host, scrollTo, contentRef, measurements, complete };
+    return {
+      ...host,
+      scrollTo,
+      onContentMeasured,
+      contentRef,
+      measurements,
+      complete,
+    };
   }
 
   beforeEach(() => {
@@ -215,7 +224,9 @@ describe('source-paired actual Native reading measurements', () => {
       enabled: true,
     });
     await host.rerender({ source: sourceA, ready: true, enabled: false });
+    await act(() => host.result.current.onHostContentSizeChange(320, 9999));
     await host.complete(0, 9999);
+    expect(host.onContentMeasured).not.toHaveBeenCalled();
     await host.rerender({ source: sourceA, ready: true, enabled: true });
     await host.complete(0, 9999);
     await act(() => jest.advanceTimersByTime(200));
@@ -226,6 +237,26 @@ describe('source-paired actual Native reading measurements', () => {
       y: 1200,
       animated: false,
     });
+  });
+
+  it('reports accepted content sizes and actual measurements while rejecting a replaced source', async () => {
+    const host = await renderHost({
+      source: sourceA,
+      ready: true,
+      enabled: true,
+    });
+    const outgoingSizeHandler = host.result.current.onHostContentSizeChange;
+    await host.rerender({ source: sourceB, ready: false, enabled: true });
+    await host.complete(0, 9999);
+    await act(() => outgoingSizeHandler(320, 9999));
+    expect(host.onContentMeasured).not.toHaveBeenCalled();
+
+    await host.rerender({ source: sourceB, ready: true, enabled: true });
+    await host.complete(1, 4100);
+    expect(host.onContentMeasured).toHaveBeenLastCalledWith(320, 4100);
+    await act(() => host.result.current.onHostContentSizeChange(320, 4200));
+    expect(host.onContentMeasured).toHaveBeenLastCalledWith(320, 4200);
+    expect(host.onContentMeasured).toHaveBeenCalledTimes(2);
   });
 
   it('rejects an older pending measurement after a new same-source size event', async () => {
@@ -349,6 +380,183 @@ describe('source-paired actual Native reading measurements', () => {
     });
     expect(measure).not.toHaveBeenCalled();
     expect(scrollTo).toHaveBeenLastCalledWith({ y: 1200, animated: false });
+  });
+
+  it('reports restored and top offsets without requiring a native scroll event', async () => {
+    const scrollTo = jest.fn();
+    const onProgrammaticScroll = jest.fn();
+    const scrollRef = { current: { scrollTo } };
+    const host = await renderHook(() =>
+      useReadingProgress({
+        contentKey,
+        scrollRef,
+        onProgrammaticScroll,
+      }),
+    );
+    await act(() => {
+      host.result.current.onLayout(viewport);
+      host.result.current.onContentSizeChange(320, 3800);
+      jest.advanceTimersByTime(180);
+    });
+    expect(onProgrammaticScroll).toHaveBeenLastCalledWith(1200);
+    expect(onProgrammaticScroll.mock.invocationCallOrder[0]).toBeGreaterThan(
+      scrollTo.mock.invocationCallOrder[0],
+    );
+
+    await act(() => host.result.current.scrollToTop());
+    expect(scrollTo).toHaveBeenLastCalledWith({ y: 0, animated: true });
+    expect(onProgrammaticScroll).toHaveBeenLastCalledWith(0);
+    expect(onProgrammaticScroll.mock.invocationCallOrder[1]).toBeGreaterThan(
+      scrollTo.mock.invocationCallOrder[1],
+    );
+    expect(host.result.current.restoredOffset).toBeNull();
+    expect(useProgressStore.getState().progress[contentKey]).toBeUndefined();
+  });
+
+  it('records fallback reflow while disabled and restores using that size without a new focus size event', async () => {
+    const scrollTo = jest.fn();
+    const onContentMeasured = jest.fn();
+    const onProgrammaticScroll = jest.fn();
+    const scrollRef = { current: { scrollTo } };
+    const host = await renderHook(
+      ({ enabled }: { enabled: boolean }) =>
+        useReadingProgress({
+          contentKey,
+          enabled,
+          scrollRef,
+          onContentMeasured,
+          onProgrammaticScroll,
+        }),
+      { initialProps: { enabled: false } },
+    );
+    await act(() => {
+      host.result.current.onLayout(viewport);
+      host.result.current.onContentSizeChange(320, 3800);
+      host.result.current.onContentSizeChange(320, 4800);
+      jest.advanceTimersByTime(200);
+    });
+    expect(onContentMeasured).toHaveBeenLastCalledWith(320, 4800);
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(onProgrammaticScroll).not.toHaveBeenCalled();
+    expect(useProgressStore.getState().progress[contentKey]).toEqual(
+      savedEntry,
+    );
+
+    await host.rerender({ enabled: true });
+    await act(() => jest.advanceTimersByTime(180));
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenLastCalledWith({ y: 1600, animated: false });
+    expect(onProgrammaticScroll).toHaveBeenLastCalledWith(1600);
+  });
+
+  it('keeps fallback reflow geometry after blur without restoring a mounted page twice', async () => {
+    const scrollTo = jest.fn();
+    const onContentMeasured = jest.fn();
+    const scrollRef = { current: { scrollTo } };
+    const host = await renderHook(
+      ({ enabled }: { enabled: boolean }) =>
+        useReadingProgress({
+          contentKey,
+          enabled,
+          scrollRef,
+          onContentMeasured,
+        }),
+      { initialProps: { enabled: true } },
+    );
+    await act(() => {
+      host.result.current.onLayout(viewport);
+      host.result.current.onContentSizeChange(320, 3800);
+      jest.advanceTimersByTime(180);
+    });
+    await host.rerender({ enabled: false });
+    await act(() => host.result.current.onContentSizeChange(320, 4800));
+    expect(onContentMeasured).toHaveBeenLastCalledWith(320, 4800);
+
+    await host.rerender({ enabled: true });
+    await act(() => {
+      host.result.current.onScroll(1600);
+      jest.advanceTimersByTime(1200);
+    });
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(useProgressStore.getState().progress[contentKey]).toEqual(
+      expect.objectContaining({ offset: 1600, scrollableDistance: 4000 }),
+    );
+  });
+
+  it('uses the latest offset callback without restarting a pending restore', async () => {
+    const scrollTo = jest.fn();
+    const scrollRef = { current: { scrollTo } };
+    const originalCallback = jest.fn();
+    const latestCallback = jest.fn();
+    const host = await renderHook(
+      ({ callback }: { callback: (offset: number) => void }) =>
+        useReadingProgress({
+          contentKey,
+          scrollRef,
+          onProgrammaticScroll: callback,
+        }),
+      { initialProps: { callback: originalCallback } },
+    );
+    await act(() => {
+      host.result.current.onLayout(viewport);
+      host.result.current.onContentSizeChange(320, 3800);
+      jest.advanceTimersByTime(100);
+    });
+    await host.rerender({ callback: latestCallback });
+    await act(() => jest.advanceTimersByTime(80));
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(originalCallback).not.toHaveBeenCalled();
+    expect(latestCallback).toHaveBeenCalledWith(1200);
+  });
+
+  it('does not report a restore or top action from an old identity or disabled page', async () => {
+    const nextKey = 'answer:disabled-offset-report';
+    const nextEntry = { ...savedEntry, offset: 1800, fraction: 0.6 };
+    useProgressStore.setState({
+      progress: { [contentKey]: savedEntry, [nextKey]: nextEntry },
+    });
+    const scrollTo = jest.fn();
+    const scrollRef = { current: { scrollTo } };
+    const onProgrammaticScroll = jest.fn();
+    const host = await renderHook(
+      ({ key, enabled }: { key: string; enabled: boolean }) =>
+        useReadingProgress({
+          contentKey: key,
+          enabled,
+          scrollRef,
+          onProgrammaticScroll,
+        }),
+      { initialProps: { key: contentKey, enabled: true } },
+    );
+    await act(() => {
+      host.result.current.onLayout(viewport);
+      host.result.current.onContentSizeChange(320, 3800);
+      jest.advanceTimersByTime(100);
+    });
+    const outgoingTop = host.result.current.scrollToTop;
+    await host.rerender({ key: nextKey, enabled: true });
+    await act(() => {
+      outgoingTop();
+      jest.advanceTimersByTime(200);
+    });
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(onProgrammaticScroll).not.toHaveBeenCalled();
+    expect(useProgressStore.getState().progress[contentKey]).toEqual(
+      savedEntry,
+    );
+
+    await act(() => {
+      host.result.current.onContentSizeChange(320, 3800);
+      jest.advanceTimersByTime(100);
+    });
+    await host.rerender({ key: nextKey, enabled: false });
+    await act(() => {
+      host.result.current.scrollToTop();
+      jest.advanceTimersByTime(200);
+    });
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(onProgrammaticScroll).not.toHaveBeenCalled();
+    expect(useProgressStore.getState().progress[nextKey]).toEqual(nextEntry);
   });
 
   it('saves the outgoing content before restoring another identity in the same hook', async () => {

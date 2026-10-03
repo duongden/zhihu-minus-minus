@@ -41,6 +41,7 @@ import Reanimated, {
   SharedTransition,
   type SharedValue,
   useAnimatedStyle,
+  useDerivedValue,
   useSharedValue,
   withDelay,
   withSequence,
@@ -63,6 +64,10 @@ import {
   type ZhihuQuestionDetail,
 } from '@/api/zhihu/question';
 import { BouncyButton } from '@/components/BouncyButton';
+import {
+  DetailNavigationHeader,
+  useDetailNavigationHeight,
+} from '@/components/DetailNavigationHeader';
 import { FollowButton } from '@/components/FollowButton';
 import { LikeButton } from '@/components/LikeButton';
 import { QueryErrorView } from '@/components/QueryErrorView';
@@ -86,6 +91,7 @@ import { useCollectionStore } from '@/store/useCollectionStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import type { ZhihuAuthor } from '@/types/zhihu';
 import { formatDate } from '@/utils/date';
+import { calculateDetailHeaderAppearance } from '@/utils/detailHeaderAppearance';
 import { refreshInfiniteQuery } from '@/utils/query';
 import { getZhihuErrorMessage } from '@/utils/zhihuError';
 
@@ -713,11 +719,19 @@ export default function QuestionDetail() {
   const isAuthenticated = useAuthStore((state) =>
     hasAuthenticationCookie(state.cookies),
   );
-  const backgroundColor = Colors[colorScheme].background;
-  const textColor = Colors[colorScheme].text;
+  const textColor = useThemeColor({}, 'text');
+  const secondaryTextColor = useThemeColor({}, 'textSecondary');
+  const navigationHeight = insets.top + useDetailNavigationHeight();
+  const fontSizeScale = useSettingsStore((state) => state.fontSizeScale);
   const queryClient = useQueryClient();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const screenTranslateX = useSharedValue(0);
+  const scrollY = useSharedValue(0);
+  const titleCollapseOffset = useSharedValue(100);
+  const headerProgress = useDerivedValue(() =>
+    calculateDetailHeaderAppearance(scrollY.value, titleCollapseOffset.value),
+  );
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
   const { scrollGestureRef, renderScrollComponent } = useGestureScrollView();
   const [swipedAuthor, setSwipedAuthor] = useState<ZhihuAuthor | null>(null);
 
@@ -863,13 +877,13 @@ export default function QuestionDetail() {
             flashListRef.current?.scrollToIndex({
               index: index,
               animated: true,
-              viewOffset: insets.top + 50, // Match header height exactly
+              viewOffset: navigationHeight,
             });
           }
         }, 100);
       }
     },
-    [answers, insets.top, enableBrowseHistory],
+    [answers, navigationHeight, enableBrowseHistory],
   );
 
   const getShareLink = (answer: AnswerDetail) => {
@@ -881,6 +895,8 @@ export default function QuestionDetail() {
 
   const handleScrollEffects = useCallback(
     (currentY: number) => {
+      setHeaderCollapsed(currentY >= titleCollapseOffset.value);
+
       // if (!qLoading && isRestored && currentY > 0) {
       //   saveProgress(id as string, currentY);
       // }
@@ -901,7 +917,7 @@ export default function QuestionDetail() {
                 ref.measureFooter(
                   (_x: number, y: number, _w: number, _h: number) => {
                     const isVisible =
-                      y > insets.top + 40 && y < screenHeight - 40;
+                      y > navigationHeight && y < screenHeight - 40;
                     resolve(isVisible);
                   },
                 );
@@ -932,30 +948,19 @@ export default function QuestionDetail() {
       activeItem,
       expandedIds,
       footerAnim,
-      insets.top,
+      navigationHeight,
+      titleCollapseOffset,
       screenHeight,
       viewableIdsRef,
     ],
   );
 
-  const { headerVisible, handleScroll } = useScrollHeaderAnim(
+  const { handleScroll } = useScrollHeaderAnim(
     400,
     handleScrollEffects,
     100,
+    scrollY,
   );
-
-  const headerAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: headerVisible.value,
-    transform: [
-      {
-        translateY: interpolate(
-          headerVisible.value,
-          [0, 1],
-          [-insets.top - 120, 0],
-        ),
-      },
-    ],
-  }));
 
   const footerAnimatedStyle = useAnimatedStyle(() => ({
     opacity: footerAnim.value,
@@ -967,7 +972,10 @@ export default function QuestionDetail() {
   }));
 
   const primaryColor = useThemeColor({}, 'primary');
-  const primaryTransparent = useThemeColor({}, 'primaryTransparent');
+  const linkColor = useThemeColor({}, 'link');
+  const onPrimaryColor = useThemeColor({}, 'onPrimary');
+  const topicBackground = useThemeColor({}, 'backgroundTertiary');
+  const dividerColor = useThemeColor({}, 'divider');
   const toolbarBackground = useThemeColor({}, 'backgroundSecondary');
 
   const {
@@ -1034,186 +1042,261 @@ export default function QuestionDetail() {
 
   const renderHeader = useMemo(
     () => (
-      <View
-        type="surface"
-        className="p-5 mb-4 rounded-b-[24px]"
-        style={{ paddingTop: insets.top + 50 }}
-      >
-        <Reanimated.View
-          sharedTransitionTag={`title-${id}`}
-          sharedTransitionStyle={slowTransition}
-          className="bg-transparent"
+      <View>
+        <View
+          type="surface"
+          className="px-5 pb-5"
+          style={{ paddingTop: navigationHeight + 14 }}
         >
-          <Text className="text-[21px] font-bold leading-7">
-            {question?.title || initialTitle || '加载中...'}
-          </Text>
-        </Reanimated.View>
-        {qLoading && !question ? (
-          <View className="h-[100px] justify-center bg-transparent">
-            <ActivityIndicator size="small" color={primaryColor} />
-          </View>
-        ) : questionError && !question ? (
-          <QueryErrorView
-            compact
-            message="问题详情加载失败"
-            onRetry={() => void refetchQuestion()}
-          />
-        ) : (
-          <>
-            {question?.topics && (
-              <View className="flex-row flex-wrap mb-2.5 mt-2 bg-transparent">
-                {question.topics.map((topic) => (
-                  <BouncyButton
-                    key={topic.id}
-                    onPress={() => router.push(`/topic/${topic.id}`)}
-                    className="px-2.5 py-1 rounded-[15px] mr-2 mb-1"
-                    style={{ backgroundColor: primaryTransparent }}
-                  >
-                    <Text className="text-xs" style={{ color: primaryColor }}>
-                      {topic.name}
-                    </Text>
-                  </BouncyButton>
-                ))}
-              </View>
-            )}
-            {question?.detail ? (
-              <View className="mt-2.5 bg-transparent">
-                {detailExpanded ? (
-                  <View className="bg-transparent">
-                    <ZhihuContent
-                      content={question.detail}
-                      objectId={id as string}
-                      type="question"
-                    />
+          <Reanimated.View
+            sharedTransitionTag={`title-${id}`}
+            sharedTransitionStyle={slowTransition}
+            onLayout={({ nativeEvent }) => {
+              const { y, height } = nativeEvent.layout;
+              titleCollapseOffset.value = Math.max(
+                1,
+                y + height - navigationHeight,
+              );
+              setHeaderCollapsed(scrollY.value >= titleCollapseOffset.value);
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 22,
+                lineHeight: 30 * fontSizeScale,
+                fontWeight: '700',
+              }}
+            >
+              {question?.title || initialTitle || '加载中...'}
+            </Text>
+          </Reanimated.View>
+          {qLoading && !question ? (
+            <View className="h-[100px] justify-center">
+              <ActivityIndicator size="small" color={primaryColor} />
+            </View>
+          ) : questionError && !question ? (
+            <QueryErrorView
+              compact
+              message="问题详情加载失败"
+              onRetry={() => void refetchQuestion()}
+            />
+          ) : (
+            <>
+              {question?.topics?.length ? (
+                <View className="flex-row flex-wrap mt-3 gap-1.5">
+                  {question.topics.map((topic) => (
                     <BouncyButton
-                      onPress={() => setDetailExpanded(false)}
-                      className="flex-row items-center justify-center py-1 mt-1"
+                      key={topic.id}
+                      accessibilityRole="button"
+                      onPress={() => router.push(`/topic/${topic.id}`)}
+                      style={{
+                        backgroundColor: topicBackground,
+                        paddingHorizontal: 9,
+                        paddingVertical: 4,
+                        borderRadius: 6,
+                      }}
                     >
                       <Text
-                        style={{ color: primaryColor }}
-                        className="text-[13px] font-bold mr-1"
+                        type="secondary"
+                        style={{ fontSize: 12, lineHeight: 18 }}
                       >
-                        收起
+                        {topic.name}
                       </Text>
-                      <Ionicons
-                        name="chevron-up"
-                        size={14}
-                        color={primaryColor}
-                      />
                     </BouncyButton>
-                  </View>
-                ) : (
-                  <BouncyButton onPress={() => setDetailExpanded(true)}>
-                    <Text type="secondary" className="text-sm leading-5">
-                      {question.excerpt?.replace(/<[^>]+>/g, '') || ''}
-                    </Text>
-                    <Text
-                      style={{ color: primaryColor }}
-                      className="text-[13px] font-bold mt-1"
+                  ))}
+                </View>
+              ) : null}
+              {question?.detail ? (
+                <View className="mt-3">
+                  {detailExpanded ? (
+                    <>
+                      <ZhihuContent
+                        content={question.detail}
+                        objectId={id as string}
+                        type="question"
+                      />
+                      <BouncyButton
+                        accessibilityRole="button"
+                        accessibilityLabel="收起问题描述"
+                        onPress={() => setDetailExpanded(false)}
+                        className="flex-row items-center self-start py-1 mt-1 gap-1"
+                      >
+                        <Text
+                          style={{
+                            color: linkColor,
+                            fontSize: 13,
+                            lineHeight: 20,
+                          }}
+                        >
+                          收起问题描述
+                        </Text>
+                        <Ionicons
+                          name="chevron-up"
+                          size={13}
+                          color={linkColor}
+                        />
+                      </BouncyButton>
+                    </>
+                  ) : (
+                    <BouncyButton
+                      accessibilityRole="button"
+                      accessibilityLabel="展开问题描述"
+                      onPress={() => setDetailExpanded(true)}
                     >
-                      展开全文
-                    </Text>
-                  </BouncyButton>
-                )}
-              </View>
-            ) : question?.excerpt ? (
-              <Text type="secondary" className="mt-2.5 text-sm leading-5">
-                {question.excerpt.replace(/<[^>]+>/g, '')}
-              </Text>
-            ) : null}
-            <View className="mt-3 bg-transparent">
-              <Text type="secondary" className="text-[13px]">
+                      <Text
+                        type="secondary"
+                        numberOfLines={3}
+                        style={{ fontSize: 14, lineHeight: 22 }}
+                      >
+                        {question.excerpt?.replace(/<[^>]+>/g, '') || ''}
+                      </Text>
+                      <View className="flex-row items-center mt-1 gap-1">
+                        <Text
+                          style={{
+                            color: linkColor,
+                            fontSize: 13,
+                            lineHeight: 20,
+                          }}
+                        >
+                          展开问题描述
+                        </Text>
+                        <Ionicons
+                          name="chevron-down"
+                          size={13}
+                          color={linkColor}
+                        />
+                      </View>
+                    </BouncyButton>
+                  )}
+                </View>
+              ) : question?.excerpt ? (
+                <Text
+                  type="secondary"
+                  className="mt-3"
+                  numberOfLines={3}
+                  style={{ fontSize: 14, lineHeight: 22 }}
+                >
+                  {question.excerpt.replace(/<[^>]+>/g, '')}
+                </Text>
+              ) : null}
+              <Text
+                type="tertiary"
+                className="mt-4"
+                style={{ fontSize: 12, lineHeight: 18 }}
+              >
                 {question?.follower_count || 0} 关注 ·{' '}
                 {question?.visit_count || 0} 浏览
               </Text>
-            </View>
-            <View className="flex-row mt-[15px] gap-2.5 bg-transparent">
-              <FollowButton
-                following={Boolean(question?.relationship?.is_following)}
-                loading={followMutation.isPending}
-                label="关注问题"
-                onPress={() => followMutation.mutate()}
-                style={{ flex: 1 }}
-              />
-              <BouncyButton
-                className="flex-1 flex-row items-center justify-center py-2 rounded-md"
-                style={{ backgroundColor: primaryTransparent }}
-                onPress={() =>
-                  router.push({
-                    pathname: '/comments/[id]',
-                    params: {
-                      id,
-                      type: 'question',
-                      count: question?.comment_count || 0,
-                    },
-                  })
-                }
-              >
-                <Text
-                  className="text-sm font-medium"
-                  style={{ color: primaryColor }}
-                >
-                  {question?.comment_count || 0} 条评论
-                </Text>
-              </BouncyButton>
-              <BouncyButton
-                className="flex-1 flex-row items-center justify-center py-2 rounded-md"
-                style={{ backgroundColor: primaryTransparent }}
-                onPress={() => router.push(`/question/write/${id}`)}
-              >
-                <Text
-                  className="text-sm font-medium"
-                  style={{ color: primaryColor }}
-                >
-                  写回答
-                </Text>
-              </BouncyButton>
-            </View>
-            <View className="mt-[15px] pt-3 flex-row justify-between items-center bg-transparent">
-              <Text className="font-medium text-[15px]">
-                {question?.answer_count || 0} 个回答
-              </Text>
-              <View className="flex-row items-center bg-transparent">
+              <View className="flex-row flex-wrap items-center mt-3.5 gap-2">
+                <FollowButton
+                  following={Boolean(question?.relationship?.is_following)}
+                  loading={followMutation.isPending}
+                  accessibilityLabel={
+                    question?.relationship?.is_following
+                      ? '取消关注问题'
+                      : '关注问题'
+                  }
+                  onPress={() => followMutation.mutate()}
+                />
                 <BouncyButton
-                  onPress={() => setSortBy('default')}
-                  className="ml-[15px] px-1 py-0.5"
-                  style={[
-                    sortBy === 'default' && {
-                      borderBottomWidth: 2,
-                      borderBottomColor: primaryColor,
-                    },
-                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${question?.comment_count || 0} 条问题评论`}
+                  className="flex-row items-center justify-center gap-1.5"
+                  style={{ minHeight: 34, paddingHorizontal: 6 }}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/comments/[id]',
+                      params: {
+                        id,
+                        type: 'question',
+                        count: question?.comment_count || 0,
+                      },
+                    })
+                  }
                 >
+                  <Ionicons
+                    name="chatbubble-outline"
+                    size={16}
+                    color={secondaryTextColor}
+                  />
                   <Text
-                    type={sortBy === 'default' ? 'primary' : 'secondary'}
-                    className="text-[13px]"
-                    style={[sortBy === 'default' && { fontWeight: 'bold' }]}
+                    type="secondary"
+                    style={{ fontSize: 13, lineHeight: 20 }}
                   >
-                    默认
+                    {question?.comment_count || 0} 评论
                   </Text>
                 </BouncyButton>
+                <View className="flex-1" />
                 <BouncyButton
-                  onPress={() => setSortBy('created')}
-                  className="ml-[15px] px-1 py-0.5"
-                  style={[
-                    sortBy === 'created' && {
-                      borderBottomWidth: 2,
-                      borderBottomColor: primaryColor,
-                    },
-                  ]}
+                  accessibilityRole="button"
+                  onPress={() => router.push(`/question/write/${id}`)}
+                  style={{
+                    minHeight: 34,
+                    paddingHorizontal: 15,
+                    paddingVertical: 6,
+                    borderRadius: 20,
+                    backgroundColor: primaryColor,
+                  }}
                 >
                   <Text
-                    type={sortBy === 'created' ? 'primary' : 'secondary'}
-                    className="text-[13px]"
-                    style={[sortBy === 'created' && { fontWeight: 'bold' }]}
+                    style={{
+                      fontSize: 14,
+                      lineHeight: 21,
+                      fontWeight: '600',
+                      color: onPrimaryColor,
+                    }}
                   >
-                    时间
+                    写回答
                   </Text>
                 </BouncyButton>
               </View>
-            </View>
-          </>
-        )}
+            </>
+          )}
+        </View>
+        <View
+          className="mx-5 flex-row justify-between items-center py-3.5 mb-1"
+          style={{ borderTopWidth: 0.5, borderTopColor: dividerColor }}
+        >
+          <Text style={{ fontSize: 15, lineHeight: 22, fontWeight: '600' }}>
+            {question?.answer_count || 0} 个回答
+          </Text>
+          <View className="flex-row items-center gap-4">
+            <BouncyButton
+              accessibilityRole="button"
+              accessibilityState={{ selected: sortBy === 'default' }}
+              onPress={() => setSortBy('default')}
+              className="py-1"
+            >
+              <Text
+                type={sortBy === 'default' ? 'default' : 'secondary'}
+                style={{
+                  fontSize: 13,
+                  lineHeight: 20,
+                  fontWeight: sortBy === 'default' ? '600' : '400',
+                }}
+              >
+                默认
+              </Text>
+            </BouncyButton>
+            <BouncyButton
+              accessibilityRole="button"
+              accessibilityState={{ selected: sortBy === 'created' }}
+              onPress={() => setSortBy('created')}
+              className="py-1"
+            >
+              <Text
+                type={sortBy === 'created' ? 'default' : 'secondary'}
+                style={{
+                  fontSize: 13,
+                  lineHeight: 20,
+                  fontWeight: sortBy === 'created' ? '600' : '400',
+                }}
+              >
+                时间
+              </Text>
+            </BouncyButton>
+          </View>
+        </View>
       </View>
     ),
     [
@@ -1221,13 +1304,20 @@ export default function QuestionDetail() {
       question,
       id,
       initialTitle,
-      insets.top,
+      navigationHeight,
+      fontSizeScale,
+      scrollY,
+      titleCollapseOffset,
       sortBy,
       followMutation.mutate,
       followMutation.isPending,
       detailExpanded,
       primaryColor,
-      primaryTransparent,
+      linkColor,
+      onPrimaryColor,
+      secondaryTextColor,
+      topicBackground,
+      dividerColor,
       questionError,
       refetchQuestion,
       router.push,
@@ -1259,44 +1349,15 @@ export default function QuestionDetail() {
       />
 
       <Reanimated.View style={[{ flex: 1 }, animatedScreenStyle]}>
-        {/* 顶部标题栏 */}
-        <Reanimated.View
-          className="absolute left-0 right-0 z-10"
-          style={[
-            {
-              backgroundColor,
-              paddingTop: insets.top,
-            },
-            headerAnimatedStyle,
-          ]}
-        >
-          <View
-            className="flex-row items-start bg-transparent"
-            style={{
-              minHeight: 56,
-              paddingTop: 17,
-              paddingBottom: 8,
-              paddingLeft: 52,
-              paddingRight: 16,
-            }}
-          >
-            <Text
-              className="flex-1 text-[16px] font-bold text-left"
-              style={{ color: textColor, lineHeight: 22 }}
-            >
-              {question?.title || initialTitle}
-            </Text>
-          </View>
-        </Reanimated.View>
-
-        {/* 返回按钮 */}
-        <BouncyButton
-          onPress={() => router.back()}
-          className="absolute left-2.5 z-[100] w-10 h-10 justify-center items-center rounded-full"
-          style={{ top: insets.top + 8 }}
-        >
-          <Ionicons name="chevron-back" size={28} color={textColor} />
-        </BouncyButton>
+        <DetailNavigationHeader
+          title={question?.title || initialTitle || '问题'}
+          collapsed={headerCollapsed}
+          progress={headerProgress}
+          onBack={() => router.back()}
+          onTitlePress={() =>
+            flashListRef.current?.scrollToOffset({ offset: 0, animated: true })
+          }
+        />
 
         <AnimatedFlashList<AnswerDetail>
           ref={flashListRef}

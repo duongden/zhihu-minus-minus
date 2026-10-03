@@ -1,6 +1,7 @@
 import { act, render } from '@testing-library/react-native';
 import React from 'react';
 import AnswerDetailScreen from '../app/answer/[id]';
+import { calculateDetailHeaderAppearance } from '../utils/detailHeaderAppearance';
 
 interface PagerProps {
   children?: React.ReactNode;
@@ -17,6 +18,19 @@ interface PagerProps {
 interface AnswerProps {
   id: string;
   isFocused: boolean;
+  onScroll?: (offset: number) => void;
+  onHeaderLayout?: (collapseOffset: number) => void;
+  headerProgress?: { value: number };
+  activeAnswerId?: { value: string };
+  activeScrollY?: { value: number };
+  scopeVersion?: number;
+  activeScopeVersion?: { value: number };
+}
+
+interface HeaderProps {
+  collapsed: boolean;
+  author?: { name: string };
+  progress: { value: number };
 }
 
 let mockParams: {
@@ -27,8 +41,10 @@ let mockParams: {
 let mockPages: { data: { id: string }[] }[] | undefined;
 let mockPagerProps: PagerProps;
 let mockPagerMounts: number;
+let mockHeaderProps: HeaderProps;
 const mockAnswerProps = new Map<string, AnswerProps>();
 const mockAnswerMounts = new Map<string, number>();
+const mockHeaderThresholds = new Map<string, number>();
 const mockSetPage = jest.fn();
 const mockSetParams = jest.fn();
 const mockFetchNextPage = jest.fn();
@@ -48,8 +64,12 @@ const originalCancelIdleCallback = Object.getOwnPropertyDescriptor(
 );
 
 jest.mock('@tanstack/react-query', () => ({
-  useQuery: () => ({
-    data: { question: { id: mockParams.questionId, title: '问题' } },
+  useQuery: ({ queryKey }: { queryKey: readonly unknown[] }) => ({
+    data: {
+      id: String(queryKey[1]),
+      question: { id: mockParams.questionId, title: '问题' },
+      author: { name: `作者 ${queryKey[1]}` },
+    },
     isLoading: false,
   }),
   useQueryClient: () => mockQueryClient,
@@ -103,6 +123,12 @@ jest.mock('../components/AnswerDetailView', () => {
     },
   };
 });
+jest.mock('../components/DetailNavigationHeader', () => ({
+  DetailNavigationHeader: (props: HeaderProps) => {
+    mockHeaderProps = props;
+    return null;
+  },
+}));
 jest.mock('../api/client', () => ({ __esModule: true, default: {} }));
 jest.mock('../api/zhihu', () => ({ getAnswer: jest.fn() }));
 jest.mock('../api/zhihu/history', () => ({ recordReadHistory: jest.fn() }));
@@ -151,7 +177,7 @@ jest.mock('react-native-reanimated', () => {
     SharedTransition: { duration: () => ({}) },
     Extrapolate: { CLAMP: 'clamp' },
     interpolate: () => 1,
-    useSharedValue: (value: number) => react.useRef({ value }).current,
+    useSharedValue: <T>(value: T) => react.useRef({ value }).current,
     useAnimatedStyle: (style: () => object) => style(),
   };
 });
@@ -182,6 +208,67 @@ async function scrollPage(position: number, offset: number) {
   );
 }
 
+async function scrollAnswer(
+  id: string,
+  offset: number,
+  props = mockAnswerProps.get(id),
+) {
+  expect(props?.onScroll).toBeDefined();
+  expect(props?.activeScrollY).toBeDefined();
+  await act(() => {
+    if (
+      props?.activeAnswerId?.value === id &&
+      props.activeScopeVersion?.value === props.scopeVersion &&
+      props.activeScrollY
+    ) {
+      props.activeScrollY.value = offset;
+    }
+    props?.onScroll?.(offset);
+  });
+}
+
+async function reportScrollAnswer(
+  id: string,
+  offset: number,
+  props = mockAnswerProps.get(id),
+) {
+  expect(props?.onScroll).toBeDefined();
+  await act(() => props?.onScroll?.(offset));
+}
+
+async function layoutAnswer(id: string, collapseOffset: number) {
+  const props = mockAnswerProps.get(id);
+  expect(props?.onHeaderLayout).toBeDefined();
+  await act(() => props?.onHeaderLayout?.(collapseOffset));
+  mockHeaderThresholds.set(
+    JSON.stringify([props?.scopeVersion, id]),
+    collapseOffset,
+  );
+}
+
+async function nativeScrollAnswer(
+  id: string,
+  offset: number,
+  props = mockAnswerProps.get(id),
+) {
+  expect(props?.headerProgress).toBe(mockHeaderProps.progress);
+  await act(() => {
+    if (
+      props?.activeAnswerId?.value === id &&
+      props.activeScopeVersion?.value === props.scopeVersion &&
+      props.headerProgress
+    ) {
+      if (props.activeScrollY) props.activeScrollY.value = offset;
+      props.headerProgress.value = calculateDetailHeaderAppearance(
+        offset,
+        mockHeaderThresholds.get(JSON.stringify([props.scopeVersion, id])) ??
+          80,
+      );
+    }
+    props?.onScroll?.(offset);
+  });
+}
+
 function renderedAnswerIds(): string[] {
   return React.Children.toArray(mockPagerProps.children).flatMap((child) => {
     if (
@@ -199,8 +286,10 @@ beforeEach(() => {
   mockParams = { id: '42', questionId: '7', sortBy: 'default' };
   mockPages = undefined;
   mockPagerMounts = 0;
+  mockHeaderProps = { collapsed: false, progress: { value: 0 } };
   mockAnswerProps.clear();
   mockAnswerMounts.clear();
+  mockHeaderThresholds.clear();
   Object.defineProperty(globalThis, 'requestIdleCallback', {
     configurable: true,
     value: jest.fn(() => 1),
@@ -444,5 +533,266 @@ describe('answer pager list transitions', () => {
     for (const index of [-1, 1, 0.5, Number.NaN]) await selectPage(index);
     expect(mockAnswerProps.get('42')?.isFocused).toBe(true);
     expect(mockSetParams).not.toHaveBeenCalled();
+  });
+});
+
+describe('answer header state across pager navigation', () => {
+  it('restores intermediate header appearance and rejects outgoing scroll reports', async () => {
+    setList(['42', '11']);
+    await render(React.createElement(AnswerDetailScreen));
+    await layoutAnswer('42', 140);
+    const outgoingAnswer = mockAnswerProps.get('42');
+    await nativeScrollAnswer('42', 120);
+    expect(mockHeaderProps.progress.value).toBeCloseTo(28 / 48);
+
+    await selectPage(1);
+    expect(mockHeaderProps.progress.value).toBe(0);
+    await reportScrollAnswer('42', 400, outgoingAnswer);
+    expect(mockHeaderProps.progress.value).toBe(0);
+    await nativeScrollAnswer('11', 56);
+    expect(mockHeaderProps.progress.value).toBe(0.5);
+    await reportScrollAnswer('42', 0, outgoingAnswer);
+    expect(mockHeaderProps.progress.value).toBe(0.5);
+
+    await selectPage(0);
+    expect(mockHeaderProps.progress.value).toBeCloseTo(28 / 48);
+    await selectPage(1);
+    expect(mockHeaderProps.progress.value).toBe(0.5);
+  });
+
+  it('restores the latest UI offset after a delayed JS report and a round trip', async () => {
+    setList(['42', '11']);
+    await render(React.createElement(AnswerDetailScreen));
+    await layoutAnswer('42', 140);
+    await nativeScrollAnswer('42', 130);
+    expect(mockHeaderProps.progress.value).toBeCloseTo(38 / 48);
+    await reportScrollAnswer('42', 100);
+    expect(mockHeaderProps.progress.value).toBeCloseTo(38 / 48);
+    await selectPage(1);
+    expect(mockHeaderProps.progress.value).toBe(0);
+    await selectPage(0);
+    expect(mockHeaderProps.progress.value).toBeCloseTo(38 / 48);
+  });
+
+  it('keeps intermediate appearance during horizontal movement and a canceled swipe', async () => {
+    setList(['42', '11']);
+    await render(React.createElement(AnswerDetailScreen));
+    await layoutAnswer('42', 140);
+    await nativeScrollAnswer('42', 120);
+    await startDrag();
+    await scrollPage(0, 0.65);
+    await nativeScrollAnswer('11', 300);
+    expect(mockHeaderProps.progress.value).toBeCloseTo(28 / 48);
+    await scrollState('settling');
+    await scrollPage(0, 0);
+    await scrollState('idle');
+    expect(mockHeaderProps.progress.value).toBeCloseTo(28 / 48);
+  });
+
+  it('clears appearance on scope changes and rejects an old callback after returning', async () => {
+    setList(['42', '11']);
+    const page = await render(React.createElement(AnswerDetailScreen));
+    await layoutAnswer('42', 140);
+    await nativeScrollAnswer('42', 120);
+    const outgoingAnswer = mockAnswerProps.get('42');
+    const originalParams = mockParams;
+    mockParams = { ...mockParams, sortBy: 'updated' };
+    await page.rerender(React.createElement(AnswerDetailScreen));
+    expect(mockHeaderProps.progress.value).toBe(0);
+
+    mockParams = originalParams;
+    await page.rerender(React.createElement(AnswerDetailScreen));
+    expect(mockHeaderProps.progress.value).toBe(0);
+    await reportScrollAnswer('42', 500, outgoingAnswer);
+    expect(mockHeaderProps.progress.value).toBe(0);
+    await selectPage(1);
+    await selectPage(0);
+    expect(mockHeaderProps.progress.value).toBe(0);
+  });
+
+  it('rejects UI writes from a previous scope with the same answer ID after a scope round trip', async () => {
+    setList(['42', '11']);
+    const page = await render(React.createElement(AnswerDetailScreen));
+    await layoutAnswer('42', 140);
+    await nativeScrollAnswer('42', 120);
+    const originalAnswer = mockAnswerProps.get('42');
+    expect(originalAnswer?.scopeVersion).toBeDefined();
+    const originalParams = mockParams;
+    mockParams = { ...mockParams, sortBy: 'updated' };
+    await page.rerender(React.createElement(AnswerDetailScreen));
+    const middleAnswer = mockAnswerProps.get('42');
+    expect(middleAnswer?.scopeVersion).not.toBe(originalAnswer?.scopeVersion);
+    expect(middleAnswer?.activeScopeVersion?.value).toBe(
+      middleAnswer?.scopeVersion,
+    );
+    await nativeScrollAnswer('42', 500, originalAnswer);
+    expect(mockHeaderProps.progress.value).toBe(0);
+    expect(middleAnswer?.activeScrollY?.value).toBe(0);
+
+    await nativeScrollAnswer('42', 56);
+    expect(mockHeaderProps.progress.value).toBe(0.5);
+    mockParams = originalParams;
+    await page.rerender(React.createElement(AnswerDetailScreen));
+    const returnedAnswer = mockAnswerProps.get('42');
+    expect(returnedAnswer?.scopeVersion).not.toBe(originalAnswer?.scopeVersion);
+    expect(returnedAnswer?.scopeVersion).not.toBe(middleAnswer?.scopeVersion);
+    await nativeScrollAnswer('42', 130, originalAnswer);
+    await nativeScrollAnswer('42', 68, middleAnswer);
+    expect(mockHeaderProps.progress.value).toBe(0);
+    expect(returnedAnswer?.activeScrollY?.value).toBe(0);
+
+    await nativeScrollAnswer('42', 56);
+    expect(mockHeaderProps.progress.value).toBe(0.5);
+    await selectPage(1);
+    await selectPage(0);
+    expect(mockHeaderProps.progress.value).toBe(0.5);
+  });
+
+  it('restores each answer collapse state and updates its compact author together', async () => {
+    setList(['42', '11']);
+    await render(React.createElement(AnswerDetailScreen));
+    await layoutAnswer('42', 140);
+    await scrollAnswer('42', 141);
+    expect(mockHeaderProps.collapsed).toBe(true);
+    expect(mockHeaderProps.author?.name).toBe('作者 42');
+
+    await selectPage(1);
+    expect(mockHeaderProps.collapsed).toBe(false);
+    expect(mockHeaderProps.author?.name).toBe('作者 11');
+    await scrollAnswer('11', 300);
+    expect(mockHeaderProps.collapsed).toBe(true);
+    await scrollAnswer('11', 20);
+    expect(mockHeaderProps.collapsed).toBe(false);
+
+    await selectPage(0);
+    expect(mockHeaderProps.collapsed).toBe(true);
+    expect(mockHeaderProps.author?.name).toBe('作者 42');
+    await scrollAnswer('42', 120);
+    expect(mockHeaderProps.collapsed).toBe(false);
+    await selectPage(1);
+    expect(mockHeaderProps.collapsed).toBe(false);
+    await selectPage(0);
+    expect(mockHeaderProps.collapsed).toBe(false);
+  });
+
+  it('ignores offscreen scroll events for both the active header and saved answer state', async () => {
+    setList(['42', '11']);
+    await render(React.createElement(AnswerDetailScreen));
+    await scrollAnswer('42', 300);
+    await scrollAnswer('11', 400);
+    expect(mockHeaderProps.collapsed).toBe(true);
+    expect(mockHeaderProps.author?.name).toBe('作者 42');
+
+    await selectPage(1);
+    expect(mockHeaderProps.collapsed).toBe(false);
+    await scrollAnswer('42', 0);
+    expect(mockHeaderProps.collapsed).toBe(false);
+    expect(mockHeaderProps.author?.name).toBe('作者 11');
+    await selectPage(0);
+    expect(mockHeaderProps.collapsed).toBe(true);
+  });
+
+  it('rejects a delayed outgoing scroll callback without overwriting its saved state', async () => {
+    setList(['42', '11']);
+    await render(React.createElement(AnswerDetailScreen));
+    const outgoingAnswer = mockAnswerProps.get('42');
+    await scrollAnswer('42', 300);
+    await selectPage(1);
+    await reportScrollAnswer('42', 0, outgoingAnswer);
+    expect(mockHeaderProps.collapsed).toBe(false);
+    expect(mockHeaderProps.author?.name).toBe('作者 11');
+
+    await selectPage(0);
+    expect(mockHeaderProps.collapsed).toBe(true);
+  });
+
+  it('keeps the current header through horizontal movement and a canceled swipe', async () => {
+    setList(['42', '11']);
+    await render(React.createElement(AnswerDetailScreen));
+    await scrollAnswer('42', 300);
+    await startDrag();
+    await scrollPage(0, 0.65);
+    await scrollAnswer('11', 0);
+    expect(mockHeaderProps.collapsed).toBe(true);
+    expect(mockHeaderProps.author?.name).toBe('作者 42');
+
+    await scrollState('settling');
+    await scrollPage(0, 0);
+    await scrollState('idle');
+    expect(mockHeaderProps.collapsed).toBe(true);
+    expect(mockHeaderProps.author?.name).toBe('作者 42');
+    await startDrag();
+    await scrollPage(0, 0.5);
+    await selectPage(1);
+    expect(mockHeaderProps.collapsed).toBe(false);
+    expect(mockHeaderProps.author?.name).toBe('作者 11');
+  });
+
+  it('preserves collapse state by answer identity when a list refresh changes indexes', async () => {
+    setList(['42', '11', '99']);
+    const page = await render(React.createElement(AnswerDetailScreen));
+    await selectPage(2);
+    await scrollAnswer('99', 300);
+    const oldPager = mockPagerProps;
+    setList(['99', '42', '11']);
+    await page.rerender(React.createElement(AnswerDetailScreen));
+    expect(mockHeaderProps.collapsed).toBe(true);
+    expect(mockHeaderProps.author?.name).toBe('作者 99');
+
+    await selectPage(2, oldPager);
+    expect(mockHeaderProps.collapsed).toBe(true);
+    expect(mockHeaderProps.author?.name).toBe('作者 99');
+    await selectPage(0);
+    await startDrag();
+    await selectPage(1);
+    expect(mockHeaderProps.collapsed).toBe(false);
+    expect(mockHeaderProps.author?.name).toBe('作者 42');
+    await selectPage(0);
+    expect(mockHeaderProps.collapsed).toBe(true);
+    expect(mockHeaderProps.author?.name).toBe('作者 99');
+  });
+
+  it.each([
+    'questionId',
+    'sortBy',
+  ] as const)('clears header snapshots and rejects old scroll callbacks after a %s change', async (field) => {
+    setList(['42', '11']);
+    const page = await render(React.createElement(AnswerDetailScreen));
+    await scrollAnswer('42', 300);
+    const outgoingAnswer = mockAnswerProps.get('42');
+    await selectPage(1);
+    await scrollAnswer('11', 300);
+    const originalParams = mockParams;
+    mockParams = {
+      ...mockParams,
+      [field]: field === 'questionId' ? '8' : 'updated',
+    };
+    await page.rerender(React.createElement(AnswerDetailScreen));
+    expect(mockHeaderProps.collapsed).toBe(false);
+    expect(mockHeaderProps.author?.name).toBe('作者 42');
+    await reportScrollAnswer('42', 500, outgoingAnswer);
+    expect(mockHeaderProps.collapsed).toBe(false);
+
+    // Returning before any new scope scroll must not revive the prior snapshot.
+    mockParams = originalParams;
+    await page.rerender(React.createElement(AnswerDetailScreen));
+    expect(mockHeaderProps.collapsed).toBe(false);
+    expect(mockHeaderProps.author?.name).toBe('作者 42');
+    await scrollAnswer('42', 100);
+    expect(mockHeaderProps.collapsed).toBe(true);
+  });
+
+  it('does not revive the previously displayed header when returning to its old pager scope', async () => {
+    setList(['42', '11']);
+    const page = await render(React.createElement(AnswerDetailScreen));
+    await scrollAnswer('42', 300);
+    const originalParams = mockParams;
+    mockParams = { ...mockParams, sortBy: 'updated' };
+    await page.rerender(React.createElement(AnswerDetailScreen));
+    expect(mockHeaderProps.collapsed).toBe(false);
+
+    mockParams = originalParams;
+    await page.rerender(React.createElement(AnswerDetailScreen));
+    expect(mockHeaderProps.collapsed).toBe(false);
   });
 });

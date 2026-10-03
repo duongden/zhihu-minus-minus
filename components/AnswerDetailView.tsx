@@ -12,22 +12,25 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import Reanimated, {
-  interpolate,
+  runOnJS,
   SharedTransition,
   type SharedValue,
-  useAnimatedStyle,
+  useAnimatedScrollHandler,
+  useSharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { type AnswerDetail, deleteAnswer, getAnswer } from '@/api/zhihu';
 import { getAllContentCollectionStatus } from '@/api/zhihu/collection';
 import { followMember, unfollowMember } from '@/api/zhihu/member';
 import { BouncyButton } from '@/components/BouncyButton';
+import { useDetailNavigationHeight } from '@/components/DetailNavigationHeader';
 import { DownvoteButton } from '@/components/DownvoteButton';
 import { FollowButton } from '@/components/FollowButton';
 import { LikeButton } from '@/components/LikeButton';
 import { ActionSheet } from '@/components/overlays/ActionSheet';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { ReadingProgressNotice } from '@/components/ReadingProgressNotice';
+import { ReadingScrollIndicator } from '@/components/ReadingScrollIndicator';
 import { ShareMenu } from '@/components/ShareMenu';
 import { StableAvatar } from '@/components/StableAvatar';
 import { Text, ThemedIcon, useThemeColor, View } from '@/components/Themed';
@@ -43,39 +46,77 @@ import { useCollectionAction } from '@/hooks/useCollectionAction';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
 import { useReadingContentMeasurement } from '@/hooks/useReadingContentMeasurement';
 import { useReadingProgress } from '@/hooks/useReadingProgress';
-import { useScrollHeaderAnim } from '@/hooks/useScrollAnimation';
 import { useCollectionStore } from '@/store/useCollectionStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { formatDate } from '@/utils/date';
+import { calculateDetailHeaderAppearance } from '@/utils/detailHeaderAppearance';
 import { getZhihuErrorMessage, getZhihuErrorStatus } from '@/utils/zhihuError';
 
-const _slowTransition = SharedTransition.duration(600);
+const slowTransition = SharedTransition.duration(600);
 
 interface AnswerDetailViewProps {
   id: string;
   initialTitle?: string;
   questionId?: string;
   onScroll?: (y: number) => void;
-  scrollY?: SharedValue<number>;
+  onHeaderLayout?: (collapseOffset: number) => void;
+  headerProgress?: SharedValue<number>;
+  activeAnswerId?: SharedValue<string>;
+  activeScrollY?: SharedValue<number>;
+  activeScopeVersion?: SharedValue<number>;
+  scopeVersion?: number;
   isFocused?: boolean;
 }
 
 export const AnswerDetailView = ({
   id,
+  initialTitle,
   questionId,
   onScroll,
-  scrollY,
+  onHeaderLayout,
+  headerProgress,
+  activeAnswerId,
+  activeScrollY,
+  activeScopeVersion,
+  scopeVersion,
   isFocused = false,
 }: AnswerDetailViewProps) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
   const colorScheme = useColorScheme();
-  const backgroundColor = Colors[colorScheme].background;
-  const _textColor = Colors[colorScheme].text;
+  const navigationHeight = insets.top + useDetailNavigationHeight();
 
   const scrollViewRef = useRef<NativeScrollView>(null);
   const contentViewRef = useRef<NativeView>(null);
+  const focusScope = React.useMemo(
+    () => ({ id, isFocused, scopeVersion }),
+    [id, isFocused, scopeVersion],
+  );
+  const focusedRef = useRef(focusScope);
+  focusedRef.current = focusScope;
+  React.useLayoutEffect(() => {
+    focusedRef.current = focusScope;
+    return () => {
+      if (focusedRef.current === focusScope)
+        focusedRef.current = { ...focusScope, isFocused: false };
+    };
+  }, [focusScope]);
+  const isCurrentFocus = React.useCallback(
+    () =>
+      focusScope.isFocused &&
+      focusedRef.current === focusScope &&
+      activeScopeVersion?.value === scopeVersion &&
+      (!activeAnswerId || activeAnswerId.value === id),
+    [focusScope, activeScopeVersion, scopeVersion, activeAnswerId, id],
+  );
+  const scrollCallbackRef = useRef(onScroll);
+  scrollCallbackRef.current = onScroll;
+  const scrollY = useSharedValue(0);
+  const collapseOffset = useSharedValue(80);
+  const contentHeight = useSharedValue(0);
+  const viewportHeight = useSharedValue(0);
+  const lastCallbackTime = useSharedValue(0);
 
   const [menuVisible, setMenuVisible] = React.useState(false);
   const [isSharing, setIsSharing] = React.useState(false);
@@ -141,12 +182,60 @@ export const AnswerDetailView = ({
     Boolean(answer) &&
     (!waitForNativeLayout || readyLayoutSource === contentLayoutSource);
 
+  const updateHeaderProgress = React.useCallback(
+    (offset: number) => {
+      if (
+        !headerProgress ||
+        activeAnswerId?.value !== id ||
+        activeScopeVersion?.value !== scopeVersion
+      )
+        return;
+      if (activeScrollY) activeScrollY.value = offset;
+      headerProgress.value = calculateDetailHeaderAppearance(
+        offset,
+        collapseOffset.value,
+      );
+    },
+    [
+      headerProgress,
+      activeAnswerId,
+      activeScrollY,
+      activeScopeVersion,
+      scopeVersion,
+      id,
+      collapseOffset,
+    ],
+  );
+  React.useLayoutEffect(() => {
+    if (!isCurrentFocus()) return;
+    // An offscreen page can be clamped by native layout after content reflows.
+    const offset = scrollY.value;
+    updateHeaderProgress(offset);
+    scrollCallbackRef.current?.(offset);
+  }, [isCurrentFocus, scrollY, updateHeaderProgress]);
+  const handleProgrammaticScroll = React.useCallback(
+    (offset: number) => {
+      if (!focusedRef.current.isFocused) return;
+      scrollY.value = offset;
+      updateHeaderProgress(offset);
+      scrollCallbackRef.current?.(offset);
+    },
+    [scrollY, updateHeaderProgress],
+  );
+  const handleContentMeasured = React.useCallback(
+    (_width: number, height: number) => {
+      if (Number.isFinite(height) && height > 0) contentHeight.value = height;
+    },
+    [contentHeight],
+  );
   const readingProgress = useReadingProgress({
     contentKey: `answer:${id}`,
     enabled: isFocused,
     ready: contentLayoutReady,
     layoutSource: waitForNativeLayout ? contentLayoutSource : undefined,
     scrollRef: scrollViewRef,
+    onProgrammaticScroll: handleProgrammaticScroll,
+    onContentMeasured: handleContentMeasured,
   });
   const handleContentSizeChange = useReadingContentMeasurement({
     enabled: waitForNativeLayout && isFocused,
@@ -155,32 +244,48 @@ export const AnswerDetailView = ({
     beginMeasurement: readingProgress.beginContentMeasurement,
     onContentSizeChange: readingProgress.onContentSizeChange,
   });
-  const handleTrackedScroll = React.useCallback(
-    (offset: number) => {
-      onScroll?.(offset);
-      readingProgress.onScroll(offset);
-    },
-    [onScroll, readingProgress.onScroll],
-  );
-  const { headerVisible, handleScroll } = useScrollHeaderAnim(
-    300,
-    handleTrackedScroll,
-    100,
-    scrollY,
-  );
-
-  const headerAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: headerVisible.value,
-    transform: [
-      {
-        translateY: interpolate(
-          headerVisible.value,
-          [0, 1],
-          [-insets.top - 50, 0],
-        ),
+  const handleTrackedScroll = React.useCallback(() => {
+    if (!isCurrentFocus()) return;
+    const offset = scrollY.value;
+    scrollCallbackRef.current?.(offset);
+    readingProgress.onScroll(offset);
+  }, [isCurrentFocus, readingProgress.onScroll, scrollY]);
+  const handleScroll = useAnimatedScrollHandler(
+    {
+      onScroll: (event) => {
+        if (activeScopeVersion?.value !== scopeVersion) return;
+        const offset = event.contentOffset.y;
+        scrollY.value = offset;
+        if (!isFocused || (activeAnswerId && activeAnswerId.value !== id))
+          return;
+        if (headerProgress && activeAnswerId?.value === id) {
+          if (activeScrollY) activeScrollY.value = offset;
+          headerProgress.value = calculateDetailHeaderAppearance(
+            offset,
+            collapseOffset.value,
+          );
+        }
+        const now = Date.now();
+        if (now - lastCallbackTime.value >= 80) {
+          lastCallbackTime.value = now;
+          runOnJS(handleTrackedScroll)();
+        }
       },
+    },
+    [
+      isFocused,
+      handleTrackedScroll,
+      headerProgress,
+      activeAnswerId,
+      activeScrollY,
+      activeScopeVersion,
+      scopeVersion,
+      id,
+      scrollY,
+      collapseOffset,
+      lastCallbackTime,
     ],
-  }));
+  );
 
   const followMutation = useOptimisticToggle<AnswerDetail>({
     queryKey: ['answer-detail', id],
@@ -303,60 +408,6 @@ export const AnswerDetailView = ({
 
   return (
     <View className="flex-1">
-      {/* Header (On Scroll) */}
-      <Reanimated.View
-        className="absolute left-0 right-0 z-10"
-        style={[
-          {
-            backgroundColor,
-            paddingTop: insets.top,
-          },
-          headerAnimatedStyle,
-        ]}
-      >
-        <View
-          className="flex-row items-start px-[15px] justify-between bg-transparent"
-          style={{ marginTop: 8, paddingBottom: 8 }}
-        >
-          <View className="w-10 bg-transparent" />
-          <View className="flex-1 flex-col items-center bg-transparent">
-            {/* 问题标题 */}
-            <BouncyButton
-              onPress={() =>
-                router.push(`/question/${answer?.question?.id || questionId}`)
-              }
-              style={{ maxWidth: '90%', paddingTop: 6 }}
-              className="bg-transparent"
-            >
-              <Text
-                className="text-[17px] font-bold text-center"
-                numberOfLines={1}
-              >
-                {answer?.question?.title || '加载中...'}
-              </Text>
-            </BouncyButton>
-
-            {/* 用户头像 + 名字 */}
-            <BouncyButton
-              onPress={goToProfile}
-              className="flex-row items-center justify-center mt-1 bg-transparent"
-            >
-              <StableAvatar
-                uri={authorAvatarUrl}
-                className="w-4 h-4 rounded-full mr-1"
-              />
-              <Text
-                className="text-[11px] font-medium opacity-60"
-                numberOfLines={1}
-              >
-                {answer?.author?.name || '知乎用户'}
-              </Text>
-            </BouncyButton>
-          </View>
-          <View className="w-10 bg-transparent" />
-        </View>
-      </Reanimated.View>
-
       <Reanimated.ScrollView
         ref={scrollViewRef}
         innerViewRef={
@@ -368,45 +419,117 @@ export const AnswerDetailView = ({
           backgroundColor: Colors[colorScheme].backgroundSecondary,
         }}
         scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
         onScroll={handleScroll}
-        onLayout={readingProgress.onLayout}
+        onLayout={(event) => {
+          viewportHeight.value = event.nativeEvent.layout.height;
+          readingProgress.onLayout(event);
+        }}
         onContentSizeChange={handleContentSizeChange}
-        onScrollEndDrag={readingProgress.commitProgress}
-        onMomentumScrollEnd={readingProgress.commitProgress}
+        onScrollEndDrag={(event) => {
+          if (!isCurrentFocus()) return;
+          scrollY.value = event.nativeEvent.contentOffset.y;
+          updateHeaderProgress(event.nativeEvent.contentOffset.y);
+          handleTrackedScroll();
+          readingProgress.commitProgress();
+        }}
+        onMomentumScrollEnd={(event) => {
+          if (!isCurrentFocus()) return;
+          scrollY.value = event.nativeEvent.contentOffset.y;
+          updateHeaderProgress(event.nativeEvent.contentOffset.y);
+          handleTrackedScroll();
+          readingProgress.commitProgress();
+        }}
         contentContainerStyle={{
-          paddingTop: insets.top + 76,
+          paddingTop: navigationHeight + 14,
           paddingBottom: 100 + insets.bottom,
         }}
       >
-        <View className="flex-row items-center px-5 pt-5 pb-4 justify-between bg-transparent">
+        <View
+          className="px-5 bg-transparent"
+          onLayout={({ nativeEvent: { layout } }) => {
+            const offset = Math.max(
+              1,
+              layout.y + layout.height - navigationHeight,
+            );
+            collapseOffset.value = offset;
+            onHeaderLayout?.(offset);
+            if (focusedRef.current.isFocused)
+              updateHeaderProgress(scrollY.value);
+          }}
+        >
           <BouncyButton
-            onPress={goToProfile}
-            className="flex-row items-center flex-1 bg-transparent"
+            accessibilityRole="button"
+            accessibilityLabel="查看问题"
+            onPress={() => {
+              const target = answer?.question?.id || questionId;
+              if (target) router.push(`/question/${target}`);
+            }}
+            className="bg-transparent"
           >
-            <StableAvatar
-              uri={authorAvatarUrl}
-              className="w-11 h-11 rounded-full"
-            />
-            <View className="ml-3 flex-1 bg-transparent">
-              <Text className="text-[16px] font-bold" numberOfLines={1}>
-                {answer?.author?.name}
+            <View className="flex-row items-center gap-1 mb-2 bg-transparent">
+              <Text type="secondary" style={{ fontSize: 12, lineHeight: 18 }}>
+                来自问题
               </Text>
-              {answer?.author?.headline ? (
+              <Ionicons
+                name="chevron-forward"
+                size={12}
+                color={secondaryColor}
+              />
+            </View>
+            <Reanimated.View
+              sharedTransitionTag={`title-${questionId || answer?.question?.id || id}`}
+              sharedTransitionStyle={slowTransition}
+            >
+              <Text
+                style={{
+                  fontSize: 21,
+                  lineHeight: 29 * fontSizeScale,
+                  fontWeight: '700',
+                }}
+              >
+                {answer?.question?.title || initialTitle || '加载中...'}
+              </Text>
+            </Reanimated.View>
+          </BouncyButton>
+          <View className="flex-row items-center pt-4 pb-5 justify-between gap-3 bg-transparent">
+            <BouncyButton
+              onPress={goToProfile}
+              className="flex-row items-center flex-1 bg-transparent"
+            >
+              <StableAvatar
+                uri={authorAvatarUrl}
+                className="w-9 h-9 rounded-full"
+              />
+              <View className="ml-2.5 flex-1 bg-transparent">
                 <Text
-                  type="secondary"
-                  className="text-[13px] mt-0.5"
+                  style={{
+                    fontSize: 15,
+                    lineHeight: 22 * fontSizeScale,
+                    fontWeight: '600',
+                  }}
                   numberOfLines={1}
                 >
-                  {answer.author.headline}
+                  {answer?.author?.name || '知乎用户'}
                 </Text>
-              ) : null}
-            </View>
-          </BouncyButton>
-          <FollowButton
-            following={Boolean(answer?.author?.is_following)}
-            loading={followMutation.isPending}
-            onPress={() => followMutation.mutate()}
-          />
+                {answer?.author?.headline ? (
+                  <Text
+                    type="secondary"
+                    style={{ fontSize: 12, lineHeight: 18 * fontSizeScale }}
+                    numberOfLines={1}
+                  >
+                    {answer.author.headline}
+                  </Text>
+                ) : null}
+              </View>
+            </BouncyButton>
+            <FollowButton
+              following={Boolean(answer?.author?.is_following)}
+              loading={followMutation.isPending}
+              disabled={!answer}
+              onPress={() => followMutation.mutate()}
+            />
+          </View>
         </View>
 
         {queryLoading && !answer ? (
@@ -480,6 +603,15 @@ export const AnswerDetailView = ({
           </View>
         )}
       </Reanimated.ScrollView>
+
+      <ReadingScrollIndicator
+        scrollY={scrollY}
+        contentHeight={contentHeight}
+        viewportHeight={viewportHeight}
+        top={navigationHeight + 8}
+        bottom={insets.bottom + 84}
+        visible={isFocused && contentLayoutReady}
+      />
 
       <ReadingProgressNotice
         visible={readingProgress.restoredOffset !== null}

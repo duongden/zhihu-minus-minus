@@ -1,0 +1,247 @@
+import { fireEvent, render } from '@testing-library/react-native';
+import { type ImageProps, StyleSheet } from 'react-native';
+import { DetailNavigationHeader } from '../components/DetailNavigationHeader';
+
+let mockReadingSettings = { fontSizeScale: 1, lineHeightScale: 1.5 };
+
+jest.mock('../store/useSettingsStore', () => ({
+  useSettingsStore: (
+    selector: (state: {
+      fontSizeScale: number;
+      lineHeightScale: number;
+    }) => unknown,
+  ) => selector(mockReadingSettings),
+}));
+jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 24, right: 0, bottom: 0, left: 0 }),
+}));
+jest.mock('react-native-reanimated', () => ({
+  __esModule: true,
+  default: {
+    View: jest.requireActual<typeof import('react-native')>('react-native')
+      .View,
+  },
+  useAnimatedStyle: (style: () => unknown) => style(),
+}));
+jest.mock('../components/Themed', () => {
+  const native =
+    jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    Text: native.Text,
+    View: native.View,
+    useThemeColor: () => '#1364cc',
+  };
+});
+jest.mock('../components/BouncyButton', () => ({
+  BouncyButton:
+    jest.requireActual<typeof import('react-native')>('react-native').Pressable,
+}));
+jest.mock('../components/StableAvatar', () => {
+  const react = jest.requireActual<typeof import('react')>('react');
+  const native =
+    jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    StableAvatar: ({
+      uri,
+      style,
+    }: {
+      uri?: string | null;
+      style?: ImageProps['style'];
+    }) =>
+      react.createElement(native.Image, {
+        testID: 'detail-header-avatar',
+        source: uri ? { uri } : undefined,
+        style,
+      }),
+  };
+});
+
+const title = '这是用于验证长问题标题始终只占一行的合成问题';
+
+beforeEach(() => {
+  mockReadingSettings = { fontSizeScale: 1, lineHeightScale: 1.5 };
+});
+
+test('the expanded header shows only the back action even when author and share actions are available', async () => {
+  const onBack = jest.fn();
+  const onShare = jest.fn();
+  const host = await render(
+    <DetailNavigationHeader
+      testID="expanded-detail-header"
+      title={title}
+      collapsed={false}
+      onBack={onBack}
+      onShare={onShare}
+      author={{
+        name: '作者 A',
+        avatarUrl: 'https://example.com/avatar-a.png',
+        onPress: jest.fn(),
+      }}
+    />,
+  );
+
+  expect(host.getByTestId('expanded-detail-header')).toHaveStyle({
+    backgroundColor: 'transparent',
+  });
+  expect(host.getByTestId('expanded-detail-header')).toHaveProp(
+    'pointerEvents',
+    'box-none',
+  );
+  expect(host.getByTestId('expanded-detail-header-surface')).toHaveStyle({
+    opacity: 0,
+  });
+  expect(host.queryByText('回答')).toBeNull();
+  expect(host.queryByText('问题')).toBeNull();
+  expect(host.queryByText(title)).toBeNull();
+  expect(host.queryByText('作者 A')).toBeNull();
+  expect(host.queryByTestId('detail-header-avatar')).toBeNull();
+  expect(host.queryByRole('button', { name: '分享' })).toBeNull();
+  expect(host.getAllByRole('button')).toHaveLength(1);
+  await fireEvent.press(host.getByRole('button', { name: '返回' }));
+  expect(onBack).toHaveBeenCalledTimes(1);
+  expect(onShare).not.toHaveBeenCalled();
+});
+
+test('the collapsed header keeps the author avatar and name alongside a single-line title and working actions', async () => {
+  const onBack = jest.fn();
+  const onShare = jest.fn();
+  const onTitlePress = jest.fn();
+  const onAuthorPress = jest.fn();
+  const host = await render(
+    <DetailNavigationHeader
+      testID="collapsed-detail-header"
+      title={title}
+      collapsed
+      onBack={onBack}
+      onShare={onShare}
+      onTitlePress={onTitlePress}
+      author={{
+        name: '作者 A',
+        avatarUrl: 'https://example.com/avatar-a.png',
+        onPress: onAuthorPress,
+      }}
+    />,
+  );
+
+  expect(host.getByTestId('collapsed-detail-header')).toHaveStyle({
+    backgroundColor: 'transparent',
+  });
+  expect(host.getByTestId('collapsed-detail-header-surface')).toHaveStyle({
+    backgroundColor: '#1364cc',
+    opacity: 1,
+  });
+  expect(host.queryByText('回答')).toBeNull();
+  expect(host.getByText(title)).toHaveProp('numberOfLines', 1);
+  expect(host.getByText('作者 A')).toBeTruthy();
+  expect(host.getByTestId('detail-header-avatar')).toHaveProp('source', {
+    uri: 'https://example.com/avatar-a.png',
+  });
+
+  await fireEvent.press(
+    host.getByRole('button', { name: '查看 作者 A 的主页' }),
+  );
+  await fireEvent.press(host.getByRole('button', { name: '返回' }));
+  await fireEvent.press(host.getByRole('button', { name: '分享' }));
+  await fireEvent.press(host.getByRole('button', { name: title }));
+  expect(onAuthorPress).toHaveBeenCalledTimes(1);
+  expect(onBack).toHaveBeenCalledTimes(1);
+  expect(onShare).toHaveBeenCalledTimes(1);
+  expect(onTitlePress).toHaveBeenCalledTimes(1);
+});
+
+test('changing answers replaces the displayed author, avatar and profile action together', async () => {
+  const onAuthorAPress = jest.fn();
+  const onAuthorBPress = jest.fn();
+  const onBack = jest.fn();
+  const host = await render(
+    <DetailNavigationHeader
+      title={title}
+      collapsed
+      onBack={onBack}
+      author={{
+        name: '作者 A',
+        avatarUrl: 'https://example.com/avatar-a.png',
+        onPress: onAuthorAPress,
+      }}
+    />,
+  );
+
+  await host.rerender(
+    <DetailNavigationHeader
+      title={title}
+      collapsed
+      onBack={onBack}
+      author={{
+        name: '作者 B',
+        avatarUrl: 'https://example.com/avatar-b.png',
+        onPress: onAuthorBPress,
+      }}
+    />,
+  );
+
+  expect(host.queryByText('作者 A')).toBeNull();
+  expect(host.getByText('作者 B')).toBeTruthy();
+  expect(host.getByTestId('detail-header-avatar')).toHaveProp('source', {
+    uri: 'https://example.com/avatar-b.png',
+  });
+  await fireEvent.press(
+    host.getByRole('button', { name: '查看 作者 B 的主页' }),
+  );
+  expect(onAuthorBPress).toHaveBeenCalledTimes(1);
+  expect(onAuthorAPress).not.toHaveBeenCalled();
+});
+
+test('the question header supports both states without an author or share action', async () => {
+  const onBack = jest.fn();
+  const host = await render(
+    <DetailNavigationHeader title={title} collapsed={false} onBack={onBack} />,
+  );
+  expect(host.queryByText('问题')).toBeNull();
+  expect(host.getAllByRole('button')).toHaveLength(1);
+
+  await host.rerender(
+    <DetailNavigationHeader title={title} collapsed onBack={onBack} />,
+  );
+
+  expect(host.getByText(title)).toHaveProp('numberOfLines', 1);
+  expect(host.queryByTestId('detail-header-avatar')).toBeNull();
+  expect(host.queryByRole('button', { name: '分享' })).toBeNull();
+  expect(host.getByRole('button', { name: title })).toBeDisabled();
+  await fireEvent.press(host.getByRole('button', { name: '返回' }));
+  expect(onBack).toHaveBeenCalledTimes(1);
+});
+
+test('increasing reading line height reserves enough header space for both title and author', async () => {
+  const onBack = jest.fn();
+  const onAuthorPress = jest.fn();
+  const renderHeader = () => (
+    <DetailNavigationHeader
+      testID="detail-navigation-header"
+      title={title}
+      collapsed
+      onBack={onBack}
+      author={{ name: '作者 A', onPress: onAuthorPress }}
+    />
+  );
+  const host = await render(renderHeader());
+  const getRowHeight = () => {
+    const row = host.getByTestId('detail-navigation-header-row');
+    return StyleSheet.flatten(row.props.style).height as number;
+  };
+  const originalHeight = getRowHeight();
+
+  mockReadingSettings = { fontSizeScale: 1, lineHeightScale: 2.5 };
+  await host.rerender(renderHeader());
+
+  const enlargedHeight = getRowHeight();
+  const visibleContentHeight = (20 + 18) * (2.5 / 1.5) + 2;
+  expect(enlargedHeight).toBeGreaterThan(originalHeight);
+  expect(enlargedHeight).toBeGreaterThanOrEqual(visibleContentHeight);
+  expect(host.getByText(title)).toHaveProp('numberOfLines', 1);
+  expect(host.getByText('作者 A')).toBeTruthy();
+  await fireEvent.press(
+    host.getByRole('button', { name: '查看 作者 A 的主页' }),
+  );
+  expect(onAuthorPress).toHaveBeenCalledTimes(1);
+});

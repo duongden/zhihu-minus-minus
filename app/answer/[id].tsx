@@ -1,33 +1,21 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet } from 'react-native';
+import { ActivityIndicator } from 'react-native';
 import PagerView from 'react-native-pager-view';
-import Reanimated, {
-  Extrapolate,
-  interpolate,
-  SharedTransition,
-  useAnimatedStyle,
-  useSharedValue,
-} from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import client from '@/api/client';
 import { getAnswer } from '@/api/zhihu';
 import { recordReadHistory } from '@/api/zhihu/history';
 import { AnswerDetailView } from '@/components/AnswerDetailView';
-import { BouncyButton } from '@/components/BouncyButton';
+import { DetailNavigationHeader } from '@/components/DetailNavigationHeader';
 import { ShareMenu } from '@/components/ShareMenu';
-import { Text, useThemeColor, View } from '@/components/Themed';
-import { useColorScheme } from '@/components/useColorScheme';
-import Colors from '@/constants/Colors';
+import { useThemeColor, View } from '@/components/Themed';
 import { RICH_CONTENT_STALE_TIME } from '@/features/rich-content';
+import { useAnswerHeaderState } from '@/hooks/useAnswerHeaderState';
 import { useNeighborAnswerPrefetch } from '@/hooks/useNeighborAnswerPrefetch';
 import { useZhihuInfiniteQuery } from '@/hooks/useZhihuInfiniteQuery';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { getZhihuErrorStatus } from '@/utils/zhihuError';
-
-const slowTransition = SharedTransition.duration(600);
 
 export default function AnswerDetailScreen() {
   const {
@@ -42,10 +30,7 @@ export default function AnswerDetailScreen() {
     sortBy?: string;
   }>();
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const colorScheme = useColorScheme();
-  const textColor = Colors[colorScheme].text;
   const primaryColor = useThemeColor({}, 'primary');
 
   // 锁定初始 ID，避免滑动时 URL 参数改变导致重新触发 top-level loading
@@ -156,6 +141,15 @@ export default function AnswerDetailScreen() {
 
   const currentPage = Math.max(0, answerIds.indexOf(selectedId));
   const currentId = answerIds[currentPage];
+  const headerState = useAnswerHeaderState(pagerKey, currentId);
+  const { data: currentAnswer } = useQuery({
+    queryKey: ['answer-detail', currentId],
+    queryFn: ({ signal }) => getAnswer(currentId, undefined, { signal }),
+    enabled: !!currentId,
+    staleTime: RICH_CONTENT_STALE_TIME,
+    retry: (failureCount, err) =>
+      getZhihuErrorStatus(err) === 404 ? false : failureCount < 2,
+  });
   const pageListKey = JSON.stringify(answerIds);
   const currentPager = useRef({ pagerKey, pageListKey });
   currentPager.current = { pagerKey, pageListKey };
@@ -207,20 +201,6 @@ export default function AnswerDetailScreen() {
     url: string;
   } | null>(null);
 
-  // Keep the pager header animation on the UI thread while preserving the
-  // per-answer scroll position in JS for pager navigation.
-  const scrollY = useSharedValue(0);
-  const scrollPositions = useRef<{ [key: string]: number }>({});
-  const isCollapsedRef = useRef(false);
-  const [isHeaderCollapsed, setIsHeaderCollapsed] = useState(false);
-
-  const headerBgStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(scrollY.value, [0, 80], [1, 0], Extrapolate.CLAMP),
-  }));
-  const headerContentStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(scrollY.value, [0, 80], [1, 0], Extrapolate.CLAMP),
-  }));
-
   useNeighborAnswerPrefetch(answerIds, currentPage);
 
   useEffect(() => {
@@ -235,13 +215,9 @@ export default function AnswerDetailScreen() {
   }, [enableBrowseHistory, currentId]);
 
   const selectAnswer = (answerId: string) => {
+    headerState.restore(answerId);
     setSelection({ pagerKey, answerId });
     if (answerId !== currentId) router.setParams({ id: answerId });
-    const lastY = scrollPositions.current[answerId] || 0;
-    scrollY.value = lastY;
-    const shouldCollapse = lastY > 80;
-    isCollapsedRef.current = shouldCollapse;
-    setIsHeaderCollapsed(shouldCollapse);
   };
 
   const handleShareClick = () => {
@@ -278,82 +254,35 @@ export default function AnswerDetailScreen() {
     <View className="flex-1">
       <Stack.Screen options={{ headerShown: false, title: '回答' }} />
 
-      {/* Header Bar */}
-      <View
-        className="flex-row items-start px-2.5 absolute left-0 right-0 z-50"
-        style={{
-          top: 0,
-          paddingTop: insets.top + 8,
-          minHeight: 44 + insets.top + 8,
-          paddingBottom: 8,
-          backgroundColor: 'transparent',
+      <DetailNavigationHeader
+        title={
+          currentAnswer?.question?.title ||
+          initialAnswer?.question?.title ||
+          initialTitle ||
+          '加载中...'
+        }
+        collapsed={headerState.collapsed}
+        progress={headerState.headerProgress}
+        onBack={() => router.back()}
+        onTitlePress={() => {
+          const target = currentAnswer?.question?.id || questionId;
+          if (target) router.push(`/question/${target}`);
         }}
-        pointerEvents="box-none"
-      >
-        {/* Background (Animates to transparent on scroll) */}
-        <Reanimated.View
-          style={[
-            StyleSheet.absoluteFillObject,
-            {
-              backgroundColor:
-                colorScheme === 'dark'
-                  ? 'rgba(0,0,0,0.6)'
-                  : 'rgba(255,255,255,0.6)',
-            },
-            headerBgStyle,
-          ]}
-          pointerEvents="none"
-        />
-
-        {/* 返回按钮 (Always Visible) */}
-        <BouncyButton
-          onPress={() => router.back()}
-          className="w-10 h-10 justify-center items-center z-50 rounded-full"
-        >
-          <Ionicons name="chevron-back" size={28} color={textColor} />
-        </BouncyButton>
-
-        {/* 可折叠/淡出的内容区域 (标题和分享按钮) */}
-        <Reanimated.View
-          className="flex-1 flex-row items-start"
-          style={headerContentStyle}
-          pointerEvents={isHeaderCollapsed ? 'none' : 'auto'}
-        >
-          {/* 标题区域 */}
-          <BouncyButton
-            className="flex-1 mx-2"
-            onPress={() =>
-              router.push(
-                `/question/${initialAnswer?.question?.id || questionId}`,
-              )
-            }
-            style={{ paddingTop: 8 }}
-          >
-            <Reanimated.View
-              sharedTransitionTag={`title-${questionId || id}`}
-              sharedTransitionStyle={slowTransition}
-              className="bg-transparent"
-            >
-              <Text
-                className="text-[18px] font-bold leading-6"
-                numberOfLines={2}
-              >
-                {initialAnswer?.question?.title ||
-                  (initialTitle as string) ||
-                  '加载中...'}
-              </Text>
-            </Reanimated.View>
-          </BouncyButton>
-
-          {/* 分享按钮 */}
-          <BouncyButton
-            onPress={handleShareClick}
-            className="w-10 h-10 justify-center items-center rounded-full"
-          >
-            <Ionicons name="share-outline" size={24} color={textColor} />
-          </BouncyButton>
-        </Reanimated.View>
-      </View>
+        onShare={handleShareClick}
+        author={
+          currentAnswer?.author
+            ? {
+                name: currentAnswer.author.name || '知乎用户',
+                avatarUrl: currentAnswer.author.avatar_url,
+                onPress: () => {
+                  const token =
+                    currentAnswer.author.url_token || currentAnswer.author.id;
+                  if (token) router.push(`/user/${token}`);
+                },
+              }
+            : undefined
+        }
+      />
 
       <PagerView
         ref={pagerRef}
@@ -452,17 +381,15 @@ export default function AnswerDetailScreen() {
               initialTitle={aid === id ? (initialTitle as string) : undefined}
               questionId={questionId as string}
               isFocused={index === currentPage}
-              scrollY={scrollY}
-              onScroll={(y) => {
-                scrollPositions.current[aid] = y;
-                if (index === currentPage) {
-                  const shouldCollapse = y > 80;
-                  if (shouldCollapse !== isCollapsedRef.current) {
-                    isCollapsedRef.current = shouldCollapse;
-                    setIsHeaderCollapsed(shouldCollapse);
-                  }
-                }
-              }}
+              headerProgress={headerState.headerProgress}
+              activeAnswerId={headerState.activeAnswerId}
+              activeScrollY={headerState.activeScrollY}
+              activeScopeVersion={headerState.activeScopeVersion}
+              scopeVersion={headerState.scopeVersion}
+              onScroll={(y) => headerState.onScroll(aid, y)}
+              onHeaderLayout={(offset) =>
+                headerState.onHeaderLayout(aid, offset)
+              }
             />
           </View>
         ))}

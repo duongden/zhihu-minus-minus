@@ -20,6 +20,8 @@ interface UseReadingProgressOptions {
   contentKey: string;
   enabled?: boolean;
   ready?: boolean;
+  onProgrammaticScroll?: (offset: number) => void;
+  onContentMeasured?: (width: number, height: number) => void;
   /** Native content requires an actual measurement paired with this identity. */
   layoutSource?: object;
   scrollRef: React.RefObject<ScrollToRef | null>;
@@ -37,6 +39,8 @@ export function useReadingProgress({
   contentKey,
   enabled = true,
   ready = true,
+  onProgrammaticScroll,
+  onContentMeasured,
   layoutSource,
   scrollRef,
 }: UseReadingProgressOptions) {
@@ -77,6 +81,10 @@ export function useReadingProgress({
   } | null>(null);
   const committedTryRestoreRef = useRef<() => void>(() => {});
   const progressIdentityRef = useRef(contentKey);
+  const onProgrammaticScrollRef = useRef(onProgrammaticScroll);
+  onProgrammaticScrollRef.current = onProgrammaticScroll;
+  const onContentMeasuredRef = useRef(onContentMeasured);
+  onContentMeasuredRef.current = onContentMeasured;
 
   useLayoutEffect(() => {
     measurementScopeRef.current = {
@@ -193,6 +201,7 @@ export function useReadingProgress({
       scrollRef.current?.scrollTo({ y: targetOffset, animated: false });
       restoredRef.current = true;
       setRestoredOffset(targetOffset);
+      onProgrammaticScrollRef.current?.(targetOffset);
     }, RESTORE_DELAY_MS);
   }, [contentKey, enabled, entry, hasHydrated, ready, layoutSource, scrollRef]);
 
@@ -232,6 +241,7 @@ export function useReadingProgress({
           request,
         };
         contentHeightRef.current = height;
+        onContentMeasuredRef.current?.(width, height);
         // Readiness may have committed since this async measurement was requested.
         committedTryRestoreRef.current();
       };
@@ -270,16 +280,18 @@ export function useReadingProgress({
   );
 
   const onContentSizeChange = useCallback(
-    (_width: number, height: number) => {
+    (width: number, height: number) => {
       const current = measurementScopeRef.current;
       if (
-        layoutSource &&
-        (!current.enabled ||
-          current.contentKey !== contentKey ||
-          current.layoutSource !== layoutSource)
+        current.contentKey !== contentKey ||
+        current.layoutSource !== layoutSource ||
+        (layoutSource && !current.enabled)
       )
         return;
+      // Mounted fallback pages can reflow while unfocused without another size
+      // event on focus. Keep their geometry; tryRestore still requires enabled.
       contentHeightRef.current = height;
+      onContentMeasuredRef.current?.(width, height);
       if (!layoutSource && ready) contentMeasuredWhileReadyRef.current = true;
       tryRestore();
     },
@@ -291,11 +303,14 @@ export function useReadingProgress({
   }, []);
 
   const scrollToTop = useCallback(() => {
+    const current = restoreEligibilityRef.current;
+    if (!current.enabled || current.contentKey !== contentKey) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     offsetRef.current = 0;
     setRestoredOffset(null);
     removeProgress(contentKey);
     scrollRef.current?.scrollTo({ y: 0, animated: true });
+    onProgrammaticScrollRef.current?.(0);
   }, [contentKey, removeProgress, scrollRef]);
 
   return {
