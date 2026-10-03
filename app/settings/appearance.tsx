@@ -25,14 +25,16 @@ import { Text, useThemeColor, View } from '@/components/Themed';
 import { ThemeModeSelector } from '@/components/ThemeModeSelector';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
-import { designTokens } from '@/constants/designTokens';
+import { colors as baseColors, designTokens } from '@/constants/designTokens';
 import {
   READING_BACKGROUND_OPTIONS,
+  resolveThemeColors,
   SURFACE_STYLE_OPTIONS,
   TEXT_CONTRAST_OPTIONS,
 } from '@/constants/theme';
 import type { RichContentRenderer } from '@/features/rich-content';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import { contrastingText } from '@/utils/colorContrast';
 
 // 开启 Android 下的 LayoutAnimation
 if (
@@ -91,6 +93,19 @@ export default function AppearanceSettings() {
 
   const tintColor = useThemeColor({}, 'primary');
   const canvasColor = useThemeColor({}, 'background');
+  const readingPreviews = useMemo(
+    () =>
+      READING_BACKGROUND_OPTIONS.map((option) => ({
+        ...option,
+        palette: resolveThemeColors(colorScheme, {
+          primaryColor,
+          readingBackground: option.value,
+          textContrast,
+          surfaceStyle,
+        }),
+      })),
+    [colorScheme, primaryColor, textContrast, surfaceStyle],
+  );
 
   const toggleAdvancedColor = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -98,7 +113,6 @@ export default function AppearanceSettings() {
   };
 
   return (
-    // 使用全局底色（深色模式下为纯黑，浅色模式下为浅灰，凸显卡片感）
     <RNView
       style={[
         styles.container,
@@ -286,29 +300,34 @@ export default function AppearanceSettings() {
         {/* 2. 主题颜色 */}
         <Section title="主题颜色" colorScheme={colorScheme}>
           <RNView style={styles.colorGrid}>
-            {PRESET_COLORS.map((preset) => {
-              const isSelected = primaryColor === preset.value;
+            {PRESET_COLORS.map(({ name, value: presetColor }) => {
+              const isSelected =
+                (primaryColor ?? baseColors.light.primary).toLowerCase() ===
+                presetColor.toLowerCase();
               return (
                 <BouncyButton
-                  key={preset.value}
-                  onPress={() => updateSettings({ primaryColor: preset.value })}
+                  key={presetColor}
+                  accessibilityRole="radio"
+                  accessibilityLabel={name}
+                  accessibilityState={{ checked: isSelected }}
+                  onPress={() => updateSettings({ primaryColor: presetColor })}
                   style={[
                     styles.colorChip,
                     {
                       backgroundColor: Colors[colorScheme].backgroundTertiary,
-                      borderColor: isSelected ? preset.value : 'transparent',
+                      borderColor: isSelected ? presetColor : 'transparent',
                     },
                     isSelected && { borderWidth: 1.5 },
                   ]}
                 >
                   <RNView
-                    style={[styles.colorDot, { backgroundColor: preset.value }]}
+                    style={[styles.colorDot, { backgroundColor: presetColor }]}
                   />
                   {isSelected && (
                     <Ionicons
                       name="checkmark"
                       size={14}
-                      color={preset.value}
+                      color={presetColor}
                       style={{ marginLeft: 2 }}
                     />
                   )}
@@ -316,16 +335,18 @@ export default function AppearanceSettings() {
               );
             })}
             <BouncyButton
+              accessibilityRole="button"
+              accessibilityLabel="恢复默认主题色"
               onPress={() =>
-                updateSettings({ primaryColor: Colors.light.primary })
+                updateSettings({ primaryColor: baseColors.light.primary })
               }
               style={[
                 styles.colorChip,
                 {
                   backgroundColor: Colors[colorScheme].backgroundTertiary,
                   borderColor:
-                    primaryColor === Colors.light.primary || !primaryColor
-                      ? Colors.light.primary
+                    primaryColor === baseColors.light.primary || !primaryColor
+                      ? baseColors.light.primary
                       : 'transparent',
                 },
               ]}
@@ -352,6 +373,7 @@ export default function AppearanceSettings() {
             colorScheme={colorScheme}
           >
             <Switch
+              accessibilityLabel="显示自定义颜色"
               value={showAdvancedColor}
               onValueChange={toggleAdvancedColor}
               trackColor={{ true: tintColor }}
@@ -370,44 +392,73 @@ export default function AppearanceSettings() {
 
         {/* 3. 阅读体验 */}
         <Section title="阅读体验" colorScheme={colorScheme}>
-          <SettingItem
-            label="阅读背景"
-            icon="color-fill-outline"
-            colorScheme={colorScheme}
-          >
-            <RNView style={styles.optionRow}>
-              {READING_BACKGROUND_OPTIONS.map((option) => {
+          <RNView>
+            <SettingItem
+              label="阅读背景"
+              icon="color-fill-outline"
+              colorScheme={colorScheme}
+            >
+              <Text type="secondary" style={styles.readingScope}>
+                同步应用页面与正文
+              </Text>
+            </SettingItem>
+            <RNView
+              style={styles.readingGrid}
+              accessibilityRole="radiogroup"
+              accessibilityLabel="阅读背景"
+            >
+              {readingPreviews.map((option) => {
                 const isSelected = readingBackground === option.value;
                 return (
                   <BouncyButton
                     key={option.value}
+                    accessibilityRole="radio"
+                    accessibilityLabel={option.label}
+                    accessibilityHint={option.description}
+                    accessibilityState={{ checked: isSelected }}
                     onPress={() =>
                       updateSettings({ readingBackground: option.value })
                     }
                     style={[
-                      styles.optionChip,
+                      styles.readingPreview,
                       {
-                        backgroundColor: Colors[colorScheme].backgroundTertiary,
+                        backgroundColor: option.palette.backgroundSecondary,
+                        borderColor: isSelected
+                          ? option.palette.primary
+                          : option.palette.border,
                       },
-                      isSelected && { backgroundColor: tintColor },
                     ]}
                   >
+                    <RNView style={styles.readingPreviewHeading}>
+                      <Text
+                        style={[
+                          styles.readingPreviewLabel,
+                          { color: option.palette.text },
+                        ]}
+                      >
+                        {option.label}
+                      </Text>
+                      {isSelected && (
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={18}
+                          color={option.palette.primary}
+                        />
+                      )}
+                    </RNView>
                     <Text
                       style={[
-                        styles.optionChipText,
-                        isSelected && {
-                          color: Colors[colorScheme].onPrimary,
-                          fontWeight: 'bold',
-                        },
+                        styles.readingPreviewDescription,
+                        { color: option.palette.textSecondary },
                       ]}
                     >
-                      {option.label}
+                      {option.description}
                     </Text>
                   </BouncyButton>
                 );
               })}
             </RNView>
-          </SettingItem>
+          </RNView>
           <SettingItem
             label="文字对比度"
             icon="contrast-outline"
@@ -691,7 +742,7 @@ function HslSlider({
                 borderRadius: 10,
                 backgroundColor: thumbColor,
                 borderWidth: 2,
-                borderColor: Colors.light.textInverse,
+                borderColor: contrastingText(thumbColor),
               },
               thumbAnimatedStyle,
             ]}
@@ -714,12 +765,14 @@ function ColorPickerSection({
   const borderColor = Colors[colorScheme].border;
 
   const [hsl, setHsl] = useState(() =>
-    hexToHsl(primaryColor || Colors.light.primary),
+    hexToHsl(primaryColor || baseColors.light.primary),
   );
-  const [hexText, setHexText] = useState(primaryColor || Colors.light.primary);
+  const [hexText, setHexText] = useState(
+    primaryColor || baseColors.light.primary,
+  );
 
   useEffect(() => {
-    const target = primaryColor || Colors.light.primary;
+    const target = primaryColor || baseColors.light.primary;
     setHexText(target);
     const newHsl = hexToHsl(target);
     setHsl((currentHsl) => {
@@ -762,16 +815,17 @@ function ColorPickerSection({
         padding: 16,
         paddingTop: 8,
         gap: 16,
-        backgroundColor: colorScheme === 'dark' ? '#141415' : '#FAFAFA',
+        backgroundColor: Colors[colorScheme].backgroundTertiary,
       }}
     >
       <RNView style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
         <RNView
+          testID="primary-color-preview"
           style={{
             width: 40,
             height: 40,
             borderRadius: 20,
-            backgroundColor: primaryColor || previewColor,
+            backgroundColor: previewColor,
             borderWidth: 1,
             borderColor: borderColor,
           }}
@@ -785,7 +839,8 @@ function ColorPickerSection({
               backgroundColor: Colors[colorScheme].backgroundTertiary,
             },
           ]}
-          placeholder="#0084ff"
+          accessibilityLabel="自定义主题色"
+          placeholder={baseColors.light.primary}
           placeholderTextColor={Colors[colorScheme].textTertiary}
           value={hexText}
           onChangeText={(val) => {
@@ -798,7 +853,7 @@ function ColorPickerSection({
           }}
           onBlur={() => {
             if (!/^#[0-9a-fA-F]{6}$/.test(hexText))
-              setHexText(primaryColor || Colors.light.primary);
+              setHexText(primaryColor || baseColors.light.primary);
           }}
           maxLength={7}
           autoCapitalize="none"
@@ -931,6 +986,31 @@ const styles = StyleSheet.create({
   colorChipText: {
     fontSize: 10,
   },
+  readingScope: { flexShrink: 1, fontSize: 12, marginLeft: 12 },
+  readingGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
+  },
+  readingPreview: {
+    flexBasis: '46%',
+    flexGrow: 1,
+    minHeight: 86,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    padding: 12,
+    gap: 6,
+  },
+  readingPreviewHeading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
+  readingPreviewLabel: { flexShrink: 1, fontSize: 15, fontWeight: '600' },
+  readingPreviewDescription: { fontSize: 12 },
   optionRow: {
     flex: 1,
     flexDirection: 'row',

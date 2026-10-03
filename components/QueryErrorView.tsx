@@ -15,6 +15,7 @@ export function QueryErrorView({
   compact = false,
 }: QueryErrorViewProps) {
   const primaryColor = useThemeColor({}, 'primary');
+  const onPrimary = useThemeColor({}, 'onPrimary');
   const mutedColor = useThemeColor({}, 'textTertiary');
 
   return (
@@ -35,7 +36,9 @@ export function QueryErrorView({
         style={{ backgroundColor: primaryColor }}
         onPress={onRetry}
       >
-        <Text className="text-on-primary font-bold text-sm">重新加载</Text>
+        <Text className="font-bold text-sm" style={{ color: onPrimary }}>
+          重新加载
+        </Text>
       </BouncyButton>
     </View>
   );

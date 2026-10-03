@@ -42,8 +42,10 @@ export const DownvoteButton = ({
   const loading = pendingIdentity === identity;
   const queryClient = useQueryClient();
   const scale = useSharedValue(1);
+  const primaryColor = useThemeColor({}, 'primary');
+  const onPrimary = useThemeColor({}, 'onPrimary');
   const colorScheme = useColorScheme();
-  const tintColor = useThemeColor({}, 'primary');
+  const mutedColor = colors[colorScheme].iconMuted;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: FlashList identity changes must reset local reaction state even when the next item has equal initial values.
   React.useEffect(() => {
@@ -51,6 +53,14 @@ export const DownvoteButton = ({
   }, [identity, initialVoted]);
 
   const isDownvoted = voted === -1;
+  const foregroundColor =
+    variant === 'default'
+      ? isDownvoted
+        ? onPrimary
+        : primaryColor
+      : isDownvoted
+        ? primaryColor
+        : mutedColor;
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -102,36 +112,18 @@ export const DownvoteButton = ({
       }
       style={[
         variant === 'default' && {
-          backgroundColor: isDownvoted ? tintColor : `${tintColor}1a`,
+          backgroundColor: isDownvoted ? primaryColor : `${primaryColor}1a`,
         },
         variant === 'minimal' && { borderRadius: 99 },
-        loading && { opacity: 0.7 },
       ]}
     >
       {loading ? (
-        <ActivityIndicator
-          size="small"
-          color={
-            isDownvoted || variant === 'minimal'
-              ? tintColor
-              : variant === 'default'
-                ? colors[colorScheme].textInverse
-                : tintColor
-          }
-        />
+        <ActivityIndicator size="small" color={foregroundColor} />
       ) : (
         <Animated.View style={animatedStyle}>
           <VoteTriangle
             active={isDownvoted}
-            color={
-              variant === 'minimal'
-                ? isDownvoted
-                  ? tintColor
-                  : colors[colorScheme].iconMuted
-                : isDownvoted
-                  ? colors[colorScheme].textInverse
-                  : tintColor
-            }
+            color={foregroundColor}
             direction="down"
             size={variant === 'minimal' ? 24 : 20}
           />

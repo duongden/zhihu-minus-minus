@@ -37,6 +37,8 @@ export default function ProfileScreen({ isActive = true }: ProfileScreenProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const accentColor = useThemeColor({}, 'primary');
+  const dangerColor = useThemeColor({}, 'danger');
+  const onDanger = useThemeColor({}, 'onDanger');
   const accentBgColor = useThemeColor({}, 'primaryTransparent');
   const _surfaceColor = Colors[colorScheme].surface;
   const _textColor = Colors[colorScheme].text;
@@ -431,7 +433,10 @@ export default function ProfileScreen({ isActive = true }: ProfileScreenProps) {
           right={
             unreadCount > 0 ? (
               <View className="flex-row items-center bg-transparent">
-                <Text className="bg-[#ff4d4f] text-white text-xs font-bold px-1.5 py-0.5 rounded-[10px] overflow-hidden mr-1">
+                <Text
+                  className="text-xs font-bold px-1.5 py-0.5 rounded-[10px] overflow-hidden mr-1"
+                  style={{ backgroundColor: dangerColor, color: onDanger }}
+                >
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </Text>
                 <Ionicons

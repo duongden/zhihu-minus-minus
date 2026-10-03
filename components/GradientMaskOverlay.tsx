@@ -4,9 +4,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { effects } from '@/constants/designTokens';
+import { useThemeColor } from './Themed';
 
 export function GradientMaskOverlay({ isDark }: { isDark: boolean }) {
   const insets = useSafeAreaInsets();
+  const overlayColor = useThemeColor({}, 'contentOverlayStrong');
 
   return (
     <View
@@ -35,9 +37,7 @@ export function GradientMaskOverlay({ isDark }: { isDark: boolean }) {
             tint={isDark ? 'dark' : 'light'}
             style={{
               flex: 1,
-              backgroundColor: isDark
-                ? effects.blurSurface.dark
-                : effects.blurSurface.light,
+              backgroundColor: overlayColor,
             }}
           />
         </MaskedView>
@@ -64,9 +64,7 @@ export function GradientMaskOverlay({ isDark }: { isDark: boolean }) {
             tint={isDark ? 'dark' : 'light'}
             style={{
               flex: 1,
-              backgroundColor: isDark
-                ? effects.blurSurface.dark
-                : effects.blurSurface.light,
+              backgroundColor: overlayColor,
             }}
           />
         </MaskedView>

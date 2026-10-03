@@ -10,7 +10,6 @@ import {
 } from '@/api/zhihu';
 import { StableAvatar } from './StableAvatar';
 import { Text, useThemeColor, View } from './Themed';
-import { useColorScheme } from './useColorScheme';
 
 /**
  * 最近更新的用户头像栏 (朋友圈/动态更新提示)
@@ -18,9 +17,10 @@ import { useColorScheme } from './useColorScheme';
 function RecentMomentsComponent() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const _colorScheme = useColorScheme();
   const primaryColor = useThemeColor({}, 'primary');
   const dangerColor = useThemeColor({}, 'danger');
+  const onDanger = useThemeColor({}, 'onDanger');
+  const surfaceColor = useThemeColor({}, 'backgroundSecondary');
 
   const { data } = useQuery({
     queryKey: ['recent-moments'],
@@ -122,12 +122,16 @@ function RecentMomentsComponent() {
               {/* 未读数字角标 */}
               {item.unread_count > 0 && (
                 <View
-                  className="absolute -right-1 -top-1 bg-danger rounded-full min-w-[20px] h-[20px] justify-center items-center px-1 border-2 border-white dark:border-[#1a1a1a]"
-                  style={{ backgroundColor: dangerColor }}
+                  className="absolute -right-1 -top-1 rounded-full min-w-[20px] h-[20px] justify-center items-center px-1 border-2"
+                  style={{
+                    backgroundColor: dangerColor,
+                    borderColor: surfaceColor,
+                  }}
                 >
                   <Text
-                    className="text-white font-bold text-center"
+                    className="font-bold text-center"
                     style={{
+                      color: onDanger,
                       fontSize: 10,
                       lineHeight: 12,
                     }}

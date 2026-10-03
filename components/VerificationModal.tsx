@@ -4,13 +4,13 @@ import { StatusBar } from 'expo-status-bar';
 import { Modal, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView, type WebViewNavigation } from 'react-native-webview';
-import Colors from '@/constants/Colors';
 import { useVerificationStore } from '@/store/useVerificationStore';
 import { BouncyButton } from './BouncyButton';
-import { Text, View } from './Themed';
+import { Text, useRuntimeThemeColors, View } from './Themed';
 
 export const VerificationModal = () => {
   const queryClient = useQueryClient();
+  const colors = useRuntimeThemeColors();
   const { isVisible, verificationUrl, hide } = useVerificationStore();
 
   const handleNavigationStateChange = (navState: WebViewNavigation) => {
@@ -40,25 +40,18 @@ export const VerificationModal = () => {
       presentationStyle="fullScreen"
       onRequestClose={hide}
     >
-      <SafeAreaView style={styles.container}>
-        <StatusBar
-          style="dark"
-          backgroundColor={Colors.light.backgroundSecondary}
-        />
-        <View style={styles.header}>
-          <Text
-            lightColor={Colors.light.text}
-            darkColor={Colors.dark.textInverse}
-            style={styles.title}
-          >
-            安全验证
-          </Text>
+      <SafeAreaView
+        style={[styles.container, { backgroundColor: colors.surface }]}
+      >
+        <StatusBar style="auto" backgroundColor={colors.surface} />
+        <View style={[styles.header, { borderBottomColor: colors.border }]}>
+          <Text style={[styles.title, { color: colors.text }]}>安全验证</Text>
           <BouncyButton onPress={hide} style={styles.closeButton}>
-            <Ionicons name="close" size={24} color="#666" />
+            <Ionicons name="close" size={24} color={colors.textSecondary} />
           </BouncyButton>
         </View>
         <WebView
-          style={styles.webView}
+          style={{ backgroundColor: colors.surface }}
           source={{ uri: verificationUrl }}
           onNavigationStateChange={handleNavigationStateChange}
           javaScriptEnabled={true}
@@ -74,7 +67,6 @@ export const VerificationModal = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: Colors.light.backgroundSecondary,
   },
   header: {
     height: 54,
@@ -82,7 +74,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Colors.light.border,
     position: 'relative',
   },
   title: {
@@ -93,8 +84,5 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 15,
     padding: 5,
-  },
-  webView: {
-    backgroundColor: Colors.light.backgroundSecondary,
   },
 });

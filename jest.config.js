@@ -1,6 +1,15 @@
 /** @type {import('jest').Config} */
+const expoPreset = require('jest-expo/jest-preset');
+
 module.exports = {
   preset: 'jest-expo',
+  // Material Color Utilities publishes ESM; keep Expo's other exclusions intact.
+  transformIgnorePatterns: expoPreset.transformIgnorePatterns.map((pattern) =>
+    pattern.replace(
+      '/node_modules/(?!',
+      '/node_modules/(?!@material/material-color-utilities/|',
+    ),
+  ),
   watchman: false,
   transform: {
     '^.+\\.mjs$': [

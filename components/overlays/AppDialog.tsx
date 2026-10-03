@@ -46,6 +46,7 @@ export function AppDialog({
   const colorScheme = useColorScheme();
   const primaryColor = useThemeColor({}, 'primary');
   const onPrimary = useThemeColor({}, 'onPrimary');
+  const onDanger = useThemeColor({}, 'onDanger');
   const primaryTransparent = useThemeColor({}, 'primaryTransparent');
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -192,7 +193,7 @@ export function AppDialog({
                       ? onPrimary
                       : variant === 'secondary'
                         ? Colors[colorScheme].text
-                        : Colors[colorScheme].textInverse;
+                        : onDanger;
                   return (
                     <BouncyButton
                       key={action.label}

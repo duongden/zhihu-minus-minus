@@ -263,13 +263,13 @@ export function MarkdownText({
 }: MarkdownTextProps) {
   const textColor = useThemeColor({}, 'text');
   const secondaryColor = useThemeColor({}, 'textSecondary');
-  const primaryColor = useThemeColor({}, 'primary');
+  const linkColor = useThemeColor({}, 'link');
   const borderColor = useThemeColor({}, 'controlBorder');
   const codeBackground = useThemeColor({}, 'backgroundTertiary');
   const bodyColor = muted ? secondaryColor : textColor;
   const blocks = useMemo(() => parseMarkdown(markdown), [markdown]);
   const context: InlineContext = {
-    linkColor: primaryColor,
+    linkColor,
     codeBackground,
     codeColor: bodyColor,
   };

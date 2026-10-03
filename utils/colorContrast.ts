@@ -8,6 +8,13 @@ export function rgbChannels(color: string): [number, number, number] {
   throw new Error('Invalid opaque theme color');
 }
 
+/** Use the current surface hue for overlays instead of hardcoded white/black. */
+export function withAlpha(color: string, alpha: number): string {
+  const channels = rgbChannels(color);
+  const opacity = Number.isFinite(alpha) ? Math.min(1, Math.max(0, alpha)) : 0;
+  return `rgba(${channels.join(',')},${opacity})`;
+}
+
 function luminance(color: string): number {
   const channels = rgbChannels(color).map((channel) => {
     const value = channel / 255;

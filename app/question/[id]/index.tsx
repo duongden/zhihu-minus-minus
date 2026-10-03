@@ -158,6 +158,7 @@ const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
 
     const primaryColor = useThemeColor({}, 'primary');
     const warningColor = useThemeColor({}, 'warning');
+    const cardBackground = useThemeColor({}, 'backgroundSecondary');
 
     const isFirstMount = useRef(true);
     const animationItemIdRef = useRef(item.id);
@@ -384,7 +385,7 @@ const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
         <View
           {...touchCaptureHandlers}
           style={{
-            backgroundColor: Colors[colorScheme].backgroundSecondary,
+            backgroundColor: cardBackground,
             borderRadius: 12,
             position: 'relative',
           }}
@@ -487,14 +488,7 @@ const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
                     }}
                   >
                     <LinearGradient
-                      colors={[
-                        colorScheme === 'dark'
-                          ? 'rgba(30, 30, 34, 0)'
-                          : 'rgba(255, 255, 255, 0)',
-                        colorScheme === 'dark'
-                          ? 'rgba(30, 30, 34, 1)'
-                          : 'rgba(255, 255, 255, 1)',
-                      ]}
+                      colors={[`${cardBackground}00`, cardBackground]}
                       style={{
                         flex: 1,
                         justifyContent: 'flex-end',
@@ -590,14 +584,7 @@ const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
                     className="absolute inset-0"
                   >
                     <LinearGradient
-                      colors={[
-                        colorScheme === 'dark'
-                          ? 'rgba(30, 30, 34, 0)'
-                          : 'rgba(255, 255, 255, 0)',
-                        colorScheme === 'dark'
-                          ? 'rgba(30, 30, 34, 1)'
-                          : 'rgba(255, 255, 255, 1)',
-                      ]}
+                      colors={[`${cardBackground}00`, cardBackground]}
                       style={{
                         position: 'absolute',
                         left: 0,
@@ -981,6 +968,7 @@ export default function QuestionDetail() {
 
   const primaryColor = useThemeColor({}, 'primary');
   const primaryTransparent = useThemeColor({}, 'primaryTransparent');
+  const toolbarBackground = useThemeColor({}, 'backgroundSecondary');
 
   const {
     data: question,
@@ -1408,10 +1396,7 @@ export default function QuestionDetail() {
             tint={colorScheme}
             className="flex-1"
             style={{
-              backgroundColor:
-                colorScheme === 'dark'
-                  ? 'rgba(26,26,26,0.8)'
-                  : 'rgba(255,255,255,0.85)',
+              backgroundColor: `${toolbarBackground}D9`,
             }}
           >
             <View className="flex-1 flex-row items-center px-5 justify-between bg-transparent">

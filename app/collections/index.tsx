@@ -37,6 +37,9 @@ export default function MyCollectionsScreen() {
   const cookies = useAuthStore((state) => state.cookies);
   const isAuthenticated = hasAuthenticationCookie(cookies);
   const primaryColor = useThemeColor({}, 'primary');
+  const dangerColor = useThemeColor({}, 'danger');
+  const onDanger = useThemeColor({}, 'onDanger');
+  const backgroundColor = useThemeColor({}, 'background');
   const borderColor = Colors[colorScheme].border;
   const [modalVisible, setModalVisible] = useState(false);
   const [editingItem, setEditingItem] = useState<CollectionItem | null>(null);
@@ -210,16 +213,12 @@ export default function MyCollectionsScreen() {
           <View
             className="absolute -right-0.5 -bottom-0.5 rounded-md p-0.5"
             style={{
-              backgroundColor: '#ff4d4f',
+              backgroundColor: dangerColor,
               borderWidth: 1,
-              borderColor: Colors[colorScheme].textInverse,
+              borderColor: backgroundColor,
             }}
           >
-            <Ionicons
-              name="lock-closed"
-              size={10}
-              color={Colors[colorScheme].textInverse}
-            />
+            <Ionicons name="lock-closed" size={10} color={onDanger} />
           </View>
         )}
       </View>

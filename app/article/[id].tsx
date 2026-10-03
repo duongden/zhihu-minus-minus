@@ -291,9 +291,7 @@ export default function ArticleDetail() {
               backgroundColor: Colors[colorScheme].backgroundSecondary,
               opacity: headerBgOpacity,
               borderBottomWidth: StyleSheet.hairlineWidth,
-              borderBottomColor: isDark
-                ? 'rgba(255,255,255,0.1)'
-                : 'rgba(0,0,0,0.1)',
+              borderBottomColor: Colors[colorScheme].divider,
             },
           ]}
           pointerEvents="none"
@@ -332,9 +330,7 @@ export default function ArticleDetail() {
         ref={scrollViewRef}
         className="flex-1"
         style={{
-          backgroundColor: isDark
-            ? 'rgba(34, 34, 34, 0.85)'
-            : 'rgba(255, 255, 255, 0.9)',
+          backgroundColor: Colors[colorScheme].backgroundSecondary,
         }}
         scrollEventThrottle={16}
         onScroll={Animated.event(
@@ -502,11 +498,9 @@ export default function ArticleDetail() {
             tint={isDark ? 'dark' : 'light'}
             className="rounded-[32px] overflow-hidden h-16"
             style={{
-              backgroundColor: isDark
-                ? 'rgba(26,26,26,0.8)'
-                : 'rgba(255,255,255,0.85)',
+              backgroundColor: Colors[colorScheme].contentOverlayStrong,
               borderWidth: StyleSheet.hairlineWidth,
-              borderColor: 'rgba(150,150,150,0.1)',
+              borderColor: Colors[colorScheme].contentBorder,
             }}
           >
             <View className="flex-row items-center px-5 h-full bg-transparent">

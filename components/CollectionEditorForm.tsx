@@ -36,6 +36,7 @@ export function CollectionEditorForm({
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme];
   const primaryColor = useThemeColor({}, 'primary');
+  const onPrimary = useThemeColor({}, 'onPrimary');
 
   return (
     <View style={styles.container}>
@@ -111,14 +112,9 @@ export function CollectionEditorForm({
         ]}
       >
         {pending ? (
-          <ActivityIndicator color={Colors[colorScheme].onPrimary} />
+          <ActivityIndicator color={onPrimary} />
         ) : (
-          <Text
-            style={[
-              styles.submitLabel,
-              { color: Colors[colorScheme].onPrimary },
-            ]}
-          >
+          <Text style={[styles.submitLabel, { color: onPrimary }]}>
             {submitLabel}
           </Text>
         )}

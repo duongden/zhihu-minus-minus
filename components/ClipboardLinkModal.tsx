@@ -13,7 +13,7 @@ export function ClipboardLinkModal({
   onClose: () => void;
   onOpen: () => void;
 }) {
-  const primaryColor = useThemeColor({}, 'primary');
+  const linkColor = useThemeColor({}, 'link');
 
   return (
     <AppDialog
@@ -27,7 +27,7 @@ export function ClipboardLinkModal({
         { label: '立即打开', onPress: onOpen, variant: 'primary' },
       ]}
     >
-      <Text style={[styles.url, { color: primaryColor }]} numberOfLines={3}>
+      <Text style={[styles.url, { color: linkColor }]} numberOfLines={3}>
         {url}
       </Text>
     </AppDialog>

@@ -13,7 +13,6 @@ import {
   type VoteContentType,
   voteContent,
 } from '@/api/zhihu';
-import Colors from '@/constants/Colors';
 import { colors } from '@/constants/designTokens';
 import { updateContentInteractionCaches } from '@/utils/contentCache';
 import { showToast } from '@/utils/toast';
@@ -48,10 +47,11 @@ export const LikeButton = ({
   const loading = pendingIdentity === identity;
   const queryClient = useQueryClient();
   const scale = useSharedValue(1);
+  const primaryColor = useThemeColor({}, 'primary');
+  const onPrimary = useThemeColor({}, 'onPrimary');
+  const borderColor = useThemeColor({}, 'border');
   const colorScheme = useColorScheme();
-
-  const tintColor = useThemeColor({}, 'primary');
-  const borderColor = Colors[colorScheme].border;
+  const mutedColor = colors[colorScheme].iconMuted;
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: FlashList identity changes must reset local reaction state even when the next item has equal initial values.
   React.useEffect(() => {
@@ -60,6 +60,14 @@ export const LikeButton = ({
   }, [identity, initialCount, initialVoted]);
 
   const isUpvoted = voted === 1;
+  const foregroundColor =
+    variant === 'default'
+      ? isUpvoted
+        ? onPrimary
+        : primaryColor
+      : isUpvoted
+        ? primaryColor
+        : mutedColor;
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -145,18 +153,17 @@ export const LikeButton = ({
       }
       style={[
         variant === 'default' && {
-          backgroundColor: isUpvoted ? tintColor : borderColor,
+          backgroundColor: isUpvoted ? primaryColor : borderColor,
         },
         (variant === 'ghost' || variant === 'minimal') && {
           borderRadius: 99,
         },
-        loading && { opacity: 0.7 },
       ]}
     >
       {loading ? (
         <ActivityIndicator
           size="small"
-          color={tintColor}
+          color={foregroundColor}
           style={{ marginRight: 4 }}
         />
       ) : (
@@ -168,19 +175,7 @@ export const LikeButton = ({
         >
           <VoteTriangle
             active={isUpvoted}
-            color={
-              variant === 'minimal'
-                ? isUpvoted
-                  ? tintColor
-                  : colors[colorScheme].iconMuted
-                : isUpvoted
-                  ? variant === 'default'
-                    ? colors[colorScheme].textInverse
-                    : tintColor
-                  : variant === 'default'
-                    ? tintColor
-                    : colors[colorScheme].iconMuted
-            }
+            color={foregroundColor}
             direction="up"
             size={variant === 'default' ? 18 : variant === 'minimal' ? 24 : 16}
           />
@@ -188,7 +183,7 @@ export const LikeButton = ({
             <Text
               className="text-sm ml-0.5 font-bold"
               style={{
-                color: isUpvoted ? tintColor : colors[colorScheme].iconMuted,
+                color: foregroundColor,
               }}
             >
               {count}
@@ -200,13 +195,7 @@ export const LikeButton = ({
         <Text
           className={`ml-1 text-[13px] font-semibold ${variant === 'ghost' ? 'text-xs ml-0.5' : ''}`}
           style={{
-            color: isUpvoted
-              ? variant === 'default'
-                ? colors[colorScheme].textInverse
-                : tintColor
-              : variant === 'default'
-                ? tintColor
-                : colors[colorScheme].iconMuted,
+            color: foregroundColor,
           }}
         >
           {typeof count === 'number' && count > 0

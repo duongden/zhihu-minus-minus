@@ -6,6 +6,7 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { colors } from '@/constants/designTokens';
 import { useAuthStore } from '@/store/useAuthStore';
+import { contrastingText } from '@/utils/colorContrast';
 import { BouncyButton } from './BouncyButton';
 import { Text, View } from './Themed';
 
@@ -48,7 +49,7 @@ const HotCardComponent = ({ item }: { item: HotItem }) => {
           : Colors[colorScheme].backgroundTertiary;
   const rankTextColor =
     item.rank <= 3
-      ? colors[colorScheme].textInverse
+      ? contrastingText(rankBgColor)
       : Colors[colorScheme].textSecondary;
 
   // Dynamic Label Style

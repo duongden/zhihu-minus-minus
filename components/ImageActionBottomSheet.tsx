@@ -1,6 +1,6 @@
 import type React from 'react';
 import { ActionSheet } from '@/components/overlays/ActionSheet';
-import { colors } from '@/constants/designTokens';
+import { useRuntimeThemeColors } from '@/components/Themed';
 import { copyImageUrl, saveImageToGallery } from '@/utils/saveImage';
 
 export interface ImageActionBottomSheetProps {
@@ -22,6 +22,7 @@ export const ImageActionBottomSheet: React.FC<ImageActionBottomSheetProps> = ({
   imageUrl,
   onClose,
 }) => {
+  const colors = useRuntimeThemeColors();
   if (!imageUrl) return null;
 
   return (
@@ -35,16 +36,16 @@ export const ImageActionBottomSheet: React.FC<ImageActionBottomSheetProps> = ({
           key: 'save',
           label: '保存到系统相册',
           icon: 'download-outline',
-          color: colors.light.imageActionSave,
-          iconBackgroundColor: colors.light.imageActionSaveBackground,
+          color: colors.imageActionSave,
+          iconBackgroundColor: colors.imageActionSaveBackground,
           onPress: () => saveImageToGallery(imageUrl),
         },
         {
           key: 'copy',
           label: '复制图片链接',
           icon: 'copy-outline',
-          color: colors.light.imageActionCopy,
-          iconBackgroundColor: colors.light.imageActionCopyBackground,
+          color: colors.imageActionCopy,
+          iconBackgroundColor: colors.imageActionCopyBackground,
           onPress: () => copyImageUrl(imageUrl),
         },
       ]}

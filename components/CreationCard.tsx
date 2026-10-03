@@ -99,6 +99,7 @@ export const CreationCard = React.forwardRef<
     const router = useRouter();
     const colorScheme = useColorScheme();
     const primaryColor = useThemeColor({}, 'primary');
+    const cardBackground = useThemeColor({}, 'backgroundSecondary');
     const warningColor = useThemeColor({}, 'warning');
     const [localExpanded, setLocalExpanded] = React.useState(false);
     const [menuVisible, setMenuVisible] = React.useState(false);
@@ -246,7 +247,7 @@ export const CreationCard = React.forwardRef<
         onPress={handlePress}
         style={[
           {
-            backgroundColor: Colors[colorScheme].backgroundSecondary,
+            backgroundColor: cardBackground,
             borderRadius: 12,
             borderWidth: 1.5,
             borderColor: isCollapsedHighlighted ? primaryColor : 'transparent',
@@ -333,14 +334,7 @@ export const CreationCard = React.forwardRef<
                   className="absolute inset-x-0 bottom-0 h-24 z-[100]"
                 >
                   <LinearGradient
-                    colors={[
-                      colorScheme === 'dark'
-                        ? 'rgba(26, 26, 26, 0)'
-                        : 'rgba(255, 255, 255, 0)',
-                      colorScheme === 'dark'
-                        ? 'rgba(26, 26, 26, 1)'
-                        : 'rgba(255, 255, 255, 1)',
-                    ]}
+                    colors={[`${cardBackground}00`, cardBackground]}
                     style={{
                       position: 'absolute',
                       left: 0,

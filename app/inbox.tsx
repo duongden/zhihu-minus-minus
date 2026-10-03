@@ -20,6 +20,9 @@ export default function InboxScreen() {
   const navigation = useNavigation();
   const queryClient = useQueryClient();
   const primaryColor = useThemeColor({}, 'primary');
+  const dangerColor = useThemeColor({}, 'danger');
+  const onDanger = useThemeColor({}, 'onDanger');
+  const backgroundColor = useThemeColor({}, 'background');
   const borderColor = Colors[colorScheme].border;
 
   useEffect(() => {
@@ -80,8 +83,17 @@ export default function InboxScreen() {
             className="w-[52px] h-[52px] rounded-full bg-surface-tertiary dark:bg-surface-tertiary-dark"
           />
           {item.unread_count > 0 && (
-            <View className="absolute top-0 right-0 bg-[#ff4d4f] rounded-full min-w-[18px] h-[18px] justify-center items-center px-1 border-2 border-white dark:border-black">
-              <Text className="text-white text-[10px] font-bold">
+            <View
+              className="absolute top-0 right-0 rounded-full min-w-[18px] h-[18px] justify-center items-center px-1 border-2"
+              style={{
+                backgroundColor: dangerColor,
+                borderColor: backgroundColor,
+              }}
+            >
+              <Text
+                className="text-[10px] font-bold"
+                style={{ color: onDanger }}
+              >
                 {item.unread_count > 99 ? '99+' : item.unread_count}
               </Text>
             </View>

@@ -1,39 +1,51 @@
 # 设计 Token
 
-应用层的视觉值统一维护在 [`constants/designTokens.json`](../constants/designTokens.json) 中。它是 TypeScript、React Native 和 NativeWind 共用的源文件，避免在 `Colors.ts`、`tailwind.config.js` 和页面之间重复抄写同一组颜色。
+应用颜色由 [`constants/designTokens.json`](../constants/designTokens.json) 的基础值与色阶配置，经 [`resolveThemeColors`](../constants/theme.ts) 统一生成。React Native、NativeWind、React Navigation 与富文本后端读取同一份运行时 palette。
 
-## 分层
+## 色阶与解析
 
-- `colors.light` / `colors.dark`：默认主题的完整颜色，两个模式使用相同的 token 键。优先使用 `text`、`backgroundSecondary`、`border`、`iconMuted` 等语义 token，不要直接使用 hex 值。
-- `themeAdjustments.readingBackground`：`soft`、`warm`、`dim` 各自完整的 light/dark 颜色。每套显式定义全部颜色 token，文字、边框、控件、遮罩、徽标和聊天气泡等均与背景配套；品牌、状态、热榜和图片操作色保留原有语义。`default` 在解析器中直接引用 `colors`，避免重复维护。
-- `themeAdjustments.textContrast`：文字对比度覆盖；`standard` 为空，保留当前预设的文字色，`high` 只覆盖正文、次要和弱化文字。
-- `typography`：系统字体、常用字号、行高比例和字重。
-- `radii` / `opacity`：通用圆角和交互透明度。
-- `effects`：渐变遮罩和模糊层等跨组件效果。
+主题使用 Google 的纯 JavaScript [`@material/material-color-utilities`](https://github.com/material-foundation/material-color-utilities) HCT 算法。以用户选择的主色为种子，保留主色原值；页面、卡片、正文文字、中性控件和边框采用同色相、低彩度的不同明度。主色图标、短文字按钮及透明浅底继续使用已有主色与 alpha 配方。灰、黑、白种子保持中性，避免引入不存在的色相。
 
-## 使用方式
+- `colors.light / dark` 保留基础语义值和旧代码兼容键，包括品牌、危险、成功与警告等颜色。
+- `themeAdjustments.readingBackground` 只定义四档阅读体验的中性色彩度和 light/dark 明度，不再复制数百个相同色值。暖纸以暖色色相为主，使用 Material harmonization 向种子轻微偏移。
+- `themeAdjustments.textContrast.high` 指定高对比文字明度。
+- `typography / radii / opacity / effects` 继续定义静态排版、形状和交互效果；遮罩的 alpha 形状可以固定，实际表面颜色应来自运行时 token。
 
-React Native 的运行时颜色使用 `useThemeColor`，字号等静态值使用 `@/constants/designTokens`：
+解析顺序为：规范化种子与预设 → HCT 低彩度中性色阶 → 分层或扁平表面 → 文字对比度 → 实心前景校验。正文、次要文字、三级文字和链接在页面、卡片及中性控件上至少满足 4.5:1；高对比正文至少 7:1。实心按钮按实际背景选择黑或白，使对比度至少 4.5:1。原有强调色与透明底不纳入这项文字对比度保证。解析结果不可变，缓存上限 64 套，避免取色器拖动造成无限缓存。
+
+## 配对使用颜色
+
+| 用途 | 背景 | 文字、图标、加载指示器 |
+| --- | --- | --- |
+| 主色实心按钮 | `primary` | `onPrimary` |
+| 主色透明浅底 | `primaryTransparent` 或 `primary_XX` | 原有 `primary`（既有组件配色保持不变） |
+| 危险实心按钮或角标 | `danger` | `onDanger` |
+| 成功实心按钮 | `success` | `onSuccess` |
+| 警告实心按钮 | `warning` | `onWarning` |
+| 图标和短文字按钮 | 原有表面或透明底 | 原始 `primary`、`danger / success / warning` 等强调色 |
+| 长提示文字及正文链接 | 页面或卡片 | `link` |
+
+`primaryTransparent` 保留透明语义：默认主色为 light 0.1 / dark 0.15，自定义非默认主色为原有 `26` alpha；`primary_XX` 直接拼接当前主色与指定 alpha。`tint` 保留原始主色，`tabIconSelected` 保留既有默认/自定义规则。`link` 延续对原始主色做最小可读性调整的算法，不生成新的 HCT 强调色阶。`surface` 等于 `backgroundSecondary`；`textInverse` 仍表示反色表面文字，不能当作所有实心按钮的前景。
+
+特殊固定底色（例如热榜名次）使用 `contrastingText(actualBackground)`；任意非主题背景上的彩色前景使用 `readableColor(foreground, [actualBackground])`。透明颜色必须先考虑实际承载表面，不能拿透明字符串当作不透明颜色计算。照片上的固定遮罩与知乎内容自带颜色属于内容边界，不由全局主题自动改写。
+
+## 运行时入口
 
 ```ts
 import { useThemeColor } from '@/components/Themed';
-import { typography } from '@/constants/designTokens';
 
-// 在组件或 hook 顶层调用。
-const color = useThemeColor({}, 'textSecondary');
-const titleStyle = { color, fontSize: typography.fontSize.title };
+const background = useThemeColor({}, 'primary');
+const foreground = useThemeColor({}, 'onPrimary');
 ```
 
-NativeWind 的语义 class 通过根布局 `vars` 读取同一套运行时 palette，例如 `bg-surface`、`text-foreground`、`text-tertiary`、`border-border` 和 `bg-primary`。`constants/Colors.ts` 仅作为旧代码的兼容入口，新代码不要再从那里新增依赖。
+批量读取可用 `useRuntimeThemeColors()`。旧 `Colors` getter 解析同一 palette；旧组件通过 `useColorScheme` 订阅颜色偏好。不要在模块级 StyleSheet 中保存运行时颜色，避免打开页面后切换主色仍保留旧值。
 
-运行时由 `resolveThemeColors` 按“完整阅读预设 → 文字对比度 → 表面层次 → 自定义主色”的顺序解析，随后修正文字/链接对比度并生成 `onPrimary`，供 `useRuntimeThemeColors`、`useThemeColor`、React Navigation 和三个正文后端使用。预设通过 `ColorToken` 的完整映射进行类型检查，新增基础颜色时必须同步补齐所有预设。解析器会复制预设，用户覆盖不会改写 token 源数据。知乎接口返回的标签色等内容数据可以保留在 feature 边界内，不应反向写入全局设计 token。
+NativeWind 根级 `vars` 同步同一 palette。不透明颜色以六位 HEX 转 RGB 通道，透明 token 直接传 CSS 颜色字符串；`bg-primary text-on-primary`、`bg-danger text-on-danger` 等实心填充使用成对语义 class。富文本仅从统一公共入口读取运行时主题。
 
-NativeWind 的 `bg-primary` 保留自定义主色；`text-link` 使用满足阅读背景对比度的派生主色，主色纯色按钮使用 `text-on-primary`。旧 `Colors` 入口解析并缓存同一 runtime palette，`useColorScheme` 订阅颜色偏好以兼容旧组件；直接读取基础 `colors` 或在模块级 StyleSheet 中保存运行时值仍不会自动更新。新代码使用运行时 hook。
+主题模式仍由 `store/useThemeStore.ts` 管理 `system / light / dark`，现有原生 Appearance 与 NativeWind 同步路径不变。本实现从应用内主色生成配色，没有接入 Android 壁纸颜色提取；纯 JS 算法在各平台共用，不新增原生模块。
 
-主题模式由 `store/useThemeStore.ts` 管理，支持 `system`、`light` 和 `dark`。`system` 模式会监听操作系统外观变化，手动切换后的模式会持久化。涉及主色的原生组件样式使用运行时 hook 或语义 class，不把运行时值提前固定在模块级常量中。
+## 验证
 
-主题同步入口在原生端通过 `TurboModuleRegistry` 调用 `Appearance` 模块，传入 `light`、`dark` 或 `unspecified`，再将实际外观事件同步给 React Native 与 NativeWind；Web 端使用 NativeWind 的公开主题 API。这条原生兼容路径最初用于规避旧版本运行时的 `null` 参数和系统颜色缓存问题。当前锁定的 CSS interop 已对 RN 0.82+ 使用 `unspecified`，RN 0.83.10 的 JS setter 也会读取实际系统颜色，不应再把旧缺陷当作当前版本事实。后续若简化兼容路径，须先保留并通过下面的主题回归测试。
+运行 `npm test -- tests/runtimeTheme.test.tsx tests/themeMode.test.js tests/actionColorContrast.test.tsx tests/appearanceSettings.test.tsx --runInBand`，再执行 `npm run check`。配色矩阵覆盖明暗模式、阅读预设、文字对比度、表面层次，以及白、黑、黄和其他高彩度种子。组件测试同时检查实心控件的文字、图标和加载态前景，以及浅底与强调色原有配方未被改写；系统模式测试继续覆盖 OS 外观同步。
 
-修改主题同步或升级相关依赖后运行 `npm test -- tests/themeMode.test.js tests/runtimeTheme.test.tsx --runInBand`。测试加载未修改的 Appearance 和 NativeWind 原生运行时代码，模拟 Android 的非空参数约束和异步外观事件，覆盖冷启动、手动模式、恢复跟随系统和回到前台。
-
-文字与背景的用户调整方案见 [`docs/THEME_CUSTOMIZATION.md`](./THEME_CUSTOMIZATION.md)，其中区分了主题预设、低门槛调节和高级自定义三层能力。
+真机验收应查看实际正文、设置预览、投票/关注/危险按钮，覆盖高亮度种子与暗色模式；自动对比度测试不能替代透明叠层、照片或平台控件的视觉检查。

@@ -271,12 +271,9 @@ export default function PinDetailScreen() {
           tint={colorScheme === 'dark' ? 'dark' : 'light'}
           className="rounded-[32px] overflow-hidden h-16"
           style={{
-            backgroundColor:
-              colorScheme === 'dark'
-                ? 'rgba(26,26,26,0.8)'
-                : 'rgba(255,255,255,0.85)',
+            backgroundColor: Colors[colorScheme].contentOverlayStrong,
             borderWidth: StyleSheet.hairlineWidth,
-            borderColor: 'rgba(150,150,150,0.1)',
+            borderColor: Colors[colorScheme].contentBorder,
           }}
         >
           <View className="flex-row items-center px-5 h-full bg-transparent">

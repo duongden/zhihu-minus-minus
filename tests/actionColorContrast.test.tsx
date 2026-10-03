@@ -1,0 +1,196 @@
+import { fireEvent, render } from '@testing-library/react-native';
+import { voteContent } from '../api/zhihu';
+import { voteContent as voteContentDirect } from '../api/zhihu/voters';
+import { DownvoteButton } from '../components/DownvoteButton';
+import { LikeButton } from '../components/LikeButton';
+import { AppDialog } from '../components/overlays/AppDialog';
+import { resolveThemeColors } from '../constants/theme';
+import { useSettingsStore } from '../store/useSettingsStore';
+import { contrastRatio } from '../utils/colorContrast';
+
+let mockColorScheme: 'light' | 'dark' = 'light';
+
+jest.mock('../api/zhihu', () => ({
+  voteContent: jest.fn(),
+  getVoteSuccessMessage: () => '合成结果',
+}));
+jest.mock('../api/zhihu/voters', () => ({
+  voteContent: jest.fn(),
+  getVoteSuccessMessage: () => '合成结果',
+}));
+jest.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({}),
+}));
+jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
+jest.mock('react-native-reanimated', () => ({
+  __esModule: true,
+  default: { View: jest.requireActual('react-native').View },
+  useAnimatedStyle: (callback: () => unknown) => callback(),
+  useSharedValue: (value: number) => ({ value }),
+  withSequence: (...values: number[]) => values.at(-1),
+  withSpring: (value: number) => value,
+  withTiming: (value: number) => value,
+}));
+jest.mock('../components/VoteTriangle', () => ({
+  VoteTriangle: ({ color }: { color: string }) => {
+    const NativeText = jest.requireActual('react-native').Text;
+    return (
+      <NativeText testID="vote-icon" style={{ color }}>
+        ▲
+      </NativeText>
+    );
+  },
+}));
+jest.mock('../components/BouncyButton', () => ({
+  BouncyButton: (props: import('react-native').PressableProps) =>
+    jest
+      .requireActual('react')
+      .createElement(jest.requireActual('react-native').Pressable, {
+        ...props,
+        onPress: (event: import('react-native').GestureResponderEvent) => {
+          void props.onPress?.(event);
+        },
+      }),
+}));
+jest.mock('../components/useColorScheme', () => ({
+  useColorScheme: () => mockColorScheme,
+}));
+jest.mock('../store/useSettingsStore', () => ({
+  useSettingsStore: jest.requireActual('zustand').create(() => ({
+    primaryColor: null,
+    readingBackground: 'warm',
+    textContrast: 'standard',
+    surfaceStyle: 'layered',
+    fontSizeScale: 1,
+    lineHeightScale: 1.5,
+  })),
+}));
+jest.mock('../utils/contentCache', () => ({
+  updateContentInteractionCaches: jest.fn(),
+}));
+jest.mock('../utils/toast', () => ({ showToast: jest.fn() }));
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 48, bottom: 16, left: 0, right: 0 }),
+}));
+
+function currentPalette() {
+  return resolveThemeColors(mockColorScheme, useSettingsStore.getState());
+}
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockColorScheme = 'light';
+  useSettingsStore.setState({ primaryColor: '#ffffff' });
+  jest.mocked(voteContent).mockImplementation(() => new Promise(() => {}));
+  jest
+    .mocked(voteContentDirect)
+    .mockImplementation(() => new Promise(() => {}));
+});
+
+test.each([
+  ['light', '#ffffff'],
+  ['light', '#001144'],
+  ['dark', '#ffffff'],
+  ['dark', '#001144'],
+] as const)('filled vote controls keep text, icons and pending spinners readable in %s with %s', async (scheme, primaryColor) => {
+  mockColorScheme = scheme;
+  useSettingsStore.setState({ primaryColor });
+  const palette = currentPalette();
+  const like = await render(<LikeButton id="synthetic" count={5} voted={1} />);
+  expect(like.getByRole('button')).toHaveStyle({
+    backgroundColor: palette.primary,
+  });
+  expect(like.getByText('5')).toHaveStyle({ color: palette.onPrimary });
+  expect(like.getByTestId('vote-icon')).toHaveStyle({
+    color: palette.onPrimary,
+  });
+  expect(
+    contrastRatio(palette.onPrimary, palette.primary),
+  ).toBeGreaterThanOrEqual(4.5);
+  await fireEvent.press(like.getByRole('button'));
+  expect(like.getByRole('button')).toBeDisabled();
+  expect(
+    like.container.queryAll((node) => node.type === 'ActivityIndicator')[0]
+      .props.color,
+  ).toBe(palette.onPrimary);
+  await like.unmount();
+
+  const downvote = await render(<DownvoteButton id="synthetic" voted={-1} />);
+  expect(downvote.getByRole('button')).toHaveStyle({
+    backgroundColor: palette.primary,
+  });
+  expect(downvote.getByTestId('vote-icon')).toHaveStyle({
+    color: palette.onPrimary,
+  });
+  await fireEvent.press(downvote.getByRole('button'));
+  expect(downvote.getByRole('button')).toBeDisabled();
+  expect(
+    downvote.container.queryAll((node) => node.type === 'ActivityIndicator')[0]
+      .props.color,
+  ).toBe(palette.onPrimary);
+  await downvote.unmount();
+});
+
+test.each([
+  'light',
+  'dark',
+] as const)('unselected votes preserve their original neutral and translucent fills in %s', async (scheme) => {
+  mockColorScheme = scheme;
+  const palette = currentPalette();
+  const like = await render(<LikeButton id="synthetic" count={5} />);
+  expect(like.getByRole('button')).toHaveStyle({
+    backgroundColor: palette.border,
+  });
+  expect(like.getByText('5')).toHaveStyle({
+    color: palette.primary,
+  });
+  expect(like.getByTestId('vote-icon')).toHaveStyle({
+    color: palette.primary,
+  });
+  await like.unmount();
+  const downvote = await render(<DownvoteButton id="synthetic" />);
+  expect(downvote.getByRole('button')).toHaveStyle({
+    backgroundColor: `${palette.primary}1a`,
+  });
+  expect(downvote.getByTestId('vote-icon')).toHaveStyle({
+    color: palette.primary,
+  });
+  await downvote.unmount();
+});
+
+test.each([
+  'ghost',
+  'minimal',
+] as const)('selected %s votes preserve the exact chosen accent for icons and short labels', async (variant) => {
+  const palette = currentPalette();
+  const host = await render(
+    <LikeButton id="synthetic" count={5} voted={1} variant={variant} />,
+  );
+  expect(host.getByText('5')).toHaveStyle({ color: palette.primary });
+  expect(host.getByTestId('vote-icon')).toHaveStyle({ color: palette.primary });
+  expect(palette.primary).toBe('#ffffff');
+  await host.unmount();
+});
+
+test.each([
+  'light',
+  'dark',
+] as const)('destructive dialog actions use the foreground matched to their actual fill in %s', async (scheme) => {
+  mockColorScheme = scheme;
+  const palette = currentPalette();
+  const host = await render(
+    <AppDialog
+      visible
+      title="合成对话框"
+      actions={[{ label: '删除', variant: 'destructive', onPress: jest.fn() }]}
+    />,
+  );
+  expect(host.getByRole('button', { name: '删除' })).toHaveStyle({
+    backgroundColor: palette.danger,
+  });
+  expect(host.getByText('删除')).toHaveStyle({ color: palette.onDanger });
+  expect(
+    contrastRatio(palette.onDanger, palette.danger),
+  ).toBeGreaterThanOrEqual(4.5);
+  await host.unmount();
+});

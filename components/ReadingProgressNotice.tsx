@@ -2,9 +2,8 @@ import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BouncyButton } from '@/components/BouncyButton';
-import { Text, useThemeColor, View } from '@/components/Themed';
-import { useColorScheme } from '@/components/useColorScheme';
-import { colors } from '@/constants/designTokens';
+import { Text, useRuntimeThemeColors, View } from '@/components/Themed';
+import { readableColor } from '@/utils/colorContrast';
 
 interface ReadingProgressNoticeProps {
   visible: boolean;
@@ -22,8 +21,10 @@ export function ReadingProgressNotice({
   bottomOffset = 88,
 }: ReadingProgressNoticeProps) {
   const insets = useSafeAreaInsets();
-  const colorScheme = useColorScheme();
-  const actionColor = useThemeColor({}, 'primary');
+  const colors = useRuntimeThemeColors();
+  const backgroundColor = colors.toastSurface;
+  const actionColor = colors.primary;
+  const textColor = readableColor(colors.text, [backgroundColor]);
   const animation = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -42,11 +43,6 @@ export function ReadingProgressNotice({
     const timer = setTimeout(onDismiss, NOTICE_DURATION_MS);
     return () => clearTimeout(timer);
   }, [animation, onDismiss, visible]);
-
-  const backgroundColor =
-    colorScheme === 'dark'
-      ? colors.dark.backgroundTertiary
-      : colors.dark.toastSurface;
 
   return (
     <Animated.View
@@ -68,7 +64,7 @@ export function ReadingProgressNotice({
       ]}
     >
       <View style={[styles.card, { backgroundColor }]} className="shadow-xl">
-        <Text style={[styles.message, { color: colors.dark.text }]}>
+        <Text style={[styles.message, { color: textColor }]}>
           已定位到上次阅读处
         </Text>
         <BouncyButton

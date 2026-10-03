@@ -11,6 +11,7 @@ import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { ZhihuContent } from '@/features/rich-content';
+import { contrastingText } from '@/utils/colorContrast';
 
 export default function GuestDetailScreen() {
   const router = useRouter();
@@ -24,6 +25,7 @@ export default function GuestDetailScreen() {
   const backgroundColor = Colors[colorScheme].background;
   const cardBg = Colors[colorScheme].backgroundSecondary;
   const tintColor = useThemeColor({}, 'primary');
+  const onPrimary = useThemeColor({}, 'onPrimary');
 
   // 安全解析传递进来的 Feed 项数据
   const item = useMemo<FeedItem | null>(() => {
@@ -57,7 +59,9 @@ export default function GuestDetailScreen() {
           style={{ backgroundColor: tintColor }}
           onPress={() => router.back()}
         >
-          <Text className="text-white font-bold">返回上一页</Text>
+          <Text className="font-bold" style={{ color: onPrimary }}>
+            返回上一页
+          </Text>
         </BouncyButton>
       </View>
     );
@@ -149,9 +153,18 @@ export default function GuestDetailScreen() {
             <View className="flex-row px-5 pt-5 pb-2 bg-transparent items-center">
               <View
                 className="w-6 h-6 rounded-md items-center justify-center mr-2"
-                style={{ backgroundColor: item.rank <= 3 ? '#ff9607' : '#999' }}
+                style={{
+                  backgroundColor: item.rank <= 3 ? '#ff9607' : '#999999',
+                }}
               >
-                <Text className="text-white text-xs font-bold">
+                <Text
+                  className="text-xs font-bold"
+                  style={{
+                    color: contrastingText(
+                      item.rank <= 3 ? '#ff9607' : '#999999',
+                    ),
+                  }}
+                >
                   {item.rank}
                 </Text>
               </View>
@@ -350,7 +363,7 @@ export default function GuestDetailScreen() {
             className="w-full h-12 rounded-full items-center justify-center mb-3.5"
             style={{ backgroundColor: tintColor }}
           >
-            <Text className="text-white text-base font-bold">
+            <Text className="text-base font-bold" style={{ color: onPrimary }}>
               立即登录参与互动
             </Text>
           </BouncyButton>

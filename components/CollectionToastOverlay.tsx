@@ -1,11 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useColorScheme } from '@/components/useColorScheme';
-import { colors } from '@/constants/designTokens';
 import { useCollectionStore } from '@/store/useCollectionStore';
+import { readableColor } from '@/utils/colorContrast';
 import { BouncyButton } from './BouncyButton';
-import { Text, useThemeColor, View } from './Themed';
+import { Text, useRuntimeThemeColors, View } from './Themed';
 
 export function CollectionToastOverlay() {
   const {
@@ -17,8 +16,7 @@ export function CollectionToastOverlay() {
     openSelector,
   } = useCollectionStore();
   const insets = useSafeAreaInsets();
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const colors = useRuntimeThemeColors();
 
   const anim = useRef(new Animated.Value(0)).current;
 
@@ -61,12 +59,9 @@ export function CollectionToastOverlay() {
     }
   };
 
-  // We enforce a solid dark pill regardless of theme because dark cards on a bright screen have extreme contrast and premium feel
-  const backgroundColor = isDark
-    ? colors.dark.backgroundTertiary
-    : colors.dark.toastSurface;
-  const textColor = colors.dark.text;
-  const actionColor = useThemeColor({}, 'primary');
+  const backgroundColor = colors.toastSurface;
+  const textColor = readableColor(colors.text, [backgroundColor]);
+  const actionColor = colors.primary;
 
   return (
     <Animated.View
