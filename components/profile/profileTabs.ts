@@ -5,6 +5,7 @@ export const PROFILE_TABS = [
   { key: 'articles', label: '文章', countKey: 'articles_count' },
   { key: 'questions', label: '提问', countKey: 'question_count' },
   { key: 'pins', label: '想法', countKey: 'pins_count' },
+  { key: 'votes', label: '我赞同过', countKey: undefined },
 ] as const;
 
 export type ProfileTabKey = (typeof PROFILE_TABS)[number]['key'];

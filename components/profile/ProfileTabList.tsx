@@ -56,6 +56,7 @@ export interface ProfileTabListProps {
   renderItem: (item: unknown) => ReactNode;
   keyExtractor: (item: unknown) => string;
   listHeader?: ReactNode;
+  emptyState?: ReactNode;
 }
 
 interface PendingScroll {
@@ -81,6 +82,7 @@ export const ProfileTabList = forwardRef<
     renderItem,
     keyExtractor,
     listHeader,
+    emptyState,
   },
   ref,
 ) {
@@ -323,6 +325,8 @@ export const ProfileTabList = forwardRef<
             message={`${label}加载失败`}
             onRetry={() => void query.refetch().catch(() => undefined)}
           />
+        ) : emptyState ? (
+          <>{emptyState}</>
         ) : (
           <View className="items-center py-20 bg-transparent">
             <Text type="secondary">暂无{label}内容</Text>

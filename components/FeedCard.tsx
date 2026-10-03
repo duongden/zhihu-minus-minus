@@ -142,6 +142,7 @@ const FeedCardComponent = ({ item, tab }: FeedCardProps) => {
     () => ({ uri: item.author.avatar }),
     [item.author.avatar],
   );
+  const authorId = item.author.url_token || item.author.id;
   const thumbnailSource = useMemo(
     () => (item.image ? { uri: item.image } : undefined),
     [item.image],
@@ -366,11 +367,12 @@ const FeedCardComponent = ({ item, tab }: FeedCardProps) => {
 
         {/* 热区1：点击作者头像/姓名 -> 用户页 */}
         <BouncyButton
+          disabled={!authorId}
           onPress={() =>
             router.push({
               pathname: '/user/[id]',
               params: {
-                id: item.author.url_token || item.author.id,
+                id: authorId,
                 avatar: item.author.avatar,
               },
             })

@@ -2,12 +2,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render } from '@testing-library/react-native';
 import type { PropsWithChildren } from 'react';
 import {
+  type FeedItem,
   getMemberActivities,
   getMemberRelations,
   getMemberWithFallback,
   searchContent,
 } from '../api/zhihu';
 import {
+  getMemberAnswersVotedByMe,
   getRecentMemberActivities,
   type ZhihuMember,
 } from '../api/zhihu/member';
@@ -28,6 +30,7 @@ const mockPagerUnmount = jest.fn();
 const mockListMount = jest.fn();
 const mockListUnmount = jest.fn();
 const mockListProps = new Map<string, ProfileTabListProps>();
+const mockFeedItems = new Map<string, FeedItem>();
 const member: ZhihuMember = {
   id: 'member-hash-id',
   url_token: 'member-readable-token',
@@ -36,7 +39,8 @@ const member: ZhihuMember = {
   avatar_url: '',
 };
 let mockRoute: { id: string; tab?: string };
-let mockAuthState: { cookies: string; me: ZhihuMember };
+let mockAuthState: { cookies: string; me: ZhihuMember | null };
+let mockSessionVersion: number;
 
 jest.mock('expo-router', () => ({
   Stack: { Screen: () => null },
@@ -57,15 +61,25 @@ jest.mock('../api/zhihu', () => ({
   followMember: jest.fn(),
   unfollowMember: jest.fn(),
   getContentVoteCount: () => 0,
-  getContentVoteState: () => 0,
+  getContentVoteState: (
+    _type: string,
+    item: { relationship?: { voting?: number } },
+  ) => item.relationship?.voting ?? 0,
   MEMBER_ANSWERS_INCLUDE: 'synthetic-answer-fields',
 }));
 jest.mock('../api/zhihu/member', () => ({
+  getMemberAnswersVotedByMe: jest.fn(),
   getRecentMemberActivities: jest.fn(),
 }));
 jest.mock('../api/zhihu/history', () => ({ addReadHistory: jest.fn() }));
+jest.mock('../api/client', () => ({
+  hasAuthenticationCookie: (cookie: string | null | undefined) =>
+    typeof cookie === 'string' && /(?:^|;\s*)z_c0=[^;\s]+/.test(cookie),
+}));
 jest.mock('../store/useAuthStore', () => ({
-  useAuthStore: () => mockAuthState,
+  useAuthStore: (selector?: (state: typeof mockAuthState) => unknown) =>
+    selector ? selector(mockAuthState) : mockAuthState,
+  getAuthSessionVersion: () => mockSessionVersion,
 }));
 jest.mock('../store/useSettingsStore', () => ({
   useSettingsStore: jest.requireActual('zustand').create(() => ({
@@ -111,10 +125,12 @@ jest.mock('../components/profile/ProfileHeader', () => ({
       ),
 }));
 jest.mock('../components/FeedCard', () => ({
-  FeedCard: ({ item }: { item: { title: string } }) =>
-    jest
+  FeedCard: ({ item }: { item: FeedItem }) => {
+    mockFeedItems.set(item.id, item);
+    return jest
       .requireActual('react')
-      .createElement(jest.requireActual('react-native').Text, null, item.title),
+      .createElement(jest.requireActual('react-native').Text, null, item.title);
+  },
 }));
 jest.mock('react-native-reanimated', () => {
   const react = jest.requireActual<typeof import('react')>('react');
@@ -168,6 +184,11 @@ jest.mock('../components/profile/ProfileTabList', () => {
         jest.requireActual('react-native').View,
         { testID: `profile-list-${props.label}` },
         props.listHeader,
+        props.query.data.length === 0 &&
+          !props.query.isLoading &&
+          !props.query.isError
+          ? props.emptyState
+          : null,
         props.query.data.map((item) =>
           react.createElement(
             react.Fragment,
@@ -185,22 +206,50 @@ const emptyPage = {
   data: [],
   paging: { is_end: true, is_start: true, next: '', previous: '', totals: 0 },
 };
+const votedAnswer = {
+  id: 'voted-answer-id',
+  type: 'answer' as const,
+  author: {
+    id: member.id,
+    url_token: member.url_token,
+    name: member.name,
+    avatar_url: 'https://example.com/answer-author.jpg',
+    headline: '回答作者签名',
+    type: 'people' as const,
+  },
+  question: {
+    id: 'voted-question-id',
+    title: '我赞同过的回答所属问题',
+    type: 'question' as const,
+  },
+  excerpt: '合成回答摘要',
+  content: '<p>合成回答正文</p>',
+  comment_count: 3,
+  voteup_count: 12,
+  created_time: 1,
+  updated_time: 2,
+  relationship: { voting: 1 },
+};
 
 beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
   mockListProps.clear();
+  mockFeedItems.clear();
   mockRoute = { id: 'member-readable-token' };
-  mockAuthState = { cookies: 'synthetic-session', me: member };
+  mockAuthState = { cookies: 'z_c0=synthetic-session', me: member };
+  mockSessionVersion = 1;
   client = new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: Infinity, staleTime: Infinity },
     },
   });
   client.setQueryData(['user-detail', mockRoute.id], member);
+  client.setQueryData(['me'], member);
   jest.mocked(getMemberWithFallback).mockResolvedValue(member);
   jest.mocked(getMemberActivities).mockResolvedValue(emptyPage);
   jest.mocked(getMemberRelations).mockResolvedValue(emptyPage);
+  jest.mocked(getMemberAnswersVotedByMe).mockResolvedValue(emptyPage);
   jest.mocked(searchContent).mockResolvedValue(emptyPage);
   jest.mocked(getRecentMemberActivities).mockResolvedValue({
     ...emptyPage,
@@ -251,7 +300,7 @@ test.each([
   const host = await render(screen());
   expect(
     host.getAllByRole('tab').map((tab) => tab.props.accessibilityLabel),
-  ).toEqual(['动态', '创作', '回答', '文章', '提问', '想法']);
+  ).toEqual(['动态', '创作', '回答', '文章', '提问', '想法', '我赞同过']);
   expect(host.getByTestId('profile-owner')).toHaveTextContent(
     ownProfile ? '自己的主页' : '其他人的主页',
   );
@@ -405,5 +454,372 @@ test('creation cards of different types retain distinct list keys when their IDs
   const keys = list?.query.data.map(list.keyExtractor);
   expect(keys).toHaveLength(2);
   expect(new Set(keys).size).toBe(2);
+  await host.unmount();
+});
+
+test.each([
+  true,
+  false,
+])('voted answers load after visiting the tab for own profile: %s', async (ownProfile) => {
+  mockAuthState.me = ownProfile
+    ? member
+    : { ...member, id: 'other-member', url_token: 'other-token' };
+  client.setQueryData(['me'], mockAuthState.me);
+  jest.mocked(getMemberAnswersVotedByMe).mockResolvedValue({
+    ...emptyPage,
+    data: [votedAnswer],
+    paging: { ...emptyPage.paging, totals: 1 },
+  });
+  const host = await render(screen());
+  await flushQueries();
+
+  expect(host.getByTestId('profile-owner')).toHaveTextContent(
+    ownProfile ? '自己的主页' : '其他人的主页',
+  );
+  expect(getMemberAnswersVotedByMe).not.toHaveBeenCalled();
+  expect(host.getByRole('tab', { name: '创作' })).toBeSelected();
+
+  await fireEvent.press(host.getByRole('tab', { name: '我赞同过' }));
+  expect(mockSetPage).toHaveBeenLastCalledWith(6);
+  await act(() =>
+    mockPagerProps.onPageSelected({ nativeEvent: { position: 6 } }),
+  );
+  await flushQueries();
+  expect(getMemberAnswersVotedByMe).toHaveBeenCalledTimes(1);
+  expect(getMemberAnswersVotedByMe).toHaveBeenCalledWith(
+    member.url_token,
+    0,
+    expect.objectContaining({ aborted: false }),
+  );
+  expect(host.getByRole('tab', { name: '我赞同过' })).toBeSelected();
+  expect(mockListProps.get('我赞同过')?.active).toBe(true);
+  expect(host.getByText(votedAnswer.question.title)).toBeTruthy();
+
+  await act(() =>
+    mockPagerProps.onPageSelected({ nativeEvent: { position: 1 } }),
+  );
+  await act(() =>
+    mockPagerProps.onPageSelected({ nativeEvent: { position: 6 } }),
+  );
+  await flushQueries();
+  expect(getMemberAnswersVotedByMe).toHaveBeenCalledTimes(1);
+  expect(mockPagerUnmount).not.toHaveBeenCalled();
+  expect(mockListUnmount).not.toHaveBeenCalled();
+  await host.unmount();
+});
+
+test('the votes route counts answers by this profile author that the current account upvoted', async () => {
+  mockRoute.tab = 'votes';
+  mockAuthState.me = {
+    ...member,
+    id: 'current-account-id',
+    url_token: 'current-account-token',
+  };
+  client.setQueryData(['me'], mockAuthState.me);
+  client.setQueryData(['user-detail', mockRoute.id], {
+    ...member,
+    voteup_count: 9999,
+  });
+  jest.mocked(getMemberAnswersVotedByMe).mockResolvedValue({
+    ...emptyPage,
+    data: [votedAnswer],
+    paging: { ...emptyPage.paging, totals: 17 },
+  });
+  const host = await render(screen());
+  await flushQueries();
+
+  expect(mockPagerProps.initialPage).toBe(6);
+  expect(host.getByRole('tab', { name: '我赞同过' })).toBeSelected();
+  expect(getRecentMemberActivities).not.toHaveBeenCalled();
+  expect(getMemberRelations).not.toHaveBeenCalled();
+  expect(host.getByText('我赞同过 17')).toBeTruthy();
+  expect(
+    host.getByText('我赞同过 · 17', { includeHiddenElements: true }),
+  ).toBeTruthy();
+  expect(host.queryByText('我赞同过 9999')).toBeNull();
+  expect(mockFeedItems.get(votedAnswer.id)).toMatchObject({
+    id: votedAnswer.id,
+    type: 'answers',
+    title: votedAnswer.question.title,
+    questionId: votedAnswer.question.id,
+    author: {
+      id: votedAnswer.author.id,
+      url_token: votedAnswer.author.url_token,
+      name: votedAnswer.author.name,
+      avatar: votedAnswer.author.avatar_url,
+      headline: votedAnswer.author.headline,
+    },
+    voted: 1,
+  });
+  expect(mockFeedItems.get(votedAnswer.id)?.author.id).toBe(member.id);
+  expect(mockFeedItems.get(votedAnswer.id)?.author.id).not.toBe(
+    mockAuthState.me.id,
+  );
+  expect(mockListProps.get('我赞同过')?.listHeader).toBeUndefined();
+  await host.unmount();
+});
+
+test('unknown voted-answer totals stay hidden and missing authors do not become the profile owner', async () => {
+  mockRoute.tab = 'votes';
+  client.setQueryData(['me'], member);
+  client.setQueryData(['user-detail', mockRoute.id], {
+    ...member,
+    voteup_count: 9999,
+  });
+  jest.mocked(getMemberAnswersVotedByMe).mockResolvedValue({
+    data: [
+      {
+        ...votedAnswer,
+        author: {
+          id: '',
+          url_token: '',
+          name: '',
+          avatar_url: '',
+          type: 'people',
+        },
+      },
+    ],
+    paging: { is_end: true, is_start: true, next: '', previous: '' },
+  });
+  const host = await render(screen());
+  await flushQueries();
+
+  expect(
+    host.getAllByText('我赞同过', { includeHiddenElements: true }),
+  ).toHaveLength(2);
+  expect(mockFeedItems.get(votedAnswer.id)?.author).toMatchObject({
+    id: '',
+    url_token: '',
+    name: '匿名用户',
+    headline: '',
+  });
+  await host.unmount();
+});
+
+test('zero voted-answer totals appear in the tab and toolbar', async () => {
+  mockRoute.tab = 'votes';
+  client.setQueryData(['me'], member);
+  const host = await render(screen());
+  await flushQueries();
+
+  expect(host.getByText('我赞同过 0')).toBeTruthy();
+  expect(
+    host.getByText('我赞同过 · 0', { includeHiddenElements: true }),
+  ).toBeTruthy();
+  expect(mockListProps.get('我赞同过')?.query.data).toEqual([]);
+  expect(host.getByText('暂无我赞同过的回答')).toBeTruthy();
+  await host.unmount();
+});
+
+test('voted-answer query errors, retry and pagination reach the profile list', async () => {
+  mockRoute.tab = 'votes';
+  client.setQueryData(['me'], member);
+  jest
+    .mocked(getMemberAnswersVotedByMe)
+    .mockRejectedValue(new Error('offline'));
+  const host = await render(screen());
+  await flushQueries();
+
+  expect(mockListProps.get('我赞同过')?.query.isError).toBe(true);
+  expect(mockListProps.get('我赞同过')?.query.isLoading).toBe(false);
+  expect(mockListProps.get('我赞同过')?.query.data).toEqual([]);
+  jest.mocked(getMemberAnswersVotedByMe).mockResolvedValueOnce({
+    data: [votedAnswer],
+    paging: {
+      ...emptyPage.paging,
+      is_end: false,
+      next: 'https://www.zhihu.com/api/v4/members/member-readable-token/relations/vote?offset=20',
+      totals: 2,
+    },
+  });
+  await act(async () => {
+    await mockListProps.get('我赞同过')?.query.refetch();
+  });
+  await flushQueries();
+  expect(mockListProps.get('我赞同过')?.query.isError).toBe(false);
+  expect(mockListProps.get('我赞同过')?.query.hasNextPage).toBe(true);
+  expect(host.getByText(votedAnswer.question.title)).toBeTruthy();
+
+  const secondAnswer = {
+    ...votedAnswer,
+    id: 'next-voted-answer',
+    question: { ...votedAnswer.question, title: '下一页的我赞同过回答' },
+  };
+  jest.mocked(getMemberAnswersVotedByMe).mockResolvedValueOnce({
+    ...emptyPage,
+    data: [secondAnswer],
+    paging: { ...emptyPage.paging, totals: 2 },
+  });
+  await act(async () => {
+    await mockListProps.get('我赞同过')?.query.fetchNextPage();
+  });
+  await flushQueries();
+  expect(host.getByText(secondAnswer.question.title)).toBeTruthy();
+  expect(mockListProps.get('我赞同过')?.query.hasNextPage).toBe(false);
+  expect(getMemberAnswersVotedByMe).toHaveBeenCalledTimes(3);
+  expect(getMemberAnswersVotedByMe).toHaveBeenLastCalledWith(
+    member.url_token,
+    20,
+    expect.objectContaining({ aborted: false }),
+  );
+  await host.unmount();
+});
+
+test('refreshing voted answers resets their pages and preserves other tab caches', async () => {
+  mockRoute.tab = 'votes';
+  client.setQueryData(['me'], member);
+  const otherTabData = {
+    pages: [emptyPage, emptyPage],
+    pageParams: [0, 20],
+  };
+  const otherTabKey = ['user-answers', mockRoute.id, 'created'];
+  client.setQueryData(otherTabKey, otherTabData);
+  jest.mocked(getMemberAnswersVotedByMe).mockResolvedValueOnce({
+    data: [votedAnswer],
+    paging: {
+      ...emptyPage.paging,
+      is_end: false,
+      next: 'https://www.zhihu.com/api/v4/members/member-readable-token/relations/vote?offset=20',
+      totals: 2,
+    },
+  });
+  const host = await render(screen());
+  await flushQueries();
+  jest.mocked(getMemberAnswersVotedByMe).mockResolvedValueOnce({
+    ...emptyPage,
+    data: [{ ...votedAnswer, id: 'old-second-page-answer' }],
+    paging: { ...emptyPage.paging, totals: 2 },
+  });
+  await act(async () => {
+    await mockListProps.get('我赞同过')?.query.fetchNextPage();
+  });
+  await flushQueries();
+  expect(mockListProps.get('我赞同过')?.query.data).toHaveLength(2);
+
+  jest.mocked(getMemberAnswersVotedByMe).mockResolvedValueOnce({
+    ...emptyPage,
+    data: [votedAnswer],
+    paging: { ...emptyPage.paging, totals: 1 },
+  });
+  await act(async () => {
+    await mockListProps.get('我赞同过')?.query.refresh();
+  });
+  await flushQueries();
+  expect(getMemberAnswersVotedByMe).toHaveBeenCalledTimes(3);
+  expect(getMemberAnswersVotedByMe).toHaveBeenLastCalledWith(
+    member.url_token,
+    0,
+    expect.objectContaining({ aborted: false }),
+  );
+  expect(getMemberWithFallback).toHaveBeenCalledTimes(1);
+  expect(mockListProps.get('我赞同过')?.query.data).toEqual([votedAnswer]);
+  expect(client.getQueryData(otherTabKey)).toEqual(otherTabData);
+  expect(host.getByText('我赞同过 1')).toBeTruthy();
+  await host.unmount();
+});
+
+test.each([
+  '',
+  '_xsrf=synthetic-xsrf',
+])('guests see a login entry instead of fetching account-specific votes: %s', async (cookies) => {
+  mockRoute.tab = 'votes';
+  mockAuthState = { cookies, me: null };
+  client.setQueryData(['me'], null);
+  const host = await render(screen());
+  await flushQueries();
+
+  expect(getMemberAnswersVotedByMe).not.toHaveBeenCalled();
+  expect(host.getByRole('tab', { name: '我赞同过' })).toBeSelected();
+  expect(host.getByText('登录后查看我赞同过的回答')).toBeTruthy();
+  expect(mockListProps.get('我赞同过')?.query.data).toEqual([]);
+  expect(mockListProps.get('我赞同过')?.query.isLoading).toBe(false);
+  await fireEvent.press(host.getByRole('button', { name: '登录' }));
+  expect(mockPush).toHaveBeenCalledWith('/login');
+  await host.unmount();
+});
+
+test('switching accounts hides the previous account votes before the new query resolves', async () => {
+  mockRoute.tab = 'votes';
+  const previousAnswer = {
+    ...votedAnswer,
+    id: 'previous-account-answer',
+    question: { ...votedAnswer.question, title: '原账号赞同过的回答' },
+  };
+  jest.mocked(getMemberAnswersVotedByMe).mockResolvedValueOnce({
+    ...emptyPage,
+    data: [previousAnswer],
+    paging: { ...emptyPage.paging, totals: 9 },
+  });
+  const host = await render(screen());
+  await flushQueries();
+  expect(host.getByText(previousAnswer.question.title)).toBeTruthy();
+  expect(host.getByText('我赞同过 9')).toBeTruthy();
+
+  let finish:
+    | ((page: Awaited<ReturnType<typeof getMemberAnswersVotedByMe>>) => void)
+    | undefined;
+  jest.mocked(getMemberAnswersVotedByMe).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  mockSessionVersion += 1;
+  mockAuthState = {
+    cookies: 'z_c0=synthetic-second-session',
+    me: { ...member, id: 'second-account-id', url_token: 'second-account' },
+  };
+  client.setQueryData(['me'], mockAuthState.me);
+  await host.rerender(screen());
+  expect(host.queryByText(previousAnswer.question.title)).toBeNull();
+  expect(host.queryByText('我赞同过 9')).toBeNull();
+  expect(mockListProps.get('我赞同过')?.query.data).toEqual([]);
+  expect(mockListProps.get('我赞同过')?.query.isLoading).toBe(true);
+  expect(getMemberAnswersVotedByMe).toHaveBeenCalledTimes(2);
+
+  const nextAnswer = {
+    ...votedAnswer,
+    id: 'new-account-answer',
+    question: { ...votedAnswer.question, title: '新账号赞同过的回答' },
+  };
+  await act(async () => {
+    finish?.({
+      ...emptyPage,
+      data: [nextAnswer],
+      paging: { ...emptyPage.paging, totals: 1 },
+    });
+  });
+  await flushQueries();
+  expect(host.getByText(nextAnswer.question.title)).toBeTruthy();
+  expect(host.getByText('我赞同过 1')).toBeTruthy();
+  expect(host.queryByText(previousAnswer.question.title)).toBeNull();
+
+  mockSessionVersion += 1;
+  mockAuthState = { cookies: '', me: null };
+  client.setQueryData(['me'], null);
+  await host.rerender(screen());
+  expect(host.queryByText(nextAnswer.question.title)).toBeNull();
+  expect(host.queryByText('我赞同过 1')).toBeNull();
+  expect(host.getByText('登录后查看我赞同过的回答')).toBeTruthy();
+  expect(getMemberAnswersVotedByMe).toHaveBeenCalledTimes(2);
+  await host.unmount();
+});
+
+test('an expired login shows the login entry even when its existing query failed', async () => {
+  mockRoute.tab = 'votes';
+  jest
+    .mocked(getMemberAnswersVotedByMe)
+    .mockRejectedValue(new Error('synthetic-expired-login'));
+  const host = await render(screen());
+  await flushQueries();
+  expect(mockListProps.get('我赞同过')?.query.isError).toBe(true);
+
+  mockAuthState = { ...mockAuthState, cookies: '_xsrf=synthetic-xsrf' };
+  await host.rerender(screen());
+  expect(mockListProps.get('我赞同过')?.query.isError).toBe(false);
+  expect(mockListProps.get('我赞同过')?.query.isLoading).toBe(false);
+  expect(mockListProps.get('我赞同过')?.query.hasNextPage).toBe(false);
+  expect(host.getByText('登录后查看我赞同过的回答')).toBeTruthy();
+  expect(getMemberAnswersVotedByMe).toHaveBeenCalledTimes(1);
   await host.unmount();
 });

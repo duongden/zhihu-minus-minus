@@ -1,4 +1,5 @@
 import type {
+  ZhihuAnswer,
   ZhihuAuthor,
   ZhihuMemberRelation,
   ZhihuPaging,
@@ -256,6 +257,28 @@ export const getMemberRelations = async (
   const res = await apiClient.get<ZhihuListResponse<ZhihuMemberRelation>>(
     endpoint,
     { params },
+  );
+  return res.data;
+};
+
+/** 获取当前登录者赞同过的此主页用户的回答。 */
+export const getMemberAnswersVotedByMe = async (
+  id: string | number,
+  offset = 0,
+  signal?: AbortSignal,
+): Promise<ZhihuListResponse<ZhihuAnswer>> => {
+  const res = await apiClient.get<ZhihuListResponse<ZhihuAnswer>>(
+    `/members/${id}/relations/vote`,
+    {
+      signal,
+      params: {
+        include: MEMBER_ANSWERS_INCLUDE,
+        limit: 20,
+        offset,
+        sort_by: 'created',
+        ws_qiangzhisafe: 0,
+      },
+    },
   );
   return res.data;
 };

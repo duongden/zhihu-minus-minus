@@ -179,6 +179,38 @@ const baseItem: FeedItem = {
   voted: 0,
 };
 
+test('an anonymous author without an identity cannot open an empty profile route', async () => {
+  const host = await render(
+    <FeedCard
+      item={{
+        ...baseItem,
+        author: { id: '', name: '匿名用户', avatar: '' },
+      }}
+    />,
+  );
+  expect(host.getByText('匿名用户')).toBeDisabled();
+  await fireEvent.press(host.getByText('匿名用户'));
+  expect(mockPush).not.toHaveBeenCalledWith(
+    expect.objectContaining({ pathname: '/user/[id]' }),
+  );
+});
+
+test.each([
+  { id: 'answer-author-id', url_token: undefined },
+  { id: 'answer-author-id', url_token: 'answer-author-token' },
+])('an author profile opens using its own identity: %j', async (author) => {
+  const host = await render(
+    <FeedCard
+      item={{ ...baseItem, author: { ...baseItem.author, ...author } }}
+    />,
+  );
+  await fireEvent.press(host.getByText('合成作者'));
+  expect(mockPush).toHaveBeenCalledWith({
+    pathname: '/user/[id]',
+    params: { id: author.url_token || author.id, avatar: '' },
+  });
+});
+
 test('a context-menu vote remains attached to its original item after recycling and ignores duplicate taps', async () => {
   let finish: (result: Awaited<ReturnType<typeof voteContent>>) => void =
     () => {};

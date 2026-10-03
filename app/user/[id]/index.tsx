@@ -59,6 +59,7 @@ import { StableAvatar } from '@/components/StableAvatar';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { useUserAnswersVotedByMe } from '@/hooks/useUserAnswersVotedByMe';
 import { useUserCreations } from '@/hooks/useUserCreations';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
@@ -337,8 +338,8 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
     scrollProfileTabIntoView(index, true);
   };
 
-  const borderColor = Colors[colorScheme].border;
   const primaryColor = useThemeColor({}, 'primary');
+  const onPrimaryColor = useThemeColor({}, 'onPrimary');
   const linkColor = useThemeColor({}, 'link');
 
   const { cookies, me: storedMe } = useAuthStore();
@@ -391,6 +392,11 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
   const creationsQuery = useUserCreations(
     user,
     Boolean(visitedTabs.creations || activeTab === 'creations'),
+  );
+
+  const answersVotedByMeQuery = useUserAnswersVotedByMe(
+    user,
+    Boolean(visitedTabs.votes || activeTab === 'votes'),
   );
 
   // 2. 回答 Query
@@ -562,6 +568,31 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
           fetchNextPage: pinsQuery.fetchNextPage,
           refetch: pinsQuery.refetch,
         };
+      case 'votes':
+        return {
+          queryKey: answersVotedByMeQuery.queryKey,
+          data: answersVotedByMeQuery.answers,
+          isLoading:
+            answersVotedByMeQuery.isAuthenticated &&
+            answersVotedByMeQuery.isLoading,
+          isError:
+            answersVotedByMeQuery.isAuthenticated &&
+            answersVotedByMeQuery.isError,
+          isFetchingNextPage:
+            answersVotedByMeQuery.isAuthenticated &&
+            answersVotedByMeQuery.isFetchingNextPage,
+          isFetchNextPageError:
+            answersVotedByMeQuery.isAuthenticated &&
+            answersVotedByMeQuery.isFetchNextPageError,
+          isFetching:
+            answersVotedByMeQuery.isAuthenticated &&
+            answersVotedByMeQuery.isFetching,
+          hasNextPage:
+            answersVotedByMeQuery.isAuthenticated &&
+            answersVotedByMeQuery.hasNextPage,
+          fetchNextPage: answersVotedByMeQuery.fetchNextPage,
+          refetch: answersVotedByMeQuery.refetch,
+        };
     }
   };
 
@@ -643,8 +674,7 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
     <View
       style={{
         backgroundColor: Colors[colorScheme].background,
-        borderBottomWidth: StyleSheet.hairlineWidth,
-        borderBottomColor: borderColor,
+        marginBottom: 4,
         minHeight: 52,
       }}
       onLayout={(event) => {
@@ -665,9 +695,16 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
       >
         <NativeView className="flex-row" style={{ minWidth: '100%' }}>
           {PROFILE_TABS.map((tab, idx) => {
-            const count = tab.countKey ? user?.[tab.countKey] : undefined;
+            const count =
+              tab.key === 'votes'
+                ? answersVotedByMeQuery.total
+                : tab.countKey
+                  ? user?.[tab.countKey]
+                  : undefined;
             const countStr =
-              count !== undefined && count > 0 ? ` ${count}` : '';
+              count !== undefined && (count > 0 || tab.key === 'votes')
+                ? ` ${count}`
+                : '';
             const isActive = activeTab === tab.key;
             return (
               <BouncyButton
@@ -774,7 +811,10 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
 
     const rawType = displayItem.type;
     const mappedType: UserFeedType =
-      normalizeUserFeedType(rawType) || 'answers';
+      tabKey === 'votes'
+        ? 'answers'
+        : normalizeUserFeedType(rawType) || 'answers';
+    const fallbackAuthor = tabKey === 'votes' ? undefined : user;
 
     const getExcerptText = () => {
       if (rawType === 'pin') {
@@ -813,14 +853,16 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
         displayItem.question?.id?.toString() ||
         (rawType === 'question' ? displayItem.id?.toString() : undefined),
       author: {
-        id: displayItem.author?.id || user?.id || '',
-        url_token: displayItem.author?.url_token || user?.url_token || '',
-        name: displayItem.author?.name || user?.name || '匿名用户',
+        id: displayItem.author?.id || fallbackAuthor?.id || '',
+        url_token:
+          displayItem.author?.url_token || fallbackAuthor?.url_token || '',
+        name: displayItem.author?.name || fallbackAuthor?.name || '匿名用户',
         avatar:
           displayItem.author?.avatar_url ||
-          user?.avatar_url ||
+          fallbackAuthor?.avatar_url ||
           'https://picx.zhimg.com/v2-abed1a8c04702bc9e7ba3d3d82bc7591_s.jpg',
-        headline: displayItem.author?.headline || user?.headline || '',
+        headline:
+          displayItem.author?.headline || fallbackAuthor?.headline || '',
       },
       excerpt: getExcerptText(),
       image: imageUrl,
@@ -848,9 +890,12 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
   };
 
   const activeMeta = PROFILE_TABS.find((tab) => tab.key === activeTab);
-  const activeCount = activeMeta?.countKey
-    ? user?.[activeMeta.countKey]
-    : undefined;
+  const activeCount =
+    activeTab === 'votes'
+      ? answersVotedByMeQuery.total
+      : activeMeta?.countKey
+        ? user?.[activeMeta.countKey]
+        : undefined;
 
   return (
     <NativeView
@@ -917,10 +962,12 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
                             refetchUser(),
                             tab.key === 'creations'
                               ? creationsQuery.refresh()
-                              : refreshInfiniteQuery(
-                                  queryClient,
-                                  query.queryKey,
-                                ),
+                              : tab.key === 'votes'
+                                ? answersVotedByMeQuery.refresh()
+                                : refreshInfiniteQuery(
+                                    queryClient,
+                                    query.queryKey,
+                                  ),
                           ]),
                       }}
                       headerHeight={headerHeight}
@@ -941,6 +988,40 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
                         tab.key === 'answers'
                           ? renderAnswersSortSelector()
                           : undefined
+                      }
+                      emptyState={
+                        tab.key === 'votes' ? (
+                          <View className="items-center py-20 bg-transparent">
+                            <Text type="secondary">
+                              {answersVotedByMeQuery.isAuthenticated
+                                ? '暂无我赞同过的回答'
+                                : '登录后查看我赞同过的回答'}
+                            </Text>
+                            {!answersVotedByMeQuery.isAuthenticated && (
+                              <BouncyButton
+                                accessibilityRole="button"
+                                accessibilityLabel="登录"
+                                onPress={() => router.push('/login')}
+                                style={{
+                                  marginTop: 16,
+                                  paddingHorizontal: 20,
+                                  paddingVertical: 10,
+                                  borderRadius: 8,
+                                  backgroundColor: primaryColor,
+                                }}
+                              >
+                                <Text
+                                  style={{
+                                    color: onPrimaryColor,
+                                    fontWeight: '600',
+                                  }}
+                                >
+                                  登录
+                                </Text>
+                              </BouncyButton>
+                            )}
+                          </View>
+                        ) : undefined
                       }
                     />
                   </NativeView>

@@ -1,6 +1,6 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { createRef, type ReactNode } from 'react';
-import type { MeasureOnSuccessCallback } from 'react-native';
+import { type MeasureOnSuccessCallback, Text } from 'react-native';
 import type { SharedValue } from 'react-native-reanimated';
 import {
   type ProfileListQuery,
@@ -436,4 +436,30 @@ test('refresh stays visible through query reset and blocks pagination until sett
   expect(mockListProps.refreshing).toBe(true);
   await act(() => finish());
   expect(mockListProps.refreshing).toBe(false);
+});
+
+test('custom empty state is shown only after loading and errors are handled', async () => {
+  const props = createProps({
+    emptyState: <Text>登录后查看我赞同过的回答</Text>,
+  });
+  const host = await render(<ProfileTabList {...props} />);
+  expect(host.getByText('登录后查看我赞同过的回答')).toBeTruthy();
+  expect(host.queryByText('暂无创作内容')).toBeNull();
+
+  await host.rerender(
+    <ProfileTabList {...props} query={createQuery({ isLoading: true })} />,
+  );
+  expect(host.queryByText('登录后查看我赞同过的回答')).toBeNull();
+  await host.rerender(
+    <ProfileTabList {...props} query={createQuery({ isError: true })} />,
+  );
+  expect(host.getByText('创作加载失败')).toBeTruthy();
+  expect(host.queryByText('登录后查看我赞同过的回答')).toBeNull();
+
+  await host.rerender(
+    <ProfileTabList {...props} query={createQuery({ data: ['one'] })} />,
+  );
+  expect(host.queryByText('登录后查看我赞同过的回答')).toBeNull();
+  await host.rerender(<ProfileTabList {...props} emptyState={undefined} />);
+  expect(host.getByText('暂无创作内容')).toBeTruthy();
 });
