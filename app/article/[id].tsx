@@ -26,7 +26,7 @@ import { BouncyButton } from '@/components/BouncyButton';
 import { DownvoteButton } from '@/components/DownvoteButton';
 import { FollowButton } from '@/components/FollowButton';
 import { LikeButton } from '@/components/LikeButton';
-import { ActionSheet } from '@/components/overlays/ActionSheet';
+import { MoreActionsButton } from '@/components/MoreActionsButton';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { ReadingProgressNotice } from '@/components/ReadingProgressNotice';
 import { ShareMenu } from '@/components/ShareMenu';
@@ -35,7 +35,6 @@ import { Text, ThemedIcon, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { RICH_CONTENT_STALE_TIME, ZhihuContent } from '@/features/rich-content';
-import { useCollectionAction } from '@/hooks/useCollectionAction';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
 import { useReadingProgress } from '@/hooks/useReadingProgress';
 import { useCollectionStore } from '@/store/useCollectionStore';
@@ -47,7 +46,6 @@ import { getZhihuErrorStatus } from '@/utils/zhihuError';
 export default function ArticleDetail() {
   const colorScheme = useColorScheme();
   const primaryColor = useThemeColor({}, 'primary');
-  const warningColor = useThemeColor({}, 'warning');
   const linkColor = useThemeColor({}, 'link');
   const { id, source } = useLocalSearchParams();
   const insets = useSafeAreaInsets();
@@ -57,8 +55,15 @@ export default function ArticleDetail() {
   const textColor = Colors[colorScheme].text;
   const isDark = colorScheme === 'dark';
 
-  const [isSharing, setIsSharing] = useState(false);
-  const [menuVisible, setMenuVisible] = useState(false);
+  const contentIdentity = `${isDaily ? 'daily' : 'article'}:${String(id ?? '')}`;
+  const [openMenuIdentity, setOpenMenuIdentity] = useState<string | null>(null);
+  const menuVisible = openMenuIdentity === contentIdentity;
+
+  useEffect(() => {
+    setOpenMenuIdentity((opened) =>
+      opened === contentIdentity ? opened : null,
+    );
+  }, [contentIdentity]);
 
   const scrollY = useRef(new Animated.Value(0)).current;
   const scrollViewRef = useRef<NativeScrollView>(null);
@@ -133,9 +138,8 @@ export default function ArticleDetail() {
   const storeCollected = useCollectionStore(
     (state) => state.collectedStatusMap[String(id)],
   );
-  const activeCollected = storeCollected ?? statusCollected ?? false;
+  const activeCollected = storeCollected ?? statusCollected;
   const storeCollectedRef = useRef(storeCollected);
-  const { toggleCollect, isPending: collectionPending } = useCollectionAction();
 
   useEffect(() => {
     storeCollectedRef.current = storeCollected;
@@ -318,12 +322,9 @@ export default function ArticleDetail() {
           </Text>
         </Animated.View>
 
-        <BouncyButton
-          onPress={() => setIsSharing(true)}
-          className="w-10 h-10 justify-center items-center z-50 rounded-full"
-        >
-          <Ionicons name="share-outline" size={24} color={textColor} />
-        </BouncyButton>
+        <MoreActionsButton
+          onPress={() => setOpenMenuIdentity(contentIdentity)}
+        />
       </View>
 
       <Animated.ScrollView
@@ -539,27 +540,20 @@ export default function ArticleDetail() {
                     </Text>
                   )}
                 </BouncyButton>
-                <BouncyButton
-                  className="items-center justify-center ml-3 p-2 flex-row rounded-full bg-transparent"
-                  onPress={() => setMenuVisible(true)}
-                >
-                  <ThemedIcon
-                    name="ellipsis-horizontal"
-                    size={24}
-                    colorType="secondary"
-                  />
-                </BouncyButton>
+                <MoreActionsButton
+                  style={{ marginLeft: 12 }}
+                  onPress={() => setOpenMenuIdentity(contentIdentity)}
+                />
               </View>
             </View>
           </BlurView>
         </View>
       )}
 
-      {/* Share Menu */}
       <ShareMenu
-        visible={isSharing}
-        onClose={() => setIsSharing(false)}
-        type="article"
+        visible={menuVisible}
+        onClose={() => setOpenMenuIdentity(null)}
+        type={isDaily ? 'daily' : 'article'}
         data={
           data
             ? {
@@ -567,35 +561,16 @@ export default function ArticleDetail() {
                 title: data.title,
                 author: data.author?.name,
                 authorHeadline: data.author?.headline,
-                url: isDaily ? undefined : `https://zhuanlan.zhihu.com/p/${id}`,
+                isCollected: isDaily ? undefined : activeCollected,
+                url: isDaily
+                  ? typeof dailyData?.share_url === 'string' &&
+                    dailyData.share_url.trim()
+                    ? dailyData.share_url
+                    : `https://daily.zhihu.com/story/${id}`
+                  : `https://zhuanlan.zhihu.com/p/${id}`,
               }
             : null
         }
-      />
-
-      <ActionSheet
-        visible={menuVisible && !isSharing}
-        onClose={() => setMenuVisible(false)}
-        title="文章操作"
-        options={[
-          {
-            key: 'collection',
-            icon: 'star',
-            iconFamily: 'font-awesome-6',
-            iconSolid: activeCollected,
-            label: activeCollected ? '取消收藏' : '移至收藏',
-            color: activeCollected ? warningColor : undefined,
-            disabled: collectionPending,
-            onPress: () =>
-              toggleCollect(id as string, 'article', activeCollected),
-          },
-          {
-            key: 'share',
-            icon: 'share-social-outline',
-            label: '分享文章',
-            onPress: () => setIsSharing(true),
-          },
-        ]}
       />
     </View>
   );

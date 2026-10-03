@@ -65,14 +65,14 @@ beforeEach(() => {
 
 test('the expanded header shows only the back action even when author and share actions are available', async () => {
   const onBack = jest.fn();
-  const onShare = jest.fn();
+  const onMore = jest.fn();
   const host = await render(
     <DetailNavigationHeader
       testID="expanded-detail-header"
       title={title}
       collapsed={false}
       onBack={onBack}
-      onShare={onShare}
+      onMore={onMore}
       author={{
         name: '作者 A',
         avatarUrl: 'https://example.com/avatar-a.png',
@@ -96,16 +96,16 @@ test('the expanded header shows only the back action even when author and share 
   expect(host.queryByText(title)).toBeNull();
   expect(host.queryByText('作者 A')).toBeNull();
   expect(host.queryByTestId('detail-header-avatar')).toBeNull();
-  expect(host.queryByRole('button', { name: '分享' })).toBeNull();
+  expect(host.queryByRole('button', { name: '更多操作' })).toBeNull();
   expect(host.getAllByRole('button')).toHaveLength(1);
   await fireEvent.press(host.getByRole('button', { name: '返回' }));
   expect(onBack).toHaveBeenCalledTimes(1);
-  expect(onShare).not.toHaveBeenCalled();
+  expect(onMore).not.toHaveBeenCalled();
 });
 
 test('the collapsed header keeps the author avatar and name alongside a single-line title and working actions', async () => {
   const onBack = jest.fn();
-  const onShare = jest.fn();
+  const onMore = jest.fn();
   const onTitlePress = jest.fn();
   const onAuthorPress = jest.fn();
   const host = await render(
@@ -114,7 +114,7 @@ test('the collapsed header keeps the author avatar and name alongside a single-l
       title={title}
       collapsed
       onBack={onBack}
-      onShare={onShare}
+      onMore={onMore}
       onTitlePress={onTitlePress}
       author={{
         name: '作者 A',
@@ -142,12 +142,36 @@ test('the collapsed header keeps the author avatar and name alongside a single-l
     host.getByRole('button', { name: '查看 作者 A 的主页' }),
   );
   await fireEvent.press(host.getByRole('button', { name: '返回' }));
-  await fireEvent.press(host.getByRole('button', { name: '分享' }));
+  await fireEvent.press(host.getByRole('button', { name: '更多操作' }));
   await fireEvent.press(host.getByRole('button', { name: title }));
   expect(onAuthorPress).toHaveBeenCalledTimes(1);
   expect(onBack).toHaveBeenCalledTimes(1);
-  expect(onShare).toHaveBeenCalledTimes(1);
+  expect(onMore).toHaveBeenCalledTimes(1);
   expect(onTitlePress).toHaveBeenCalledTimes(1);
+});
+
+test('question headers can show the shared more button at the transparent top', async () => {
+  const onMore = jest.fn();
+  const host = await render(
+    <DetailNavigationHeader
+      testID="question-header"
+      title={title}
+      collapsed={false}
+      moreAlwaysVisible
+      onBack={jest.fn()}
+      onMore={onMore}
+    />,
+  );
+  expect(host.getByTestId('question-header-surface')).toHaveStyle({
+    opacity: 0,
+  });
+  expect(host.queryByText(title)).toBeNull();
+  const more = host.getByRole('button', { name: '更多操作' });
+  expect(more).toHaveStyle({ width: 44, height: 44, borderRadius: 22 });
+  expect(host.getAllByRole('button')).toHaveLength(2);
+  await fireEvent.press(more);
+  expect(onMore).toHaveBeenCalledTimes(1);
+  await host.unmount();
 });
 
 test('changing answers replaces the displayed author, avatar and profile action together', async () => {
@@ -206,7 +230,7 @@ test('the question header supports both states without an author or share action
 
   expect(host.getByText(title)).toHaveProp('numberOfLines', 1);
   expect(host.queryByTestId('detail-header-avatar')).toBeNull();
-  expect(host.queryByRole('button', { name: '分享' })).toBeNull();
+  expect(host.queryByRole('button', { name: '更多操作' })).toBeNull();
   expect(host.getByRole('button', { name: title })).toBeDisabled();
   await fireEvent.press(host.getByRole('button', { name: '返回' }));
   expect(onBack).toHaveBeenCalledTimes(1);

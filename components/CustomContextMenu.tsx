@@ -6,6 +6,7 @@ import {
   type LayoutRectangle,
   Modal,
   Pressable,
+  ScrollView,
   StyleSheet,
   useWindowDimensions,
 } from 'react-native';
@@ -47,7 +48,8 @@ export interface MenuOption {
   iconFamily?: 'ionicons' | 'font-awesome-6';
   iconSolid?: boolean;
   isDestructive?: boolean;
-  onPress: () => void;
+  disabled?: boolean;
+  onPress: () => unknown;
 }
 
 interface CustomContextMenuProps {
@@ -56,6 +58,7 @@ interface CustomContextMenuProps {
   previewContent: React.ReactNode;
   options: MenuOption[];
   originLayout?: { x: number; y: number; width: number; height: number } | null;
+  contentIdentity?: string;
 }
 
 export function CustomContextMenu({
@@ -64,6 +67,7 @@ export function CustomContextMenu({
   previewContent,
   options,
   originLayout,
+  contentIdentity,
 }: CustomContextMenuProps) {
   const colorScheme = useColorScheme();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
@@ -71,6 +75,31 @@ export function CustomContextMenu({
     null,
   );
   const openingStarted = useRef(false);
+  const pendingAction = useRef<MenuOption['onPress'] | null>(null);
+  const closing = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      pendingAction.current = null;
+    };
+  }, []);
+  const session = useRef({ visible, contentIdentity, version: 0 });
+  if (
+    session.current.visible !== visible ||
+    session.current.contentIdentity !== contentIdentity
+  ) {
+    session.current = {
+      visible,
+      contentIdentity,
+      version: session.current.version + 1,
+    };
+    pendingAction.current = null;
+    closing.current = false;
+  }
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const scale = useSharedValue(0.9);
   const opacity = useSharedValue(0);
   const translateX = useSharedValue(0);
@@ -160,7 +189,25 @@ export function CustomContextMenu({
     ],
   }));
 
+  const finishClose = (version: number) => {
+    if (
+      session.current.version !== version ||
+      !session.current.visible ||
+      !mounted.current ||
+      !closing.current
+    )
+      return;
+    const action = pendingAction.current;
+    pendingAction.current = null;
+    closing.current = false;
+    onCloseRef.current();
+    if (action) void action();
+  };
+
   const handleClose = () => {
+    if (closing.current) return;
+    closing.current = true;
+    const version = session.current.version;
     if (originLayout) {
       const itemCenterX = originLayout.x + originLayout.width / 2;
       const itemCenterY = originLayout.y + originLayout.height / 2;
@@ -182,7 +229,7 @@ export function CustomContextMenu({
         { duration: ANIMATION_CONFIG.fadeDuration },
         (finished) => {
           if (finished) {
-            runOnJS(onClose)();
+            runOnJS(finishClose)(version);
           }
         },
       );
@@ -194,7 +241,7 @@ export function CustomContextMenu({
         0,
         { duration: ANIMATION_CONFIG.fadeDuration },
         (finished) => {
-          if (finished) runOnJS(onClose)();
+          if (finished) runOnJS(finishClose)(version);
         },
       );
     }
@@ -254,18 +301,25 @@ export function CustomContextMenu({
           style={[
             animatedMenuStyle,
             styles.menuContainer,
+            { maxHeight: screenHeight * 0.4 },
             { backgroundColor: Colors[colorScheme].backgroundSecondary },
           ]}
         >
-          <Pressable onPress={(e) => e.stopPropagation()}>
+          <ScrollView keyboardShouldPersistTaps="handled">
             {options.map((option, index) => (
               <React.Fragment key={option.key}>
                 <BouncyButton
+                  accessibilityRole="button"
+                  accessibilityLabel={option.title}
+                  accessibilityState={{ disabled: option.disabled }}
+                  disabled={option.disabled}
                   onPress={() => {
+                    if (option.disabled || closing.current) return;
                     void impactAsync(ImpactFeedbackStyle.Light);
-                    option.onPress();
+                    pendingAction.current = option.onPress;
                     handleClose();
                   }}
+                  style={{ opacity: option.disabled ? 0.45 : 1 }}
                   className="flex-row items-center py-3.5 px-4 rounded-xl"
                 >
                   <Text
@@ -303,7 +357,7 @@ export function CustomContextMenu({
                 )}
               </React.Fragment>
             ))}
-          </Pressable>
+          </ScrollView>
         </Animated.View>
       </View>
     </Modal>

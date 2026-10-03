@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator } from 'react-native';
@@ -30,7 +30,6 @@ export default function AnswerDetailScreen() {
     sortBy?: string;
   }>();
   const router = useRouter();
-  const queryClient = useQueryClient();
   const primaryColor = useThemeColor({}, 'primary');
 
   // 锁定初始 ID，避免滑动时 URL 参数改变导致重新触发 top-level loading
@@ -150,6 +149,7 @@ export default function AnswerDetailScreen() {
     retry: (failureCount, err) =>
       getZhihuErrorStatus(err) === 404 ? false : failureCount < 2,
   });
+  const headerQuestionId = currentAnswer?.question?.id || questionId;
   const pageListKey = JSON.stringify(answerIds);
   const currentPager = useRef({ pagerKey, pageListKey });
   currentPager.current = { pagerKey, pageListKey };
@@ -192,14 +192,21 @@ export default function AnswerDetailScreen() {
     pagerRef.current?.setPageWithoutAnimation(currentPage);
   }, [currentPage, initialId, pageListKey, pagerKey]);
 
-  const [isSharing, setIsSharing] = useState(false);
-  const [shareData, setShareData] = useState<{
-    id: string;
-    title?: string;
-    author?: string;
-    authorHeadline?: string;
-    url: string;
+  const [menuTarget, setMenuTarget] = useState<{
+    pagerKey: string;
+    answerId: string;
+    scopeVersion: number;
   } | null>(null);
+  useEffect(() => {
+    setMenuTarget((target) =>
+      target &&
+      (target.pagerKey !== pagerKey ||
+        target.answerId !== currentId ||
+        target.scopeVersion !== headerState.scopeVersion)
+        ? null
+        : target,
+    );
+  }, [currentId, pagerKey, headerState.scopeVersion]);
 
   useNeighborAnswerPrefetch(answerIds, currentPage);
 
@@ -215,30 +222,10 @@ export default function AnswerDetailScreen() {
   }, [enableBrowseHistory, currentId]);
 
   const selectAnswer = (answerId: string) => {
+    setMenuTarget(null);
     headerState.restore(answerId);
     setSelection({ pagerKey, answerId });
     if (answerId !== currentId) router.setParams({ id: answerId });
-  };
-
-  const handleShareClick = () => {
-    if (!currentId) return;
-    const cachedAnswer = queryClient.getQueryData<
-      Awaited<ReturnType<typeof getAnswer>>
-    >(['answer-detail', currentId]);
-    const actualQid = cachedAnswer?.question?.id || questionId;
-    const url = `https://www.zhihu.com/question/${actualQid}/answer/${currentId}`;
-
-    setShareData({
-      id: currentId,
-      title:
-        cachedAnswer?.question?.title ||
-        initialAnswer?.question?.title ||
-        (initialTitle as string),
-      author: cachedAnswer?.author?.name,
-      authorHeadline: cachedAnswer?.author?.headline,
-      url,
-    });
-    setIsSharing(true);
   };
 
   if (loadingInitial && !initialAnswer) {
@@ -268,7 +255,23 @@ export default function AnswerDetailScreen() {
           const target = currentAnswer?.question?.id || questionId;
           if (target) router.push(`/question/${target}`);
         }}
-        onShare={handleShareClick}
+        onMore={
+          headerQuestionId && currentId
+            ? () => {
+                if (
+                  headerState.activeAnswerId.value !== currentId ||
+                  headerState.activeScopeVersion.value !==
+                    headerState.scopeVersion
+                )
+                  return;
+                setMenuTarget({
+                  pagerKey,
+                  answerId: currentId,
+                  scopeVersion: headerState.scopeVersion,
+                });
+              }
+            : undefined
+        }
         author={
           currentAnswer?.author
             ? {
@@ -394,12 +397,33 @@ export default function AnswerDetailScreen() {
           </View>
         ))}
       </PagerView>
-
       <ShareMenu
-        visible={isSharing}
-        onClose={() => setIsSharing(false)}
-        type="answer"
-        data={shareData}
+        visible={
+          menuTarget?.pagerKey === pagerKey &&
+          menuTarget.answerId === currentId &&
+          menuTarget.scopeVersion === headerState.scopeVersion
+        }
+        onClose={() =>
+          setMenuTarget((target) =>
+            target?.pagerKey === pagerKey &&
+            target.answerId === currentId &&
+            target.scopeVersion === headerState.scopeVersion
+              ? null
+              : target,
+          )
+        }
+        type="question"
+        data={
+          headerQuestionId
+            ? {
+                id: headerQuestionId,
+                title:
+                  currentAnswer?.question?.title ||
+                  initialAnswer?.question?.title ||
+                  initialTitle,
+              }
+            : null
+        }
       />
     </View>
   );

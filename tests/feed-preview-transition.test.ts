@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import React from 'react';
 import { Text } from 'react-native';
 import { withSpring, withTiming } from 'react-native-reanimated';
@@ -201,5 +201,105 @@ describe('feed context-menu preview transitions', () => {
     await measure(180, 140);
     expect(withTiming).toHaveBeenCalledTimes(3);
     expect(withTiming).toHaveBeenLastCalledWith(1, { duration: 100 });
+  });
+
+  it('runs only the first selected preview action after the menu finishes closing', async () => {
+    const first = jest.fn();
+    const second = jest.fn();
+    const onClose = jest.fn();
+    const menu = await render(
+      React.createElement(CustomContextMenu, {
+        visible: true,
+        contentIdentity: 'answer:first',
+        onClose,
+        previewContent: React.createElement(Text, null, '预览正文'),
+        options: [
+          {
+            key: 'first',
+            title: '分享链接',
+            icon: 'share-outline',
+            onPress: first,
+          },
+          { key: 'second', title: '复制链接', icon: 'copy', onPress: second },
+        ],
+      }),
+    );
+    await fireEvent.press(screen.getByRole('button', { name: '分享链接' }));
+    await fireEvent.press(screen.getByRole('button', { name: '复制链接' }));
+    expect(first).not.toHaveBeenCalled();
+    expect(second).not.toHaveBeenCalled();
+    const completion = jest.mocked(withTiming).mock.calls.at(-1)?.[2];
+    await act(() => completion?.(true));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).not.toHaveBeenCalled();
+    expect(onClose.mock.invocationCallOrder[0]).toBeLessThan(
+      first.mock.invocationCallOrder[0],
+    );
+    await act(() => completion?.(true));
+    expect(first).toHaveBeenCalledTimes(1);
+    await menu.unmount();
+  });
+
+  it('disables unavailable preview actions without starting a close animation', async () => {
+    const action = jest.fn();
+    const menu = await render(
+      React.createElement(CustomContextMenu, {
+        visible: true,
+        onClose: jest.fn(),
+        previewContent: React.createElement(Text, null, '预览正文'),
+        options: [
+          {
+            key: 'collection',
+            title: '正在收藏',
+            icon: 'star',
+            disabled: true,
+            onPress: action,
+          },
+        ],
+      }),
+    );
+    const timingCalls = jest.mocked(withTiming).mock.calls.length;
+    expect(screen.getByRole('button', { name: '正在收藏' })).toBeDisabled();
+    await fireEvent.press(screen.getByRole('button', { name: '正在收藏' }));
+    expect(action).not.toHaveBeenCalled();
+    expect(withTiming).toHaveBeenCalledTimes(timingCalls);
+    await menu.unmount();
+  });
+
+  it.each([
+    'identity',
+    'hidden',
+    'unmounted',
+  ] as const)('cancels a queued preview action when the original menu is %s', async (change) => {
+    const action = jest.fn();
+    const onClose = jest.fn();
+    const props = {
+      visible: true,
+      contentIdentity: 'answer:first',
+      onClose,
+      previewContent: React.createElement(Text, null, '预览正文'),
+      options: [
+        { key: 'copy', title: '复制链接', icon: 'copy', onPress: action },
+      ],
+    };
+    const menu = await render(React.createElement(CustomContextMenu, props));
+    await fireEvent.press(screen.getByRole('button', { name: '复制链接' }));
+    const completion = jest.mocked(withTiming).mock.calls.at(-1)?.[2];
+    if (change === 'unmounted') await menu.unmount();
+    else {
+      await menu.rerender(
+        React.createElement(CustomContextMenu, {
+          ...props,
+          ...(change === 'identity'
+            ? { contentIdentity: 'answer:next' }
+            : { visible: false }),
+        }),
+      );
+      await menu.rerender(React.createElement(CustomContextMenu, props));
+    }
+    await act(() => completion?.(true));
+    expect(action).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

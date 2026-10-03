@@ -1,5 +1,5 @@
 import { FontAwesome6, Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { BouncyButton } from '@/components/BouncyButton';
 import { Text, useThemeColor, View } from '@/components/Themed';
@@ -30,6 +30,7 @@ interface ActionSheetProps {
   headerContent?: React.ReactNode;
   cancelLabel?: string;
   hapticFeedback?: boolean;
+  actionContextKey?: string;
 }
 
 export function ActionSheet({
@@ -41,11 +42,29 @@ export function ActionSheet({
   headerContent,
   cancelLabel = '取消',
   hapticFeedback = true,
+  actionContextKey,
 }: ActionSheetProps) {
   const colorScheme = useColorScheme();
   const primaryTransparent = useThemeColor({}, 'primaryTransparent');
   const sheetRef = useRef<BottomSheetHandle>(null);
   const pendingAction = useRef<ActionSheetOption['onPress'] | null>(null);
+  const actionScope = useMemo(
+    () => ({ actionContextKey, visible }),
+    [actionContextKey, visible],
+  );
+  const currentScope = useRef(actionScope);
+  currentScope.current = actionScope;
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    if (currentScope.current !== actionScope) return;
+    mounted.current = true;
+    pendingAction.current = null;
+    return () => {
+      mounted.current = false;
+      pendingAction.current = null;
+    };
+  }, [actionScope]);
 
   useEffect(() => {
     if (!visible) pendingAction.current = null;
@@ -55,6 +74,7 @@ export function ActionSheet({
   }, [visible, hapticFeedback]);
 
   const handleClosed = () => {
+    if (!mounted.current || currentScope.current !== actionScope) return;
     const action = pendingAction.current;
     pendingAction.current = null;
     onClose();
@@ -64,7 +84,7 @@ export function ActionSheet({
   const close = () => sheetRef.current?.close();
 
   const selectOption = (option: ActionSheetOption) => {
-    if (option.disabled || pendingAction.current) return;
+    if (!visible || option.disabled || pendingAction.current) return;
     pendingAction.current = option.onPress;
     close();
   };
@@ -74,6 +94,7 @@ export function ActionSheet({
 
   return (
     <BottomSheet
+      key={actionContextKey}
       ref={sheetRef}
       visible={visible}
       onClose={handleClosed}

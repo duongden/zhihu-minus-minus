@@ -27,7 +27,7 @@ import { useDetailNavigationHeight } from '@/components/DetailNavigationHeader';
 import { DownvoteButton } from '@/components/DownvoteButton';
 import { FollowButton } from '@/components/FollowButton';
 import { LikeButton } from '@/components/LikeButton';
-import { ActionSheet } from '@/components/overlays/ActionSheet';
+import { MoreActionsButton } from '@/components/MoreActionsButton';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { ReadingProgressNotice } from '@/components/ReadingProgressNotice';
 import { ReadingScrollIndicator } from '@/components/ReadingScrollIndicator';
@@ -42,7 +42,6 @@ import {
   RICH_CONTENT_STALE_TIME,
   ZhihuContent,
 } from '@/features/rich-content';
-import { useCollectionAction } from '@/hooks/useCollectionAction';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
 import { useReadingContentMeasurement } from '@/hooks/useReadingContentMeasurement';
 import { useReadingProgress } from '@/hooks/useReadingProgress';
@@ -119,9 +118,12 @@ export const AnswerDetailView = ({
   const lastCallbackTime = useSharedValue(0);
 
   const [menuVisible, setMenuVisible] = React.useState(false);
-  const [isSharing, setIsSharing] = React.useState(false);
   const [votersVisible, setVotersVisible] = React.useState(false);
   const [hasBeenFocused, setHasBeenFocused] = React.useState(isFocused);
+
+  React.useEffect(() => {
+    if (!isFocused) setMenuVisible(false);
+  }, [isFocused]);
 
   React.useEffect(() => {
     if (isFocused && !hasBeenFocused) {
@@ -347,9 +349,7 @@ export const AnswerDetailView = ({
     (state) => state.collectedStatusMap[id.toString()],
   );
   const rawIsFaved =
-    answer?.reaction?.relation?.faved ||
-    answer?.relationship?.is_favorited ||
-    false;
+    answer?.reaction?.relation?.faved ?? answer?.relationship?.is_favorited;
   const activeCollected =
     storeCollected !== undefined
       ? storeCollected
@@ -357,7 +357,6 @@ export const AnswerDetailView = ({
         ? statusCollected
         : rawIsFaved;
   const storeCollectedRef = useRef(storeCollected);
-  const { toggleCollect, isPending: collectionPending } = useCollectionAction();
   const authorAvatarUrl = answer?.author?.avatar_url;
 
   React.useEffect(() => {
@@ -380,11 +379,6 @@ export const AnswerDetailView = ({
     if (token) router.push(`/user/${token}`);
   };
 
-  const getShareLink = () => {
-    const actualQid = answer?.question?.id || questionId;
-    return `https://www.zhihu.com/question/${actualQid}/answer/${id}`;
-  };
-
   const primaryColor = useThemeColor({}, 'primary');
   const linkColor = useThemeColor({}, 'link');
   const primaryTransparent = useThemeColor({}, 'primaryTransparent');
@@ -400,7 +394,6 @@ export const AnswerDetailView = ({
     ),
     [primaryColor],
   );
-  const warningColor = useThemeColor({}, 'warning');
 
   if (!hasBeenFocused) {
     return <View className="flex-1" />;
@@ -663,6 +656,9 @@ export const AnswerDetailView = ({
             </View>
             <View className="flex-1 flex-row justify-end items-center bg-transparent">
               <BouncyButton
+                accessibilityRole="button"
+                accessibilityLabel="评论"
+                disabled={!answer}
                 className="items-center justify-center ml-3 p-2 flex-row bg-transparent"
                 style={{ borderRadius: 99 }}
                 onPress={() => router.push(`/comments/${id}?type=answer`)}
@@ -681,25 +677,21 @@ export const AnswerDetailView = ({
                   </Text>
                 )}
               </BouncyButton>
-              <BouncyButton
-                className="items-center justify-center ml-3 p-2 flex-row bg-transparent"
-                style={{ borderRadius: 99 }}
+              <MoreActionsButton
+                disabled={!answer}
+                style={{ marginLeft: 12 }}
                 onPress={() => setMenuVisible(true)}
-              >
-                <ThemedIcon
-                  name="ellipsis-horizontal"
-                  size={24}
-                  colorType="secondary"
-                />
-              </BouncyButton>
+              />
             </View>
           </View>
         </BlurView>
       </View>
 
       <ShareMenu
-        visible={isSharing}
-        onClose={() => setIsSharing(false)}
+        visible={isFocused && menuVisible}
+        onClose={() => {
+          setMenuVisible(false);
+        }}
         type="answer"
         data={
           answer
@@ -708,47 +700,19 @@ export const AnswerDetailView = ({
                 title: answer.question?.title,
                 author: answer.author?.name,
                 authorHeadline: answer.author?.headline,
-                url: getShareLink(),
+                questionId: answer.question?.id || questionId,
+                isCollected: activeCollected,
               }
             : null
         }
-      />
-
-      <VoterListModal
-        visible={votersVisible}
-        onClose={() => setVotersVisible(false)}
-        contentType="answer"
-        contentId={id}
-        count={answer?.voteup_count}
-      />
-
-      <ActionSheet
-        visible={menuVisible && !isSharing}
-        onClose={() => setMenuVisible(false)}
-        title="回答操作"
-        options={[
-          {
-            key: 'collection',
-            icon: 'star',
-            iconFamily: 'font-awesome-6',
-            iconSolid: activeCollected,
-            label: activeCollected ? '取消收藏' : '移至收藏',
-            color: activeCollected ? warningColor : undefined,
-            disabled: collectionPending,
-            onPress: () => toggleCollect(id, 'answer', activeCollected),
-          },
-          {
-            key: 'share',
-            icon: 'share-social-outline',
-            label: '分享回答',
-            onPress: () => setIsSharing(true),
-          },
+        additionalOptions={[
           ...(answer?.relationship?.is_author
             ? [
                 {
                   key: 'edit',
                   icon: 'create-outline' as const,
                   label: '编辑回答',
+                  disabled: !answer.question?.id && !questionId,
                   onPress: () => {
                     const targetQuestionId = answer.question?.id || questionId;
                     if (targetQuestionId) {
@@ -765,11 +729,19 @@ export const AnswerDetailView = ({
                   icon: 'trash-outline' as const,
                   label: '删除回答',
                   destructive: true,
+                  disabled: deleteMutation.isPending,
                   onPress: handleDelete,
                 },
               ]
             : []),
         ]}
+      />
+      <VoterListModal
+        visible={votersVisible}
+        onClose={() => setVotersVisible(false)}
+        contentType="answer"
+        contentId={id}
+        count={answer?.voteup_count}
       />
     </View>
   );

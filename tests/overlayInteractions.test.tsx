@@ -96,6 +96,49 @@ test('externally hiding a menu cancels its pending action before reopening', asy
   await host.unmount();
 });
 
+test('changing the content cancels a queued action and its old close callback', async () => {
+  const action = jest.fn();
+  const closed = jest.fn();
+  const props = {
+    visible: true,
+    onClose: closed,
+    title: '内容操作',
+    options: [
+      { key: 'copy', label: '复制', icon: 'copy' as const, onPress: action },
+    ],
+  };
+  const host = await render(
+    <ActionSheet {...props} actionContextKey="answer:42" />,
+  );
+  await fireEvent.press(host.getByText('复制'));
+  const outgoingClose = mockFinishClose;
+  await host.rerender(<ActionSheet {...props} actionContextKey="answer:11" />);
+  await act(() => outgoingClose());
+  expect(action).not.toHaveBeenCalled();
+  expect(closed).not.toHaveBeenCalled();
+  expect(host.getByText('复制')).toBeTruthy();
+  await host.unmount();
+});
+
+test('unmounting during dismissal cancels a queued action', async () => {
+  const action = jest.fn();
+  const closed = jest.fn();
+  const host = await render(
+    <ActionSheet
+      visible
+      onClose={closed}
+      title="内容操作"
+      options={[{ key: 'copy', label: '复制', icon: 'copy', onPress: action }]}
+    />,
+  );
+  await fireEvent.press(host.getByText('复制'));
+  const finish = mockFinishClose;
+  await host.unmount();
+  await act(() => finish());
+  expect(action).not.toHaveBeenCalled();
+  expect(closed).not.toHaveBeenCalled();
+});
+
 test('primary dialog actions use the runtime foreground for a light accent', async () => {
   const host = await render(
     <AppDialog

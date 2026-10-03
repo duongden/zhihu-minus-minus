@@ -13,6 +13,7 @@ import {
 } from '@/api/zhihu';
 import { BouncyButton } from '@/components/BouncyButton';
 import { CollectionEditorForm } from '@/components/CollectionEditorForm';
+import { MoreActionsButton } from '@/components/MoreActionsButton';
 import { ActionSheet } from '@/components/overlays/ActionSheet';
 import { BottomSheet } from '@/components/overlays/BottomSheet';
 import { QueryErrorView } from '@/components/QueryErrorView';
@@ -237,16 +238,10 @@ export default function MyCollectionsScreen() {
           {item.answer_count || 0} 内容 · {item.follower_count || 0} 关注
         </Text>
       </View>
-      <BouncyButton
+      <MoreActionsButton
         onPress={() => setActionItem(item)}
-        className="p-2.5 rounded-full"
-      >
-        <Ionicons
-          name="ellipsis-horizontal"
-          size={18}
-          color={Colors[colorScheme].tabIconDefault}
-        />
-      </BouncyButton>
+        accessibilityLabel="收藏夹更多操作"
+      />
     </BouncyButton>
   );
 

@@ -1,4 +1,4 @@
-import { FontAwesome6, Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import {
   FlashList,
   type FlashListRef,
@@ -70,6 +70,7 @@ import {
 } from '@/components/DetailNavigationHeader';
 import { FollowButton } from '@/components/FollowButton';
 import { LikeButton } from '@/components/LikeButton';
+import { MoreActionsButton } from '@/components/MoreActionsButton';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { ShareMenu } from '@/components/ShareMenu';
 import { StableAvatar } from '@/components/StableAvatar';
@@ -77,7 +78,6 @@ import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { RICH_CONTENT_STALE_TIME, ZhihuContent } from '@/features/rich-content';
-import { useCollectionAction } from '@/hooks/useCollectionAction';
 import {
   type GestureScrollViewRef,
   useGestureScrollView,
@@ -112,7 +112,7 @@ interface AnswerItemProps {
   item: AnswerDetail;
   isExpanded: boolean;
   onToggle: (id: string, expanded: boolean) => void;
-  onShare?: (item: AnswerDetail) => void;
+  onMore?: (item: AnswerDetail) => void;
   questionId: string;
   sortBy: AnswerSort;
   isAuthenticated: boolean;
@@ -129,7 +129,7 @@ const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
       item,
       isExpanded,
       onToggle,
-      onShare,
+      onMore,
       questionId,
       sortBy,
       isAuthenticated,
@@ -145,25 +145,9 @@ const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
     const colorScheme = useColorScheme();
     const router = useRouter();
     const _textColor = Colors[colorScheme].text;
-    const queryClient = useQueryClient();
     const footerRef = useRef<NativeView>(null);
 
-    const storeCollected = useCollectionStore((state) =>
-      item?.id ? state.collectedStatusMap[item.id.toString()] : false,
-    );
-    const isCollected = storeCollected !== undefined ? storeCollected : false;
-    const storeOffset = useCollectionStore((state) =>
-      item?.id
-        ? state.collectedStatusMap[item.id.toString()] !== undefined
-          ? state.collectedCountOffsetMap[item.id.toString()] || 0
-          : 0
-        : 0,
-    );
-    const displayCount = (item.favlists_count || 0) + storeOffset;
-    const { toggleCollect } = useCollectionAction();
-
     const primaryColor = useThemeColor({}, 'primary');
-    const warningColor = useThemeColor({}, 'warning');
     const cardBackground = useThemeColor({}, 'backgroundSecondary');
 
     const isFirstMount = useRef(true);
@@ -363,28 +347,6 @@ const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
       }),
       successMessage: (isActive) => (isActive ? '已取消关注' : '已关注'),
     });
-
-    const deleteMutation = useMutation({
-      mutationFn: () => deleteAnswer(item.id),
-      onSuccess: () => {
-        Alert.alert('删除成功', '你的回答已删除喵！');
-        queryClient.invalidateQueries({ queryKey: ['question-answers'] });
-      },
-      onError: (error) => {
-        Alert.alert('删除失败', getZhihuErrorMessage(error));
-      },
-    });
-
-    const handleDelete = () => {
-      Alert.alert('确认删除', '确定要删除这个回答吗？', [
-        { text: '取消', style: 'cancel' },
-        {
-          text: '确认删除',
-          style: 'destructive',
-          onPress: () => deleteMutation.mutate(),
-        },
-      ]);
-    };
 
     return (
       <GestureDetector gesture={panGesture}>
@@ -650,55 +612,11 @@ const AnswerItem = forwardRef<AnswerItemHandle, AnswerItemProps>(
                 {item.comment_count > 0 ? item.comment_count : '0'}
               </Text>
             </BouncyButton>
-            <BouncyButton
-              className="flex-row items-center  bg-transparent py-1.5 px-3 rounded-full"
-              onPress={() => toggleCollect(item.id, 'answer', isCollected)}
-            >
-              <FontAwesome6
-                name="star"
-                solid={isCollected}
-                size={16}
-                color={
-                  isCollected ? warningColor : Colors[colorScheme].iconMuted
-                }
-              />
-              {displayCount > 0 && (
-                <Text
-                  className="ml-1 text-xs font-semibold"
-                  style={{
-                    color: isCollected
-                      ? warningColor
-                      : Colors[colorScheme].iconMuted,
-                  }}
-                >
-                  {displayCount}
-                </Text>
-              )}
-            </BouncyButton>
-            {item.relationship?.is_author && (
-              <BouncyButton
-                className="p-2 bg-transparent"
-                style={{ borderRadius: 99 }}
-                onPress={handleDelete}
-              >
-                <Ionicons
-                  name="trash-outline"
-                  size={18}
-                  color={Colors[colorScheme].danger}
-                />
-              </BouncyButton>
-            )}
-            <BouncyButton
-              className="ml-auto p-2 bg-transparent"
-              style={{ borderRadius: 99 }}
-              onPress={() => onShare?.(item)}
-            >
-              <Ionicons
-                name="share-social-outline"
-                size={18}
-                color={Colors[colorScheme].textSecondary}
-              />
-            </BouncyButton>
+            <MoreActionsButton
+              accessibilityLabel="回答更多操作"
+              style={{ marginLeft: 'auto' }}
+              onPress={() => onMore?.(item)}
+            />
           </NativeView>
         </View>
       </GestureDetector>
@@ -761,11 +679,18 @@ export default function QuestionDetail() {
 
   const [sortBy, setSortBy] = useState<AnswerSort>('default');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-  const [_menuVisible, _setMenuVisible] = useState(false);
-  const [isSharing, setIsSharing] = useState(false);
-  const [selectedAnswer, setSelectedAnswer] = useState<AnswerDetail | null>(
-    null,
-  );
+  const [menuSelection, setMenuSelection] = useState<{
+    questionId: string;
+    answer: AnswerDetail | null;
+  } | null>(null);
+  const menuVisible = menuSelection !== null && menuSelection.questionId === id;
+  const selectedAnswer = menuVisible ? (menuSelection?.answer ?? null) : null;
+
+  React.useEffect(() => {
+    setMenuSelection((selection) =>
+      selection?.questionId === id ? selection : null,
+    );
+  }, [id]);
   const [detailExpanded, setDetailExpanded] = useState(false);
 
   const itemRefs = useRef(new Map<string, AnswerItemHandle>());
@@ -776,21 +701,37 @@ export default function QuestionDetail() {
     onViewableItemsChanged,
   } = useViewableItems<AnswerDetail>();
 
-  const storeFloatingCollected = useCollectionStore((state) =>
-    activeItem?.id ? state.collectedStatusMap[activeItem.id.toString()] : false,
+  const selectedAnswerCollected = useCollectionStore((state) =>
+    selectedAnswer
+      ? (state.collectedStatusMap[selectedAnswer.id.toString()] ??
+        selectedAnswer.relationship?.is_favorited)
+      : undefined,
   );
-  const isFloatingCollected =
-    storeFloatingCollected !== undefined ? storeFloatingCollected : false;
-  const storeFloatingOffset = useCollectionStore((state) =>
-    activeItem?.id
-      ? state.collectedStatusMap[activeItem.id.toString()] !== undefined
-        ? state.collectedCountOffsetMap[activeItem.id.toString()] || 0
-        : 0
-      : 0,
-  );
-  const displayFloatingCount =
-    (activeItem?.favlists_count || 0) + storeFloatingOffset;
-  const { toggleCollect: toggleFloatingCollect } = useCollectionAction();
+
+  const deleteMutation = useMutation({
+    mutationFn: (answerId: string | number) => deleteAnswer(answerId),
+    onMutate: () => ({ questionId: id }),
+    onSuccess: (_result, _answerId, context) => {
+      Alert.alert('删除成功', '你的回答已删除喵！');
+      void queryClient.invalidateQueries({
+        queryKey: ['question-answers', context?.questionId || id],
+      });
+    },
+    onError: (error: unknown) => {
+      Alert.alert('删除失败', getZhihuErrorMessage(error));
+    },
+  });
+
+  const confirmDeleteAnswer = (answerId: string | number) => {
+    Alert.alert('确认删除', '确定要删除这个回答吗？', [
+      { text: '取消', style: 'cancel' },
+      {
+        text: '确认删除',
+        style: 'destructive',
+        onPress: () => deleteMutation.mutate(answerId),
+      },
+    ]);
+  };
 
   const footerAnim = useSharedValue(0);
 
@@ -815,7 +756,7 @@ export default function QuestionDetail() {
     queryKey: ['question-answers', id, sortBy, isAuthenticated],
     queryFn: async ({ pageParam = 0 }) => {
       const include =
-        'data[*].content,excerpt,voteup_count,comment_count,favlists_count,author.name,author.avatar_url,author.headline,author.is_following,relationship.voting,relationship.is_author,created_time,updated_time,ip_info,segment_infos';
+        'data[*].content,excerpt,voteup_count,comment_count,favlists_count,author.name,author.avatar_url,author.headline,author.is_following,relationship.voting,relationship.is_author,relationship.is_favorited,created_time,updated_time,ip_info,segment_infos';
       return getQuestionAnswers(id as string, pageParam, sortBy, include);
     },
     initialPageParam: 0,
@@ -1329,22 +1270,48 @@ export default function QuestionDetail() {
       <Stack.Screen options={{ headerShown: false, title: '问题' }} />
 
       <ShareMenu
-        visible={isSharing}
-        onClose={() => {
-          setIsSharing(false);
-          setSelectedAnswer(null);
-        }}
-        type="answer"
+        visible={menuVisible}
+        onClose={() => setMenuSelection(null)}
+        type={selectedAnswer ? 'answer' : 'question'}
         data={
           selectedAnswer
             ? {
                 id: selectedAnswer.id,
-                title: question?.title,
+                questionId: id,
+                title: question?.title || initialTitle,
                 author: selectedAnswer.author?.name,
                 authorHeadline: selectedAnswer.author?.headline,
+                isCollected: selectedAnswerCollected,
                 url: getShareLink(selectedAnswer),
               }
-            : null
+            : {
+                id,
+                title: question?.title || initialTitle,
+                url: `https://www.zhihu.com/question/${id}`,
+              }
+        }
+        additionalOptions={
+          selectedAnswer?.relationship?.is_author
+            ? [
+                {
+                  key: 'edit',
+                  icon: 'create-outline',
+                  label: '编辑回答',
+                  onPress: () =>
+                    router.push(
+                      `/question/write/${selectedAnswer.question?.id || id}`,
+                    ),
+                },
+                {
+                  key: 'delete',
+                  icon: 'trash-outline',
+                  label: '删除回答',
+                  destructive: true,
+                  disabled: deleteMutation.isPending,
+                  onPress: () => confirmDeleteAnswer(selectedAnswer.id),
+                },
+              ]
+            : []
         }
       />
 
@@ -1354,6 +1321,8 @@ export default function QuestionDetail() {
           collapsed={headerCollapsed}
           progress={headerProgress}
           onBack={() => router.back()}
+          onMore={() => setMenuSelection({ questionId: id, answer: null })}
+          moreAlwaysVisible
           onTitlePress={() =>
             flashListRef.current?.scrollToOffset({ offset: 0, animated: true })
           }
@@ -1378,10 +1347,7 @@ export default function QuestionDetail() {
                 item?.id ? expandedIds.has(item.id.toString()) : false
               }
               onToggle={handleToggleExpand}
-              onShare={(ans) => {
-                setSelectedAnswer(ans);
-                setIsSharing(true);
-              }}
+              onMore={(answer) => setMenuSelection({ questionId: id, answer })}
               questionId={id}
               sortBy={sortBy}
               isAuthenticated={isAuthenticated}
@@ -1497,42 +1463,6 @@ export default function QuestionDetail() {
                   </Text>
                 </BouncyButton>
 
-                <BouncyButton
-                  className="flex-row items-center justify-center ml-3 p-2 bg-transparent"
-                  style={{ borderRadius: 99 }}
-                  onPress={() =>
-                    activeItem?.id &&
-                    toggleFloatingCollect(
-                      activeItem.id,
-                      'answer',
-                      isFloatingCollected,
-                    )
-                  }
-                >
-                  <FontAwesome6
-                    name="star"
-                    solid={isFloatingCollected}
-                    size={20}
-                    color={
-                      isFloatingCollected
-                        ? Colors[colorScheme].warningAccent
-                        : Colors[colorScheme].textSecondary
-                    }
-                  />
-                  {displayFloatingCount > 0 && (
-                    <Text
-                      className=" text-sm font-bold"
-                      style={{
-                        color: isFloatingCollected
-                          ? Colors[colorScheme].warningAccent
-                          : Colors[colorScheme].textSecondary,
-                      }}
-                    >
-                      {displayFloatingCount}
-                    </Text>
-                  )}
-                </BouncyButton>
-
                 {activeItem?.id &&
                   expandedIds.has(activeItem.id.toString()) && (
                     <BouncyButton
@@ -1556,20 +1486,14 @@ export default function QuestionDetail() {
                     </BouncyButton>
                   )}
               </View>
-              <BouncyButton
-                className="flex-row items-center justify-center p-2 bg-transparent"
-                style={{ borderRadius: 99 }}
+              <MoreActionsButton
+                accessibilityLabel="回答更多操作"
+                disabled={!activeItem}
                 onPress={() => {
-                  setSelectedAnswer(activeItem);
-                  setIsSharing(true);
+                  if (!activeItem) return;
+                  setMenuSelection({ questionId: id, answer: activeItem });
                 }}
-              >
-                <Ionicons
-                  name="share-outline"
-                  size={22}
-                  color={Colors[colorScheme].textSecondary}
-                />
-              </BouncyButton>
+              />
             </View>
           </BlurView>
         </Reanimated.View>

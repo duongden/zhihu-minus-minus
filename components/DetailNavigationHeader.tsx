@@ -6,6 +6,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BouncyButton } from '@/components/BouncyButton';
+import { MoreActionsButton } from '@/components/MoreActionsButton';
 import { StableAvatar } from '@/components/StableAvatar';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useSettingsStore } from '@/store/useSettingsStore';
@@ -35,7 +36,8 @@ interface DetailNavigationHeaderProps {
   progress?: SharedValue<number>;
   onBack: () => void;
   onTitlePress?: () => void;
-  onShare?: () => void;
+  onMore?: () => void;
+  moreAlwaysVisible?: boolean;
   author?: {
     name: string;
     avatarUrl?: string | null;
@@ -51,7 +53,8 @@ export function DetailNavigationHeader({
   progress,
   onBack,
   onTitlePress,
-  onShare,
+  onMore,
+  moreAlwaysVisible = false,
   author,
   testID,
 }: DetailNavigationHeaderProps) {
@@ -155,23 +158,16 @@ export function DetailNavigationHeader({
             </BouncyButton>
           ) : null}
         </Animated.View>
-        {onShare ? (
+        {onMore ? (
           <Animated.View
-            pointerEvents={collapsed ? 'box-none' : 'none'}
-            accessibilityElementsHidden={!collapsed}
+            pointerEvents={collapsed || moreAlwaysVisible ? 'box-none' : 'none'}
+            accessibilityElementsHidden={!collapsed && !moreAlwaysVisible}
             importantForAccessibility={
-              collapsed ? 'auto' : 'no-hide-descendants'
+              collapsed || moreAlwaysVisible ? 'auto' : 'no-hide-descendants'
             }
-            style={contentStyle}
+            style={moreAlwaysVisible ? undefined : contentStyle}
           >
-            <BouncyButton
-              accessibilityRole="button"
-              accessibilityLabel="分享"
-              onPress={onShare}
-              style={styles.iconButton}
-            >
-              <Ionicons name="share-outline" size={22} color={foreground} />
-            </BouncyButton>
+            <MoreActionsButton onPress={onMore} color={foreground} />
           </Animated.View>
         ) : (
           <View pointerEvents="none" style={styles.iconButton} />

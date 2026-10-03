@@ -31,6 +31,14 @@ interface HeaderProps {
   collapsed: boolean;
   author?: { name: string };
   progress: { value: number };
+  onMore?: () => void;
+}
+
+interface HeaderMenuProps {
+  visible: boolean;
+  onClose: () => void;
+  type: string;
+  data: { id: string | number; title?: string; author?: string } | null;
 }
 
 let mockParams: {
@@ -42,6 +50,7 @@ let mockPages: { data: { id: string }[] }[] | undefined;
 let mockPagerProps: PagerProps;
 let mockPagerMounts: number;
 let mockHeaderProps: HeaderProps;
+let mockHeaderMenuProps: HeaderMenuProps;
 const mockAnswerProps = new Map<string, AnswerProps>();
 const mockAnswerMounts = new Map<string, number>();
 const mockHeaderThresholds = new Map<string, number>();
@@ -129,10 +138,15 @@ jest.mock('../components/DetailNavigationHeader', () => ({
     return null;
   },
 }));
+jest.mock('../components/ShareMenu', () => ({
+  ShareMenu: (props: HeaderMenuProps) => {
+    mockHeaderMenuProps = props;
+    return null;
+  },
+}));
 jest.mock('../api/client', () => ({ __esModule: true, default: {} }));
 jest.mock('../api/zhihu', () => ({ getAnswer: jest.fn() }));
 jest.mock('../api/zhihu/history', () => ({ recordReadHistory: jest.fn() }));
-jest.mock('../components/ShareMenu', () => ({ ShareMenu: () => null }));
 jest.mock('../components/useColorScheme', () => ({
   useColorScheme: () => 'light',
 }));
@@ -269,6 +283,11 @@ async function nativeScrollAnswer(
   });
 }
 
+async function openHeaderMenu() {
+  expect(mockHeaderProps.onMore).toBeDefined();
+  await act(() => mockHeaderProps.onMore?.());
+}
+
 function renderedAnswerIds(): string[] {
   return React.Children.toArray(mockPagerProps.children).flatMap((child) => {
     if (
@@ -287,6 +306,12 @@ beforeEach(() => {
   mockPages = undefined;
   mockPagerMounts = 0;
   mockHeaderProps = { collapsed: false, progress: { value: 0 } };
+  mockHeaderMenuProps = {
+    visible: false,
+    onClose: jest.fn(),
+    type: 'question',
+    data: null,
+  };
   mockAnswerProps.clear();
   mockAnswerMounts.clear();
   mockHeaderThresholds.clear();
@@ -533,6 +558,118 @@ describe('answer pager list transitions', () => {
     for (const index of [-1, 1, 0.5, Number.NaN]) await selectPage(index);
     expect(mockAnswerProps.get('42')?.isFocused).toBe(true);
     expect(mockSetParams).not.toHaveBeenCalled();
+  });
+});
+
+describe('answer header question menu', () => {
+  it('opens a question menu without answer author or collection data and closes it independently', async () => {
+    setList(['42', '11', '99']);
+    await render(React.createElement(AnswerDetailScreen));
+    await nativeScrollAnswer('42', 300);
+    expect(mockHeaderProps.collapsed).toBe(true);
+    await openHeaderMenu();
+    expect(mockHeaderMenuProps.visible).toBe(true);
+    expect(mockHeaderMenuProps.type).toBe('question');
+    expect(mockHeaderMenuProps.data).toEqual({ id: '7', title: '问题' });
+    expect(mockAnswerProps.get('42')).not.toHaveProperty('menuRequested');
+    expect(mockAnswerProps.get('42')).not.toHaveProperty('onMenuClose');
+    await act(() => mockHeaderMenuProps.onClose());
+    expect(mockHeaderMenuProps.visible).toBe(false);
+    await openHeaderMenu();
+    expect(mockHeaderMenuProps.visible).toBe(true);
+  });
+
+  it('keeps sharing the same question after paging and does not reopen its menu automatically', async () => {
+    setList(['42', '11']);
+    await render(React.createElement(AnswerDetailScreen));
+    await openHeaderMenu();
+    expect(mockHeaderMenuProps.visible).toBe(true);
+    await selectPage(1);
+    expect(mockHeaderMenuProps.visible).toBe(false);
+    await selectPage(0);
+    expect(mockHeaderMenuProps.visible).toBe(false);
+    await selectPage(1);
+    await openHeaderMenu();
+    expect(mockHeaderMenuProps.visible).toBe(true);
+    expect(mockHeaderMenuProps.type).toBe('question');
+    expect(mockHeaderMenuProps.data).toEqual({ id: '7', title: '问题' });
+    expect(mockHeaderProps.author?.name).toBe('作者 11');
+    await act(() => mockHeaderMenuProps.onClose());
+    expect(mockHeaderMenuProps.visible).toBe(false);
+  });
+
+  it('rejects an outgoing header open or menu close without disturbing the current question menu', async () => {
+    setList(['42', '11']);
+    await render(React.createElement(AnswerDetailScreen));
+    const outgoingMore = mockHeaderProps.onMore;
+    const outgoingClose = mockHeaderMenuProps.onClose;
+    await selectPage(1);
+    await act(() => outgoingMore?.());
+    expect(mockHeaderMenuProps.visible).toBe(false);
+
+    await openHeaderMenu();
+    expect(mockHeaderMenuProps.visible).toBe(true);
+    await act(() => outgoingMore?.());
+    expect(mockHeaderMenuProps.visible).toBe(true);
+    await act(() => outgoingClose?.());
+    expect(mockHeaderMenuProps.visible).toBe(true);
+    await act(() => mockHeaderMenuProps.onClose());
+    expect(mockHeaderMenuProps.visible).toBe(false);
+  });
+
+  it('rejects old scope menu callbacks for the same answer ID after a scope round trip', async () => {
+    setList(['42', '11']);
+    const page = await render(React.createElement(AnswerDetailScreen));
+    const originalMore = mockHeaderProps.onMore;
+    const originalClose = mockHeaderMenuProps.onClose;
+    const originalParams = mockParams;
+    mockParams = { ...mockParams, sortBy: 'updated' };
+    await page.rerender(React.createElement(AnswerDetailScreen));
+    const middleMore = mockHeaderProps.onMore;
+    const middleClose = mockHeaderMenuProps.onClose;
+    await openHeaderMenu();
+    expect(mockHeaderMenuProps.visible).toBe(true);
+    await act(() => originalMore?.());
+    await act(() => originalClose?.());
+    expect(mockHeaderMenuProps.visible).toBe(true);
+
+    mockParams = originalParams;
+    await page.rerender(React.createElement(AnswerDetailScreen));
+    expect(mockHeaderMenuProps.visible).toBe(false);
+    await act(() => originalMore?.());
+    await act(() => middleMore?.());
+    expect(mockHeaderMenuProps.visible).toBe(false);
+    await openHeaderMenu();
+    await act(() => originalClose?.());
+    await act(() => middleClose?.());
+    expect(mockHeaderMenuProps.visible).toBe(true);
+    await act(() => mockHeaderMenuProps.onClose());
+    expect(mockHeaderMenuProps.visible).toBe(false);
+  });
+
+  it.each([
+    'questionId',
+    'sortBy',
+  ] as const)('clears the question menu after a %s change without reviving it in the original scope', async (field) => {
+    setList(['42', '11']);
+    const page = await render(React.createElement(AnswerDetailScreen));
+    await openHeaderMenu();
+    const originalParams = mockParams;
+    mockParams = {
+      ...mockParams,
+      [field]: field === 'questionId' ? '8' : 'updated',
+    };
+    await page.rerender(React.createElement(AnswerDetailScreen));
+    expect(mockHeaderMenuProps.visible).toBe(false);
+    expect(mockHeaderMenuProps.data?.id).toBe(
+      field === 'questionId' ? '8' : '7',
+    );
+    mockParams = originalParams;
+    await page.rerender(React.createElement(AnswerDetailScreen));
+    expect(mockHeaderMenuProps.visible).toBe(false);
+    await openHeaderMenu();
+    expect(mockHeaderMenuProps.visible).toBe(true);
+    expect(mockHeaderMenuProps.data).toEqual({ id: '7', title: '问题' });
   });
 });
 

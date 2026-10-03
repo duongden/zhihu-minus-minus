@@ -17,20 +17,29 @@ jest.mock('../api/zhihu/collection', () => ({
   removeFromCollection: jest.fn(),
   removeArticleFromCollection: jest.fn(),
 }));
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
+jest.mock('../api/client', () => ({
+  hasAuthenticationCookie: (cookie: string | null | undefined) =>
+    typeof cookie === 'string' && /(?:^|;\s*)z_c0=[^;\s]+/.test(cookie),
+}));
+jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
 jest.mock('../utils/contentCache', () => ({
   updateContentInteractionCaches: jest.fn(),
 }));
 jest.mock('../utils/toast', () => ({ showToast: jest.fn() }));
 let mockSessionVersion = 0;
+let mockCookies = 'z_c0=synthetic-session';
+const mockPush = jest.fn();
 jest.mock('../store/useAuthStore', () => ({
   getAuthSessionVersion: () => mockSessionVersion,
-  useAuthStore: () => ({ cookies: 'synthetic-session' }),
+  useAuthStore: Object.assign(() => ({ cookies: mockCookies }), {
+    getState: () => ({ cookies: mockCookies }),
+  }),
 }));
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockSessionVersion = 0;
+  mockCookies = 'z_c0=synthetic-session';
   useCollectionStore.getState().resetSession();
 });
 
@@ -47,6 +56,27 @@ async function setup() {
   });
   return { client, host };
 }
+
+test('tracking cookies alone send collection actions to login', async () => {
+  mockCookies = 'd_c0=synthetic-tracking';
+  const { client, host } = await setup();
+  await act(() => host.result.current.toggleCollect('42', 'answer', false));
+  expect(mockPush).toHaveBeenCalledWith('/login');
+  expect(fastCollectAnswer).not.toHaveBeenCalled();
+  await host.unmount();
+  client.clear();
+});
+
+test('collection checks the latest login state at execution', async () => {
+  const { client, host } = await setup();
+  const outgoingAction = host.result.current.toggleCollect;
+  mockCookies = '';
+  await act(() => outgoingAction('42', 'answer', false));
+  expect(mockPush).toHaveBeenCalledWith('/login');
+  expect(fastCollectAnswer).not.toHaveBeenCalled();
+  await host.unmount();
+  client.clear();
+});
 
 test('late quick collection completion cannot repopulate a new session', async () => {
   let finish: (value: Awaited<ReturnType<typeof fastCollectAnswer>>) => void =

@@ -12,6 +12,7 @@ import { getContentVoteCount, getContentVoteState } from '@/api/zhihu/voters';
 import { BouncyButton } from '@/components/BouncyButton';
 import { FollowButton } from '@/components/FollowButton';
 import { LikeButton } from '@/components/LikeButton';
+import { MoreActionsButton } from '@/components/MoreActionsButton';
 import { PinPollCard } from '@/components/PinPollCard';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { ReadingProgressNotice } from '@/components/ReadingProgressNotice';
@@ -40,7 +41,17 @@ export default function PinDetailScreen() {
   const primaryColor = useThemeColor({}, 'primary');
   const primaryTransparent = useThemeColor({}, 'primaryTransparent');
 
-  const [isSharing, setIsSharing] = React.useState(false);
+  const contentIdentity = `pin:${String(id ?? '')}`;
+  const [openMenuIdentity, setOpenMenuIdentity] = React.useState<string | null>(
+    null,
+  );
+  const menuVisible = openMenuIdentity === contentIdentity;
+
+  useEffect(() => {
+    setOpenMenuIdentity((opened) =>
+      opened === contentIdentity ? opened : null,
+    );
+  }, [contentIdentity]);
   const [votersVisible, setVotersVisible] = React.useState(false);
   const scrollViewRef = React.useRef<ScrollView>(null);
 
@@ -152,20 +163,17 @@ export default function PinDetailScreen() {
           headerStyle: { backgroundColor },
           headerTintColor: textColor,
           headerRight: () => (
-            <BouncyButton
-              className="p-2 rounded-full"
-              onPress={() => setIsSharing(true)}
+            <MoreActionsButton
+              onPress={() => setOpenMenuIdentity(contentIdentity)}
               style={{ marginRight: 10 }}
-            >
-              <ThemedIcon name="share-outline" size={24} colorType="default" />
-            </BouncyButton>
+            />
           ),
         }}
       />
 
       <ShareMenu
-        visible={isSharing}
-        onClose={() => setIsSharing(false)}
+        visible={menuVisible}
+        onClose={() => setOpenMenuIdentity(null)}
         type="pin"
         data={
           pin
@@ -305,16 +313,10 @@ export default function PinDetailScreen() {
                   </Text>
                 )}
               </BouncyButton>
-              <BouncyButton
-                className="items-center justify-center ml-3 p-2 flex-row rounded-full bg-transparent"
-                onPress={() => setIsSharing(true)}
-              >
-                <ThemedIcon
-                  name="share-social-outline"
-                  size={24}
-                  colorType="secondary"
-                />
-              </BouncyButton>
+              <MoreActionsButton
+                style={{ marginLeft: 12 }}
+                onPress={() => setOpenMenuIdentity(contentIdentity)}
+              />
             </View>
           </View>
         </BlurView>

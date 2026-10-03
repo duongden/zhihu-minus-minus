@@ -1,14 +1,15 @@
-import { FontAwesome6, Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View as RNView, Share } from 'react-native';
+import { View as RNView } from 'react-native';
 import Animated, { SharedTransition } from 'react-native-reanimated';
 import { hasAuthenticationCookie } from '@/api/client';
 import { type FeedItem, getVoteSuccessMessage, voteContent } from '@/api/zhihu';
+import { MoreActionsButton } from '@/components/MoreActionsButton';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
-import { useCollectionAction } from '@/hooks/useCollectionAction';
+import { useContentActions } from '@/hooks/useContentActions';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useCollectionStore } from '@/store/useCollectionStore';
 import {
@@ -129,18 +130,10 @@ const FeedCardComponent = ({ item, tab }: FeedCardProps) => {
     setVoteCount(item.voteCount || 0);
   }, [item.id, item.type, item.voted, item.voteCount]);
 
-  const isCollectable = item.type === 'answers' || item.type === 'articles';
   const itemIdStr = item.id != null ? item.id.toString() : '';
   const storeCollected = useCollectionStore((state) =>
     itemIdStr ? state.collectedStatusMap[itemIdStr] : undefined,
   );
-  const isCollected = storeCollected !== undefined ? storeCollected : false;
-  const storeOffset = useCollectionStore(
-    (state) => (itemIdStr ? state.collectedCountOffsetMap[itemIdStr] : 0) || 0,
-  );
-  const displayCount = (item.favlistsCount || 0) + storeOffset;
-  const { toggleCollect } = useCollectionAction();
-  const warningColor = useThemeColor({}, 'warning');
   const secondaryColor = useThemeColor({}, 'textSecondary');
 
   const cleanTitle =
@@ -215,6 +208,29 @@ const FeedCardComponent = ({ item, tab }: FeedCardProps) => {
     width: number;
     height: number;
   } | null>(null);
+  const shareType: ShareContentType =
+    item.type === 'answers'
+      ? 'answer'
+      : item.type === 'articles'
+        ? 'article'
+        : item.type === 'pins'
+          ? 'pin'
+          : item.type === 'questions'
+            ? 'question'
+            : 'video';
+  const shareData = {
+    id: item.id,
+    title: cleanTitle,
+    author: item.author.name,
+    authorHeadline: item.author.headline,
+    questionId: item.questionId,
+    isCollected: storeCollected,
+  };
+  const { actions: contentActions } = useContentActions({
+    type: shareType,
+    data: shareData,
+    enabled: previewVisible,
+  });
 
   // Recycled cells must not retain another item's preview or share sheet.
   // biome-ignore lint/correctness/useExhaustiveDependencies: resetting overlays is keyed to the recycled content identity.
@@ -302,39 +318,16 @@ const FeedCardComponent = ({ item, tab }: FeedCardProps) => {
           },
         ]
       : []),
-    ...(isCollectable
-      ? [
-          {
-            key: 'collect',
-            title: isCollected ? '取消收藏' : '移至收藏',
-            icon: 'star',
-            iconFamily: 'font-awesome-6' as const,
-            iconSolid: isCollected,
-            onPress: () => {
-              const typeStr = item.type === 'answers' ? 'answer' : 'article';
-              toggleCollect(item.id, typeStr, isCollected);
-            },
-          },
-        ]
-      : []),
-    {
-      key: 'share',
-      title: '系统分享',
-      icon: 'share-outline',
-      onPress: async () => {
-        try {
-          const routeType = isVideoType ? 'zvideo' : item.type.slice(0, -1);
-          const link = `https://www.zhihu.com/${routeType}/${item.id}`;
-          await Share.share({
-            message: link,
-            url: link,
-            title: cleanTitle || '知乎分享',
-          });
-        } catch (_error) {
-          showToast('分享失败');
-        }
-      },
-    },
+    ...contentActions.map((action) => ({
+      key: action.key,
+      title: action.label,
+      icon: action.icon,
+      iconFamily: action.iconFamily,
+      iconSolid: action.iconSolid,
+      isDestructive: action.destructive,
+      disabled: action.disabled,
+      onPress: action.onPress,
+    })),
   ];
 
   return (
@@ -460,105 +453,60 @@ const FeedCardComponent = ({ item, tab }: FeedCardProps) => {
           )}
         </View>
 
-        {/* 热区4：底部操作栏 - 问题关注类动态不显示 */}
-        {engagementType && (
-          <View className="flex-row items-center bg-transparent">
-            <LikeButton
-              id={item.id}
-              count={voteCount}
-              voted={voted}
-              type={engagementType}
-              variant="ghost"
-              onVoteChange={(newVoted, newCount) => {
-                setVoted(newVoted);
-                setVoteCount(newCount);
-              }}
-            />
-
-            {/* 点击评论按钮 -> 评论页 */}
-            <BouncyButton
-              onPress={() => {
-                const type =
-                  item.type === 'articles'
-                    ? 'article'
-                    : item.type === 'answers'
-                      ? 'answer'
-                      : item.type.slice(0, -1);
-                router.push(
-                  `/comments/${item.id}?type=${type}&count=${item.commentCount}`,
-                );
-              }}
-              className="flex-row items-center  bg-transparent ml-4 py-1 px-3 rounded-full"
-            >
-              <Ionicons
-                name="chatbubble-outline"
-                size={16}
-                color={secondaryColor}
+        <View className="flex-row items-center bg-transparent">
+          {engagementType ? (
+            <>
+              <LikeButton
+                id={item.id}
+                count={voteCount}
+                voted={voted}
+                type={engagementType}
+                variant="ghost"
+                onVoteChange={(newVoted, newCount) => {
+                  setVoted(newVoted);
+                  setVoteCount(newCount);
+                }}
               />
-              <Text type="secondary" className="ml-1 text-xs font-semibold">
-                {item.commentCount > 0 ? item.commentCount : '0'}
-              </Text>
-            </BouncyButton>
 
-            {isCollectable && (
+              {/* 点击评论按钮 -> 评论页 */}
               <BouncyButton
                 onPress={() => {
-                  const typeStr =
-                    item.type === 'answers' ? 'answer' : 'article';
-                  toggleCollect(item.id, typeStr, isCollected);
+                  const type =
+                    item.type === 'articles'
+                      ? 'article'
+                      : item.type === 'answers'
+                        ? 'answer'
+                        : item.type.slice(0, -1);
+                  router.push(
+                    `/comments/${item.id}?type=${type}&count=${item.commentCount}`,
+                  );
                 }}
                 className="flex-row items-center  bg-transparent ml-4 py-1 px-3 rounded-full"
               >
-                <FontAwesome6
-                  name="star"
-                  solid={isCollected}
+                <Ionicons
+                  name="chatbubble-outline"
                   size={16}
-                  color={isCollected ? warningColor : secondaryColor}
+                  color={secondaryColor}
                 />
-                {displayCount > 0 && (
-                  <Text
-                    className="ml-1 text-xs font-semibold"
-                    style={{
-                      color: isCollected ? warningColor : secondaryColor,
-                    }}
-                  >
-                    {displayCount}
-                  </Text>
-                )}
+                <Text type="secondary" className="ml-1 text-xs font-semibold">
+                  {item.commentCount > 0 ? item.commentCount : '0'}
+                </Text>
               </BouncyButton>
-            )}
+            </>
+          ) : null}
 
-            <BouncyButton
-              onPress={() => setMenuVisible(true)}
-              className="ml-auto p-2 -mr-2 bg-transparent"
-              style={{ borderRadius: 99 }}
-            >
-              <Ionicons
-                name="ellipsis-horizontal"
-                size={18}
-                color={secondaryColor}
-              />
-            </BouncyButton>
-          </View>
-        )}
+          <MoreActionsButton
+            onPress={() => setMenuVisible(true)}
+            color={secondaryColor}
+            style={{ marginLeft: 'auto', marginRight: -8 }}
+          />
+        </View>
 
         <ShareMenu
           visible={menuVisible}
           onClose={() => setMenuVisible(false)}
-          type={
-            (isVideoType ? 'video' : item.type.slice(0, -1)) as ShareContentType
-          }
-          data={{
-            id: item.id,
-            title: cleanTitle,
-            author: item.author?.name,
-            authorHeadline: item.author?.headline,
-            excerpt:
-              typeof item.excerpt === 'string' ? item.excerpt : undefined,
-            url: isVideoType
-              ? `https://www.zhihu.com/zvideo/${item.id}`
-              : undefined,
-          }}
+          type={shareType}
+          data={shareData}
         />
       </BouncyButton>
 
@@ -568,6 +516,7 @@ const FeedCardComponent = ({ item, tab }: FeedCardProps) => {
           onClose={() => setPreviewVisible(false)}
           previewContent={<FeedCardPreview item={item} />}
           options={menuOptions}
+          contentIdentity={identity}
           originLayout={originLayout}
         />
       )}

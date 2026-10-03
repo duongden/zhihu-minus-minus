@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
+import { hasAuthenticationCookie } from '@/api/client';
 import {
   fastCollectAnswer,
   fastCollectArticle,
@@ -15,7 +16,6 @@ import { getZhihuErrorMessage } from '@/utils/zhihuError';
 
 export function useCollectionAction() {
   const router = useRouter();
-  const { cookies } = useAuthStore();
   const showToast = useCollectionStore((state) => state.showToast);
   const setCollectedStatus = useCollectionStore(
     (state) => state.setCollectedStatus,
@@ -138,10 +138,11 @@ export function useCollectionAction() {
     type: 'answer' | 'article',
     isCurrentlyCollected: boolean,
   ) => {
-    if (!cookies) {
+    if (!hasAuthenticationCookie(useAuthStore.getState().cookies)) {
       router.push('/login');
       return;
     }
+    if (collectMutation.isPending || uncollectMutation.isPending) return;
     if (isCurrentlyCollected) {
       uncollectMutation.mutate({ id, type });
     } else {

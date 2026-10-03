@@ -1,4 +1,4 @@
-import { FontAwesome6, Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import React from 'react';
@@ -9,11 +9,11 @@ import {
   getContentVoteState,
   type VoteContentType,
 } from '@/api/zhihu';
+import { MoreActionsButton } from '@/components/MoreActionsButton';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { ZhihuContent } from '@/features/rich-content';
-import { useCollectionAction } from '@/hooks/useCollectionAction';
 import { useCollectionStore } from '@/store/useCollectionStore';
 import { BouncyButton } from './BouncyButton';
 import { LikeButton } from './LikeButton';
@@ -100,12 +100,10 @@ export const CreationCard = React.forwardRef<
     const colorScheme = useColorScheme();
     const primaryColor = useThemeColor({}, 'primary');
     const cardBackground = useThemeColor({}, 'backgroundSecondary');
-    const warningColor = useThemeColor({}, 'warning');
     const [localExpanded, setLocalExpanded] = React.useState(false);
     const [menuVisible, setMenuVisible] = React.useState(false);
     const footerRef = React.useRef<NativeView>(null);
 
-    const isCollectable = type === 'answer' || type === 'article';
     const voteContentType: VoteContentType | null =
       type === 'article'
         ? 'articles'
@@ -114,20 +112,17 @@ export const CreationCard = React.forwardRef<
           : type === 'answer'
             ? 'answers'
             : null;
-    const storeCollected = useCollectionStore((state) =>
-      item?.id ? state.collectedStatusMap[item.id.toString()] : false,
+    const storeCollected = useCollectionStore(
+      (state) => state.collectedStatusMap[item.id.toString()],
     );
-    const isCollected = storeCollected !== undefined ? storeCollected : false;
-    const storeOffset = useCollectionStore((state) =>
-      item?.id ? state.collectedCountOffsetMap[item.id.toString()] || 0 : 0,
-    );
-    const displayCount =
-      (item?.favlists_count ??
-        item?.favlistsCount ??
-        item?.favorite_count ??
-        item?.reaction?.statistics?.favorites ??
-        0) + storeOffset;
-    const { toggleCollect } = useCollectionAction();
+    const identity = `${type}:${item.id}`;
+    const previousIdentity = React.useRef(identity);
+    React.useEffect(() => {
+      if (previousIdentity.current === identity) return;
+      previousIdentity.current = identity;
+      setMenuVisible(false);
+      setLocalExpanded(false);
+    }, [identity]);
 
     React.useImperativeHandle(ref, () => ({
       measureFooter: (callback) => footerRef.current?.measureInWindow(callback),
@@ -443,33 +438,6 @@ export const CreationCard = React.forwardRef<
                   {(item.comment_count ?? 0) > 0 ? item.comment_count : '0'}
                 </Text>
               </BouncyButton>
-              {isCollectable && (
-                <BouncyButton
-                  onPress={() => toggleCollect(item.id, type, isCollected)}
-                  className="flex-row items-center justify-center ml-3 p-2 rounded-full bg-transparent"
-                >
-                  <FontAwesome6
-                    name="star"
-                    solid={isCollected}
-                    size={16}
-                    color={
-                      isCollected ? warningColor : Colors[colorScheme].iconMuted
-                    }
-                  />
-                  {displayCount > 0 && (
-                    <Text
-                      className="ml-1 text-xs font-semibold"
-                      style={{
-                        color: isCollected
-                          ? warningColor
-                          : Colors[colorScheme].iconMuted,
-                      }}
-                    >
-                      {displayCount}
-                    </Text>
-                  )}
-                </BouncyButton>
-              )}
             </View>
           ) : (
             <Text
@@ -489,16 +457,11 @@ export const CreationCard = React.forwardRef<
             >
               {timestamp ? new Date(timestamp * 1000).toLocaleDateString() : ''}
             </Text>
-            <BouncyButton
+            <MoreActionsButton
               onPress={() => setMenuVisible(true)}
-              className="p-1 -mr-1 bg-transparent"
-            >
-              <Ionicons
-                name="ellipsis-horizontal"
-                size={18}
-                color={Colors[colorScheme].iconMuted}
-              />
-            </BouncyButton>
+              color={Colors[colorScheme].iconMuted}
+              style={{ marginRight: -4 }}
+            />
           </View>
         </NativeView>
 
@@ -511,6 +474,8 @@ export const CreationCard = React.forwardRef<
             title: getTitle(),
             author: item.author?.name,
             authorHeadline: item.author?.headline,
+            questionId: item.question?.id,
+            isCollected: storeCollected,
             excerpt:
               typeof shareExcerpt === 'string' ? shareExcerpt : undefined,
             url: item.url,
