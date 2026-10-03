@@ -916,7 +916,6 @@ export default function QuestionDetail() {
   const linkColor = useThemeColor({}, 'link');
   const onPrimaryColor = useThemeColor({}, 'onPrimary');
   const topicBackground = useThemeColor({}, 'backgroundTertiary');
-  const dividerColor = useThemeColor({}, 'divider');
   const toolbarBackground = useThemeColor({}, 'backgroundSecondary');
 
   const {
@@ -987,7 +986,11 @@ export default function QuestionDetail() {
         <View
           type="surface"
           className="px-5 pb-5"
-          style={{ paddingTop: navigationHeight + 14 }}
+          style={{
+            paddingTop: navigationHeight + 14,
+            borderBottomLeftRadius: 20,
+            borderBottomRightRadius: 20,
+          }}
         >
           <Reanimated.View
             sharedTransitionTag={`title-${id}`}
@@ -1048,7 +1051,7 @@ export default function QuestionDetail() {
                 </View>
               ) : null}
               {question?.detail ? (
-                <View className="mt-3">
+                <View className="mt-3 rounded-2xl overflow-hidden">
                   {detailExpanded ? (
                     <>
                       <ZhihuContent
@@ -1194,10 +1197,7 @@ export default function QuestionDetail() {
             </>
           )}
         </View>
-        <View
-          className="mx-5 flex-row justify-between items-center py-3.5 mb-1"
-          style={{ borderTopWidth: 0.5, borderTopColor: dividerColor }}
-        >
+        <View className="mx-5 flex-row justify-between items-center py-3.5 mb-1">
           <Text style={{ fontSize: 15, lineHeight: 22, fontWeight: '600' }}>
             {question?.answer_count || 0} 个回答
           </Text>
@@ -1258,7 +1258,6 @@ export default function QuestionDetail() {
       onPrimaryColor,
       secondaryTextColor,
       topicBackground,
-      dividerColor,
       questionError,
       refetchQuestion,
       router.push,
