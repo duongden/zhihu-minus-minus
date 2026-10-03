@@ -1,6 +1,8 @@
 # 开发指南
 
-本文面向需要在本地运行、调试、测试或扩展知乎--的开发者。用户安装说明见 [`README.md`](./README.md)，Windows Android 原生构建的网络和 Gradle 细节见 [`BUILD_WINDOWS.md`](./BUILD_WINDOWS.md)。
+本文面向需要在本地运行、调试、测试或扩展知乎--的开发者。用户安装说明见 [`README.md`](../README.md)，Windows Android 原生构建的网络和 Gradle 细节见 [`BUILD_WINDOWS.md`](./BUILD_WINDOWS.md)。
+
+除非另有说明，以下命令均在仓库根目录执行。
 
 ## 技术基线
 
@@ -21,7 +23,7 @@ npx expo prebuild
 
 `android/`、`ios/` 和 `.expo/` 是生成物，不提交到仓库。`prebuild` 会应用 Expo config plugins，包括 ABI split、App 图标、iOS Firebase static linkage 和自定义原生模块配置。
 
-本地开发不需要 Firebase 文件或 Sentry DSN。若要验证 telemetry，在项目根目录创建 `.env.local`，按 [`docs/TELEMETRY.md`](./docs/TELEMETRY.md) 配置；不要把 `google-services.json`、`GoogleService-Info.plist` 或 Token 提交到 Git。
+本地开发不需要 Firebase 文件或 Sentry DSN。若要验证 telemetry，在项目根目录创建 `.env.local`，按 [`docs/TELEMETRY.md`](./TELEMETRY.md) 配置；不要把 `google-services.json`、`GoogleService-Info.plist` 或 Token 提交到 Git。
 
 ## 运行与调试
 
@@ -59,7 +61,7 @@ npx expo run:ios --configuration Debug --device
 
 只生成本地未签名 IPA 可运行 `bash build-unsigned-ipa.sh`。脚本每次执行 iOS prebuild（`--no-install`）后安装 Pods，自动发现唯一 workspace 和 scheme，禁用本地 Sentry 上传，并把当前版本 IPA 写入项目根目录。它不会改写 `.xcode.env.local` 或删除其他版本产物；已有同版本 IPA 在构建和打包成功后替换。产物已被 Git 忽略，仍需另行签名才能安装。
 
-使用 Xcode 27 / iOS 27 SDK 时，UIKit 要求采用 Scene 生命周期，否则应用会在创建界面前退出。当前 SDK 55 由 [`withIosSceneLifecycle`](./plugins/withIosSceneLifecycle.js) 在 prebuild 时迁移窗口启动，并注入 [`ZhihuSceneDelegate.swift`](./plugins/ios/ZhihuSceneDelegate.swift)：以 `UIWindow(windowScene:)` 创建单个主窗口，将冷/热链接与前后台事件转给原有 Expo AppDelegate。生成目录无需手改；插件拒绝覆盖未知模板或已有自定义 Scene 配置，升级 Expo SDK 时须重新核对此适配。平台依据见 [Apple 迁移说明](https://developer.apple.com/documentation/uikit/transitioning-to-the-uikit-scene-based-life-cycle) 与 [Expo Scene 说明](https://github.com/expo/fyi/blob/main/ios-scene-lifecycle.md)。
+使用 Xcode 27 / iOS 27 SDK 时，UIKit 要求采用 Scene 生命周期，否则应用会在创建界面前退出。当前 SDK 55 由 [`withIosSceneLifecycle`](../plugins/withIosSceneLifecycle.js) 在 prebuild 时迁移窗口启动，并注入 [`ZhihuSceneDelegate.swift`](../plugins/ios/ZhihuSceneDelegate.swift)：以 `UIWindow(windowScene:)` 创建单个主窗口，将冷/热链接与前后台事件转给原有 Expo AppDelegate。生成目录无需手改；插件拒绝覆盖未知模板或已有自定义 Scene 配置，升级 Expo SDK 时须重新核对此适配。平台依据见 [Apple 迁移说明](https://developer.apple.com/documentation/uikit/transitioning-to-the-uikit-scene-based-life-cycle) 与 [Expo Scene 说明](https://github.com/expo/fyi/blob/main/ios-scene-lifecycle.md)。
 
 开启 Firebase 时，其 config plugin 会先在旧窗口和 React 启动代码之间插入初始化块。Scene 迁移保留这个已知生成块及平台条件，让 `FirebaseApp.configure()` 继续在 AppDelegate 的 `didFinishLaunchingWithOptions` 中执行一次，再由 Scene 创建窗口并启动 React。未知初始化仍拒绝自动迁移。修改此适配时运行 `npm test -- tests/ios-scene-lifecycle.test.js --runInBand`，并分别验证开启和关闭 telemetry 的干净 iOS prebuild；只重用本地已迁移的 `ios/` 不足以覆盖 CI。
 
@@ -106,7 +108,7 @@ npm run analyze:rich-content:inbox
 
 本地macOS具备Swift工具链时，可运行 `bash modules/zhihu-rich-text/tests/run-model-smoke.sh`，直接编译并检查iOS纯Foundation模型的UTF-16范围、非法输入和附件语义复制。它不加载UIKit，不替代iOS app编译、装饰/附件视觉及系统手势验收。
 
-`npm run lint` 不修改文件；需要自动修复时使用 `npm run lint:fix` 或 `npm run format`，然后逐项检查 diff。富文本专项的 fixture 投递、脱敏和 manifest 规则见 [`features/rich-content/README.md`](./features/rich-content/README.md)。
+`npm run lint` 不修改文件；需要自动修复时使用 `npm run lint:fix` 或 `npm run format`，然后逐项检查 diff。富文本专项的 fixture 投递、脱敏和 manifest 规则见 [`features/rich-content/README.md`](../features/rich-content/README.md)。
 
 ### 主要界面回归场景
 
@@ -125,11 +127,11 @@ npm run analyze:rich-content:inbox
 
 上述检查只使用合成内容；真实接口、系统选图和键盘行为需在目标平台另行验证，不将真实账号、正文或登录 URL 写入测试与截图。
 
-富文本后续路线按 [Issue #40](https://github.com/huamurui/zhihu-minus-minus/issues/40) 更新为原生 attributed text / Text Flow Island，实施进度与未完成项见 [Renderer V2 计划](./features/rich-content/docs/renderer-v2-plan.md)，Release指标见 [基准计划](./features/rich-content/docs/benchmark-plan.md)。“设置 → 外观与阅读 → 正文排版”提供经典排版、tiqian-super-mini、网页排版三选项；“功能开关 → 正文排版”也会进入同一页面。业务 `ZhihuContent` 默认读取持久偏好，也可显式传 `renderer` 覆盖。从“我的 → 富文本测试案例（开发）”进入功能原型或稳定fixture，可对照这三个后端；案例内切换仅保留于该页面，不写生产偏好。生产构建隐藏开发入口并重定向 `/dev/*`，但真实正文仍可通过设置选择tiqian-super-mini。开发包另有 `zhihu--:///dev/native-validation` 合成验证页，检查 AES、原子文件、恢复、流式哈希、离线公式及原生长文布局；结果文件只含时间戳和布尔值，不能导出真实账号或密钥。
+富文本后续路线按 [Issue #40](https://github.com/huamurui/zhihu-minus-minus/issues/40) 更新为原生 attributed text / Text Flow Island，实施进度与未完成项见 [Renderer V2 计划](../features/rich-content/docs/renderer-v2-plan.md)，Release指标见 [基准计划](../features/rich-content/docs/benchmark-plan.md)。“设置 → 外观与阅读 → 正文排版”提供经典排版、tiqian-super-mini、网页排版三选项；“功能开关 → 正文排版”也会进入同一页面。业务 `ZhihuContent` 默认读取持久偏好，也可显式传 `renderer` 覆盖。从“我的 → 富文本测试案例（开发）”进入功能原型或稳定fixture，可对照这三个后端；案例内切换仅保留于该页面，不写生产偏好。生产构建隐藏开发入口并重定向 `/dev/*`，但真实正文仍可通过设置选择tiqian-super-mini。开发包另有 `zhihu--:///dev/native-validation` 合成验证页，检查 AES、原子文件、恢复、流式哈希、离线公式及原生长文布局；结果文件只含时间戳和布尔值，不能导出真实账号或密钥。
 
-新增的 [tiqian-super-mini 功能原型](./features/rich-content/docs/renderer-v2-experiment-03-native-flow.md) 经过 HTML → `ZhihuDocument` → Rich Text IR → 本地 `modules/zhihu-rich-text`，初步支持同一流跨段选择、source map、装饰和行内附件。入口为上述案例列表的“tiqian-super-mini 原型”，也可在开发构建打开 `zhihu--:///dev/rich-content/prototype`。Android使用TextView/Spannable，iOS新增UIKit/TextKit adapter，两端共享Document、IR与JS交互宿主。未包含该模块或不支持的平台回退到RNRH。新增或变更模块后，对目标平台运行 `npx expo prebuild --platform android --no-install` 或 `npx expo prebuild --platform ios --no-install`，并重新编译/安装development build；Fast Refresh不能添加原生模块，Expo Go不支持此能力。iOS SVG解码依赖由本地podspec声明，prebuild后需安装Pods。
+新增的 [tiqian-super-mini 功能原型](../features/rich-content/docs/renderer-v2-experiment-03-native-flow.md) 经过 HTML → `ZhihuDocument` → Rich Text IR → 本地 `modules/zhihu-rich-text`，初步支持同一流跨段选择、source map、装饰和行内附件。入口为上述案例列表的“tiqian-super-mini 原型”，也可在开发构建打开 `zhihu--:///dev/rich-content/prototype`。Android使用TextView/Spannable，iOS新增UIKit/TextKit adapter，两端共享Document、IR与JS交互宿主。未包含该模块或不支持的平台回退到RNRH。新增或变更模块后，对目标平台运行 `npx expo prebuild --platform android --no-install` 或 `npx expo prebuild --platform ios --no-install`，并重新编译/安装development build；Fast Refresh不能添加原生模块，Expo Go不支持此能力。iOS SVG解码依赖由本地podspec声明，prebuild后需安装Pods。
 
-iOS最低版本继续为15.1。[expo-router补丁](./patches/expo-router+55.0.18.patch)为原有 `UIAction.subtitle` 赋值增加iOS16可用性守卫，避免当前SDK在默认target下编译失败；15.x仅省略此action副标题。补丁由现有postinstall的patch-package应用，无需改生成Pods工程或提高全局最低系统版本。
+iOS最低版本继续为15.1。[expo-router补丁](../patches/expo-router+55.0.18.patch)为原有 `UIAction.subtitle` 赋值增加iOS16可用性守卫，避免当前SDK在默认target下编译失败；15.x仅省略此action副标题。补丁由现有postinstall的patch-package应用，无需改生成Pods工程或提高全局最低系统版本。
 
 已安装development build并连接Metro的iOS模拟器可直接打开合成案例：
 
@@ -141,13 +143,13 @@ xcrun simctl openurl booted 'zhihu--:///dev/rich-content/prototype?caseId=attach
 
 公共推荐入口为 `ZhihuContent`，默认采用用户正文偏好，需要固定后端时可传 `renderer="native-v2"`；该外壳已封装完整RNRH fallback。直接使用 `ZhihuNativeContent` 必须提供 `renderFallback` callback，由宿主返回完整正文与图片/链接交互；HTML 宿主使用 RNRH，结构化宿主使用 JSON 分段组件。V2选区和知识点事件仅在native模块可用时生效。
 
-`structured_content` 的渲染对照位于“我的 → 富文本测试案例 → structured_content 渲染对照”。独立 `ZhihuStructuredContent` 直接按 JSON 分段展开收起，可比较 React Native 分段节点和 tiqian 原生文本流。后者直接向 `ZhihuNativeContent.document` 传递 `ZhihuDocument`；未提供该属性时，原 HTML normalization 路径保持不变，结构化模式在缺少原生模块时回退分段节点。五个主要案例来自附件中的真实回答，保持全部分段、marks 与分页状态，身份、ID、业务链接和不透明上下文已脱敏；公开正文与公式图片地址保留并在运行时加载，图片不下载进仓库。原附件缺少真实续页，另有合成案例演示追加；测试页不请求正文或互动接口、不更改持久阅读设置。样本来自 `features/rich-content/fixtures/inbox/structured-content/`，原始请求与字段结构见 [next-render 记录](./docs/ZHIHU_NEXT_RENDER.md)。
+`structured_content` 的渲染对照位于“我的 → 富文本测试案例 → structured_content 渲染对照”。独立 `ZhihuStructuredContent` 直接按 JSON 分段展开收起，可比较 React Native 分段节点和 tiqian 原生文本流。后者直接向 `ZhihuNativeContent.document` 传递 `ZhihuDocument`；未提供该属性时，原 HTML normalization 路径保持不变，结构化模式在缺少原生模块时回退分段节点。五个主要案例来自附件中的真实回答，保持全部分段、marks 与分页状态，身份、ID、业务链接和不透明上下文已脱敏；公开正文与公式图片地址保留并在运行时加载，图片不下载进仓库。原附件缺少真实续页，另有合成案例演示追加；测试页不请求正文或互动接口、不更改持久阅读设置。样本来自 `features/rich-content/fixtures/inbox/structured-content/`，原始请求与字段结构见 [next-render 记录](./ZHIHU_NEXT_RENDER.md)。
 
 正文后端偏好保存为 `richContentRenderer`，默认 `rnrh`。settings持久化版本递增到13，并从旧 `useWebView` 迁移：原值为true时保留网页排版，否则使用经典排版，不静默替用户开启tiqian-super-mini。原生模块缺失或平台不是Android/iOS时，只对本次渲染回退RNRH，保留用户选择供可用客户端继续使用。
 
-2026-09-30按用户决定正式移除Enriched：组件、专属normalizer与测试、依赖、native patch和开发入口均已删除，研发集中到本地tiqian-super-mini。[Enriched 实验记录](./features/rich-content/docs/renderer-v2-experiment-01-enriched-html.md)仅保留研究与历史构建依据。原生依赖移除后需用锁文件安装依赖，重新prebuild、编译和真机检查，以免旧生成工程继续链接已移除的库。2026-10-01增加iOS原生adapter、Expo Apple模块注册和共享JS入口；初期平台结果见实验03，后续双端Release构建、合成页面与系统交互的覆盖范围见 [本轮审查记录](./docs/CODE_REVIEW_2026-10-01.md)，完整平台验收仍需逐项推进。Tiqian保留为[历史集成草案](./features/rich-content/docs/renderer-v2-experiment-02-tiqian.md)，未接入本轮Android原型。
+2026-09-30按用户决定正式移除Enriched：组件、专属normalizer与测试、依赖、native patch和开发入口均已删除，研发集中到本地tiqian-super-mini。[Enriched 实验记录](../features/rich-content/docs/renderer-v2-experiment-01-enriched-html.md)仅保留研究与历史构建依据。原生依赖移除后需用锁文件安装依赖，重新prebuild、编译和真机检查，以免旧生成工程继续链接已移除的库。2026-10-01增加iOS原生adapter、Expo Apple模块注册和共享JS入口；初期平台结果见实验03，后续双端Release构建、合成页面与系统交互的覆盖范围见 [本轮审查记录](./CODE_REVIEW_2026-10-01.md)，完整平台验收仍需逐项推进。Tiqian保留为[历史集成草案](../features/rich-content/docs/renderer-v2-experiment-02-tiqian.md)，未接入本轮Android原型。
 
-2026-09-30初始main同步的 `npm ci`、Android / iOS prebuild和质量检查属于移除Enriched之前的记录。本轮tiqian-super-mini实现、Android Debug真机查看与Enriched移除后的验证结果以 [实验03](./features/rich-content/docs/renderer-v2-experiment-03-native-flow.md) 为准；prebuild和逻辑测试通过不代表双端原生排版、选择或Release性能已验收。
+2026-09-30初始main同步的 `npm ci`、Android / iOS prebuild和质量检查属于移除Enriched之前的记录。本轮tiqian-super-mini实现、Android Debug真机查看与Enriched移除后的验证结果以 [实验03](../features/rich-content/docs/renderer-v2-experiment-03-native-flow.md) 为准；prebuild和逻辑测试通过不代表双端原生排版、选择或Release性能已验收。
 
 ## 代码结构与数据边界
 
@@ -169,8 +171,8 @@ xcrun simctl openurl booted 'zhihu--:///dev/rich-content/prototype?caseId=attach
 
 ## 持久化与敏感数据
 
-- 登录态主存于应用沙箱的 `auth-storage.json`，用于容纳多账号 Cookie；旧版本的 SecureStore Cookie 只在首次缺少文件时用于兼容导入。主文件与当前备份使用 AES-GCM，密钥另存 SecureStore，原子读取负责 Android `.bak` 恢复；旧明文与旧 store 均保留兼容迁移，详见 [账号保存与恢复](./docs/AUTH_STORAGE.md)。
-- 设置和 telemetry 开关使用 SecureStore；阅读进度迁移到最多 100 条的双快照文件，两个快照提交后才清理旧 SecureStore。推荐流缓存、曝光与创作草稿使用 Expo SQLite；缓存 24 小时过期、曝光 30 天保留并定期限量，草稿规则见 [发布编辑器](./features/publishing/README.md)。
+- 登录态主存于应用沙箱的 `auth-storage.json`，用于容纳多账号 Cookie；旧版本的 SecureStore Cookie 只在首次缺少文件时用于兼容导入。主文件与当前备份使用 AES-GCM，密钥另存 SecureStore，原子读取负责 Android `.bak` 恢复；旧明文与旧 store 均保留兼容迁移，详见 [账号保存与恢复](./AUTH_STORAGE.md)。
+- 设置和 telemetry 开关使用 SecureStore；阅读进度迁移到最多 100 条的双快照文件，两个快照提交后才清理旧 SecureStore。推荐流缓存、曝光与创作草稿使用 Expo SQLite；缓存 24 小时过期、曝光 30 天保留并定期限量，草稿规则见 [发布编辑器](../features/publishing/README.md)。
 - Cookie、`z_c0`、`d_c0`、`_xsrf`、X-ZSE 请求头、完整 Axios config、真实登录 URL 和未脱敏正文都不能进入日志、fixture、截图或测试快照。
 - API 调试日志只允许记录 method、脱敏后的 path、status 和独立 request id。新增日志前检查成功、失败和异常对象分支。
 - 真机正文样本先脱敏，放入 `features/rich-content/fixtures/inbox/`，确认结构后再登记到 `cases/` 和 manifest。
@@ -185,10 +187,10 @@ xcrun simctl openurl booted 'zhihu--:///dev/rich-content/prototype?caseId=attach
 
 ## GitHub Actions 与发布
 
-- [`ci.yml`](./.github/workflows/ci.yml) 在 Pull Request 和 `main` push 时运行 `npm ci` 与 `npm run check`。
-- [`build.yaml`](./.github/workflows/build.yaml) 手动构建四个 Android 单 ABI APK 和一个未签名 iOS IPA；`build_mode=build` 只保留 7 天的 artifact，`build_mode=release` 还会创建 Release。
+- [`ci.yml`](../.github/workflows/ci.yml) 在 Pull Request 和 `main` push 时运行 `npm ci` 与 `npm run check`。
+- [`build.yaml`](../.github/workflows/build.yaml) 手动构建四个 Android 单 ABI APK 和一个未签名 iOS IPA；`build_mode=build` 只保留 7 天的 artifact，`build_mode=release` 还会创建 Release。
 - Release 必须从 `main` 运行，且 `package.json`、`app.json` 版本一致，`v<version>` tag 尚不存在。`publish_release=false` 创建草稿，`true` 才直接公开。
-- 构建工作流的 Android job 需要 `EXPO_TOKEN` 加上 4 个 telemetry Secret，iOS job 需要其中 4 个 telemetry Secret；由于两个 job 总是一起运行，完整 workflow 需要配置 `EXPO_TOKEN`、`FIREBASE_ANDROID_JSON_B64`、`FIREBASE_IOS_PLIST_B64`、`EXPO_PUBLIC_SENTRY_DSN` 和 `SENTRY_AUTH_TOKEN`。详情见 [`docs/RELEASING.md`](./docs/RELEASING.md) 和 [`docs/TELEMETRY.md`](./docs/TELEMETRY.md)。
+- 构建工作流的 Android job 需要 `EXPO_TOKEN` 加上 4 个 telemetry Secret，iOS job 需要其中 4 个 telemetry Secret；由于两个 job 总是一起运行，完整 workflow 需要配置 `EXPO_TOKEN`、`FIREBASE_ANDROID_JSON_B64`、`FIREBASE_IOS_PLIST_B64`、`EXPO_PUBLIC_SENTRY_DSN` 和 `SENTRY_AUTH_TOKEN`。详情见 [`docs/RELEASING.md`](./RELEASING.md) 和 [`docs/TELEMETRY.md`](./TELEMETRY.md)。
 
 ## 完成标准
 

@@ -59,7 +59,7 @@
 
 ### P2：包含 Cookie 的认证文件仍未静态加密
 
-位置：[`store/useAuthStore.ts`](../store/useAuthStore.ts)，第 8–10 行；[`DEVELOPMENT.md`](../DEVELOPMENT.md)，第 128 行。
+位置：[`store/useAuthStore.ts`](../store/useAuthStore.ts)，第 8–10 行；[`DEVELOPMENT.md`](./DEVELOPMENT.md)，第 128 行。
 
 多账号认证状态直接写入应用沙箱中的 `auth-storage.json`。应用沙箱提供隔离，但文件本身没有静态加密；一旦备份、调试导出或其他本地泄露路径暴露该文件，Cookie 可被直接读取。
 

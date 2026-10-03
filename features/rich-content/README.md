@@ -139,7 +139,7 @@ npm test -- features/rich-content/tests --runInBand
 
 开发构建可从“我的 → 富文本测试案例（开发）”打开案例列表，再进入“tiqian-super-mini 原型”。原型使用六组合成内容，提供tiqian-super-mini、RNRH、WebView三后端对照、字号/行高/排版和装饰调节、源选区面板与本地知识点菜单，不提交业务操作。稳定fixture页读取 `fixtures/manifest.json`，也可切换这三个后端；这些切换仅影响当前案例，不写入生产正文偏好。正文交互默认关闭，临时打开后需注意样本可能保留真实对象ID。
 
-开发deeplink可用 `zhihu--:///dev/rich-content/prototype?caseId=attachments` 选择合成案例；caseId只接受页面六个已知标识，忽略无效值，不接受URL中的任意HTML。iOS CLI模拟器命令见 [开发指南](../../DEVELOPMENT.md)。
+开发deeplink可用 `zhihu--:///dev/rich-content/prototype?caseId=attachments` 选择合成案例；caseId只接受页面六个已知标识，忽略无效值，不接受URL中的任意HTML。iOS CLI模拟器命令见 [开发指南](../../docs/DEVELOPMENT.md)。
 
 三个后端统一经过 `ZhihuContent` 的交互外壳，复用站内/站外链接分流、内容宽度、图片预览及共享排版指标。Android/iOS V2模块直接消费IR，初步支持选择事件、自定义装饰和行内附件；完整附件几何和无障碍映射仍需后续验收。tiqian-super-mini需要重新生成并编译development build，不能运行于Expo Go；模块缺失时可继续用RNRH查看内容。
 

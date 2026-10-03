@@ -1,6 +1,8 @@
 # AGENTS.md
 
-本文件是仓库级自动化开发指南，适用于整个项目。面向用户的安装和功能说明以 [`README.md`](./README.md) 为准；本地运行、测试、原生构建和发布流程见 [`DEVELOPMENT.md`](./DEVELOPMENT.md)、[`BUILD_WINDOWS.md`](./BUILD_WINDOWS.md) 与 [`docs/RELEASING.md`](./docs/RELEASING.md)；富文本专项约定以 [`features/rich-content/README.md`](./features/rich-content/README.md) 及其 `docs/` 为准。
+本文件是仓库级自动化开发指南，适用于整个项目。面向用户的安装和功能说明以 [`README.md`](./README.md) 为准；本地运行、测试、原生构建和发布流程见 [`DEVELOPMENT.md`](./docs/DEVELOPMENT.md)、[`BUILD_WINDOWS.md`](./docs/BUILD_WINDOWS.md) 与 [`docs/RELEASING.md`](./docs/RELEASING.md)；富文本专项约定以 [`features/rich-content/README.md`](./features/rich-content/README.md) 及其 `docs/` 为准。
+
+文中的源码路径和命令均以仓库根目录为基准。
 
 ## 项目概况
 
@@ -94,7 +96,7 @@ npm run check
 
 专项测试文件位于 `tests/` 与 `features/rich-content/tests/`，覆盖富文本、主题、用户资料、发布、知乎 App API、网络失败、投票者、更新选择和阅读进度。修改相应模块时优先运行 `npm test -- <测试文件或目录> --runInBand`，再运行完整 `npm run check`。
 
-PR 与 `main` push 使用 `.github/workflows/ci.yml`；手动构建/发布使用 `.github/workflows/build.yaml`。发布工作流构建四个 Android 单 ABI APK 和一个未签名 iOS IPA：Android 使用 `EXPO_TOKEN` 加 4 个 telemetry Secret，iOS 使用其中 4 个 telemetry Secret；完整 workflow 运行需要配置全部 5 个 Secret。详见 `DEVELOPMENT.md`、`docs/RELEASING.md` 和 `docs/TELEMETRY.md`。
+PR 与 `main` push 使用 `.github/workflows/ci.yml`；手动构建/发布使用 `.github/workflows/build.yaml`。发布工作流构建四个 Android 单 ABI APK 和一个未签名 iOS IPA：Android 使用 `EXPO_TOKEN` 加 4 个 telemetry Secret，iOS 使用其中 4 个 telemetry Secret；完整 workflow 运行需要配置全部 5 个 Secret。详见 `docs/DEVELOPMENT.md`、`docs/RELEASING.md` 和 `docs/TELEMETRY.md`。
 
 Dependabot 的 npm 普通更新只允许每月分组的 patch 更新；GitHub Actions 允许每月分组的 minor/patch 更新；Expo SDK、React Native 及配套 `expo-*` 主版本升级必须手动统一进行，不能合并跨 SDK 的单包升级。依赖 PR 必须同步更新锁文件，并以 `npm ci` 成功作为前置条件。
 
