@@ -1,6 +1,6 @@
 import { cssInterop } from 'nativewind';
 import type React from 'react';
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import {
   type GestureResponderEvent,
   Platform,
@@ -12,6 +12,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import Animated, {
+  cancelAnimation,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -75,15 +76,29 @@ export function BouncyButton({
   const androidFeedbackType = useSettingsStore(
     (state) => state.androidFeedbackType ?? 'ripple',
   );
+  const enablePressFeedback = useSettingsStore(
+    (state) => state.enablePressFeedback ?? true,
+  );
 
   // 是否启用物理动画（缩放与不透明度）
-  const enableAnimation = !isAndroid || androidFeedbackType === 'scale-opacity';
+  const enableAnimation =
+    enablePressFeedback &&
+    (!isAndroid || androidFeedbackType === 'scale-opacity');
 
   // Android 水波纹颜色：跟随主题色，带透明度
   const rippleColor = `${primaryColor}1A`; // 10% opacity
 
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
+
+  useEffect(() => {
+    if (!enableAnimation) {
+      cancelAnimation(scale);
+      cancelAnimation(opacity);
+      scale.value = 1;
+      opacity.value = 1;
+    }
+  }, [enableAnimation, scale, opacity]);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -124,6 +139,19 @@ export function BouncyButton({
     },
     [enableAnimation, onPressOut, scale, opacity],
   );
+
+  if (!enablePressFeedback) {
+    return (
+      <Pressable
+        {...props}
+        onPressIn={handlePressIn}
+        onPressOut={handlePressOut}
+        style={style}
+      >
+        {children}
+      </Pressable>
+    );
+  }
 
   if (enableAnimation) {
     return (

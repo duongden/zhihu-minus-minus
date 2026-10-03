@@ -15,6 +15,7 @@ export function NavigationInteractionSettings() {
     androidFeedbackType,
     defaultTab,
     enableHapticFeedback,
+    enablePressFeedback,
     localCityName,
     pressOpacity,
     pressScale,
@@ -110,7 +111,25 @@ export function NavigationInteractionSettings() {
           />
         </SettingItem>
 
-        {Platform.OS === 'android' ? (
+        <SettingItem
+          label="视觉反馈"
+          icon="sparkles-outline"
+          colorScheme={colorScheme}
+        >
+          <Switch
+            accessibilityLabel="视觉反馈"
+            value={enablePressFeedback}
+            onValueChange={(value) =>
+              updateSettings({ enablePressFeedback: value })
+            }
+            trackColor={{ true: tintColor }}
+          />
+        </SettingItem>
+        <Text type="secondary" style={styles.feedbackHint}>
+          关闭后无水波纹、缩放和透明度变化。震动由上方开关单独控制。
+        </Text>
+
+        {enablePressFeedback && Platform.OS === 'android' ? (
           <SettingItem
             label="反馈样式"
             icon="hardware-chip-outline"
@@ -139,8 +158,9 @@ export function NavigationInteractionSettings() {
           </SettingItem>
         ) : null}
 
-        {Platform.OS !== 'android' ||
-        androidFeedbackType === 'scale-opacity' ? (
+        {enablePressFeedback &&
+        (Platform.OS !== 'android' ||
+          androidFeedbackType === 'scale-opacity') ? (
           <>
             <StepperSetting
               label="按压不透明度"
@@ -307,6 +327,12 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   choiceRow: { flexDirection: 'row', gap: 8 },
+  feedbackHint: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    fontSize: 12,
+    lineHeight: 18,
+  },
   chip: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20 },
   chipText: { fontSize: 14 },
   stepper: { flexDirection: 'row', alignItems: 'center' },

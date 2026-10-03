@@ -114,9 +114,11 @@ export interface AppSettings {
   borderRadius: number;
   richContentRenderer: RichContentRenderer;
   enablePrivateMessaging: boolean;
-  /** iOS 按压时的不透明度 (0.5 ~ 1.0) */
+  /** 是否开启按压时的水波纹、缩放与透明度变化 */
+  enablePressFeedback: boolean;
+  /** 缩放模式按压时的不透明度 (0.5 ~ 1.0) */
   pressOpacity: number;
-  /** iOS 按压时的缩放比例 (0.88 ~ 1.0) */
+  /** 缩放模式按压时的缩放比例 (0.88 ~ 1.0) */
   pressScale: number;
   /** 安卓按压反馈类型: ripple (水波纹), scale-opacity (透明度+缩放) */
   androidFeedbackType: 'ripple' | 'scale-opacity';
@@ -189,6 +191,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   borderRadius: 12,
   richContentRenderer: 'rnrh',
   enablePrivateMessaging: false,
+  enablePressFeedback: true,
   pressOpacity: 0.82,
   pressScale: 0.98,
   androidFeedbackType: 'ripple',
@@ -252,6 +255,9 @@ export const useSettingsStore = create<SettingsState>()(
           if (!isValidRichContentRenderer(nextSettings.richContentRenderer)) {
             nextSettings.richContentRenderer = 'rnrh';
           }
+          if (typeof nextSettings.enablePressFeedback !== 'boolean') {
+            nextSettings.enablePressFeedback = true;
+          }
           if (
             typeof nextSettings.recommendRequestIncludeDesktop !== 'boolean'
           ) {
@@ -279,7 +285,7 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'zhihu-settings-storage',
       storage: createJSONStorage(() => settingsStorage),
-      version: 13,
+      version: 14,
       migrate: (rawPersistedState: unknown, version: number) => {
         const persistedState =
           normalizePersistedSettingsState(rawPersistedState);
@@ -409,6 +415,12 @@ export const useSettingsStore = create<SettingsState>()(
             ? 'webview'
             : 'rnrh';
         delete persistedState.useWebView;
+
+        // v14 adds a visual-feedback switch without changing existing styles.
+        persistedState.enablePressFeedback =
+          typeof persistedState.enablePressFeedback === 'boolean'
+            ? persistedState.enablePressFeedback
+            : true;
 
         return persistedState as unknown as SettingsState;
       },
