@@ -91,6 +91,8 @@ export interface ZhihuNativeSegmentAction {
 export interface ZhihuNativeContentProps {
   content: string;
   contentArray?: readonly ZhihuContentSegment[];
+  /** Already normalized JSON document; bypasses both HTML and pin normalization. */
+  document?: ZhihuDocument;
   objectId: string;
   type: RichContentObjectType;
   segmentInfos?: readonly ZhihuSegmentInfo[];
@@ -114,7 +116,7 @@ export interface ZhihuNativeContentProps {
   ) => void;
   /** Reuse the host's Zhihu metadata and query-backed card behavior. */
   renderLinkCard?: (card: ZhihuLinkCardBlock) => React.ReactNode;
-  /** The host supplies its complete RNRH adapter on unsupported clients. */
+  /** The host supplies a complete adapter on unsupported clients. */
   renderFallback: () => React.ReactNode;
   /** Keep the host's preview visible until the native layout is measured. */
   renderPlaceholder?: () => React.ReactNode;
@@ -471,12 +473,17 @@ function NativeBlock(props: BlockViewProps) {
         dimensions.width && dimensions.height
           ? dimensions.width / dimensions.height
           : null;
-      const imageWidth = block.role === 'avatar' ? DAILY_AVATAR_SIZE : width;
+      const imageWidth =
+        block.role === 'avatar'
+          ? DAILY_AVATAR_SIZE
+          : block.layout === 'small'
+            ? Math.min(width, block.resource.width ?? width / 2)
+            : width;
       const imageHeight =
         block.role === 'avatar'
           ? DAILY_AVATAR_SIZE
           : aspect
-            ? width / aspect
+            ? imageWidth / aspect
             : RICH_CONTENT_UNKNOWN_IMAGE_HEIGHT;
       return (
         <View style={[styles.block, { width }]}>
@@ -784,6 +791,7 @@ type NativeDocumentInput = Pick<
   ZhihuNativeContentProps,
   | 'content'
   | 'contentArray'
+  | 'document'
   | 'objectId'
   | 'type'
   | 'variant'
@@ -805,6 +813,7 @@ export const ZhihuNativeContent = React.memo(function ZhihuNativeContent(
     props.type,
     props.objectId,
     props.variant ?? 'default',
+    ...(props.document ? [props.document.id] : []),
   ]);
   const arraySignature = useMemo(
     () => JSON.stringify(props.contentArray),
@@ -815,18 +824,21 @@ export const ZhihuNativeContent = React.memo(function ZhihuNativeContent(
     content: props.content,
     arraySignature,
     contentArray: props.contentArray,
+    document: props.document,
     revision: 0,
   });
   if (
     source.current.identity !== identity ||
     source.current.content !== props.content ||
-    source.current.arraySignature !== arraySignature
+    source.current.arraySignature !== arraySignature ||
+    source.current.document !== props.document
   ) {
     source.current = {
       identity,
       content: props.content,
       arraySignature,
       contentArray: props.contentArray,
+      document: props.document,
       revision: source.current.revision + 1,
     };
   }
@@ -836,6 +848,7 @@ export const ZhihuNativeContent = React.memo(function ZhihuNativeContent(
     () => ({
       content: props.content,
       contentArray,
+      document: props.document,
       objectId: props.objectId,
       type: props.type,
       variant: props.variant,
@@ -845,6 +858,7 @@ export const ZhihuNativeContent = React.memo(function ZhihuNativeContent(
     [
       props.content,
       contentArray,
+      props.document,
       props.objectId,
       props.type,
       props.variant,
@@ -953,6 +967,7 @@ export const ZhihuNativeContent = React.memo(function ZhihuNativeContent(
 const NativeDocumentContent = React.memo(function NativeDocumentContent({
   content,
   contentArray,
+  document,
   objectId,
   type,
   segmentInfos,
@@ -1009,6 +1024,7 @@ const NativeDocumentContent = React.memo(function NativeDocumentContent({
     ? Math.max(scaledEm, Math.floor(availableWidth / scaledEm) * scaledEm)
     : availableWidth;
   const normalized = useMemo(() => {
+    if (document) return { document, diagnostics: [] };
     const normalizationOptions = {
       documentId: `${type}:${objectId}`,
       variant,
@@ -1021,24 +1037,55 @@ const NativeDocumentContent = React.memo(function NativeDocumentContent({
   }, [
     content,
     contentArray,
+    document,
     linkCardInfo,
     objectId,
     segmentInfos,
     type,
     variant,
   ]);
-  const compiled = useMemo(
-    () =>
-      compileZhihuDocument(normalized.document, {
-        fontSize,
-        lineHeight,
-        paragraphSpacing: RICH_CONTENT_PARAGRAPH_SPACING,
-      }),
-    [fontSize, lineHeight, normalized.document],
-  );
+  const compiled = useMemo(() => {
+    const result = compileZhihuDocument(normalized.document, {
+      fontSize,
+      lineHeight,
+      paragraphSpacing: RICH_CONTENT_PARAGRAPH_SPACING,
+    });
+    if (!document) return result;
+    // Supplied JSON documents can map images to bundled resources. Keep their
+    // remote identity in the document while native loads the explicit local URI.
+    const localUris = new Map<string, string>();
+    for (const node of walkZhihuDocument(document)) {
+      const resource =
+        node.type === 'inlineImage'
+          ? node.resource
+          : node.type === 'inlineFormula'
+            ? node.formula.image
+            : undefined;
+      if (resource?.offlineUri) localUris.set(node.id, resource.offlineUri);
+    }
+    if (localUris.size === 0) return result;
+    return {
+      ...result,
+      parts: result.parts.map((part) =>
+        part.type !== 'flow'
+          ? part
+          : {
+              ...part,
+              flow: {
+                ...part.flow,
+                attachments: part.flow.attachments.map((attachment) => {
+                  const uri = localUris.get(attachment.nodeId);
+                  return uri ? { ...attachment, url: uri } : attachment;
+                }),
+              },
+            },
+      ),
+    };
+  }, [document, fontSize, lineHeight, normalized.document]);
   const documentRevision = useRef({
     content,
     contentArray,
+    document,
     objectId,
     type,
     variant,
@@ -1047,6 +1094,7 @@ const NativeDocumentContent = React.memo(function NativeDocumentContent({
   if (
     documentRevision.current.content !== content ||
     documentRevision.current.contentArray !== contentArray ||
+    documentRevision.current.document !== document ||
     documentRevision.current.objectId !== objectId ||
     documentRevision.current.type !== type ||
     documentRevision.current.variant !== variant
@@ -1054,6 +1102,7 @@ const NativeDocumentContent = React.memo(function NativeDocumentContent({
     documentRevision.current = {
       content,
       contentArray,
+      document,
       objectId,
       type,
       variant,

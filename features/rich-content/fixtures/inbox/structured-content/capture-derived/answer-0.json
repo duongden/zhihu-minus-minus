@@ -1,0 +1,263 @@
+{
+  "source": "capture-derived",
+  "originalArrayIndex": 0,
+  "sanitization": "Identity spans keep their UTF-16 lengths; IDs, opaque metadata and navigation/paging URLs are replaced. Public image CDN URLs, body order, mark ranges and formula source are retained.",
+  "pages": [
+    {
+      "paging": "{\"is_end\":true,\"next\":\"https://example.invalid/next-content-render?offset=20&url_token=captured-a&content_type=answer&version_id=captured-version-a\",\"is_start\":true,\"previous\":\"https://example.invalid/next-content-render?offset=0&url_token=captured-a&content_type=answer&version_id=captured-version-a\",\"totals\":0}",
+      "segments": [
+        {
+          "id": "captured-a-segment-001",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 11,
+                "link": {
+                  "href": "https://example.invalid/people/captured-a-1-1-1",
+                  "icon_name": "",
+                  "link_type": "member_mention"
+                },
+                "start_index": 5,
+                "type": "link"
+              }
+            ],
+            "pid": "captured-a-paragraph-001",
+            "text": "补充一下 用户···· 的回答。"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-a-segment-002",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 14,
+                "link": {
+                  "href": "https://example.invalid/people/captured-a-2-1-1",
+                  "icon_name": "",
+                  "link_type": "member_mention"
+                },
+                "start_index": 0,
+                "type": "link"
+              },
+              {
+                "end_index": 60,
+                "link": {
+                  "href": "https://example.invalid/people/captured-a-2-1-2",
+                  "icon_name": "",
+                  "link_type": "member_mention"
+                },
+                "start_index": 46,
+                "type": "link"
+              }
+            ],
+            "pid": "captured-a-paragraph-002",
+            "text": "用户············ 的回答中用到了两张图片（如下），其中一张是一个时钟，另一张是 用户············ 对时钟中的式子的解释。"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-a-segment-003",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 30,
+                "link": {
+                  "href": "https://example.invalid/people/captured-a-3-1-1",
+                  "icon_name": "",
+                  "link_type": "member_mention"
+                },
+                "start_index": 16,
+                "type": "link"
+              }
+            ],
+            "pid": "captured-a-paragraph-003",
+            "text": "可笑的是，总共仅仅12个式子， 用户············ 就凭着主观臆测解释错了至少4个："
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-a-segment-004",
+          "list_node": {
+            "items": [
+              {
+                "indent_level": 1,
+                "marks": [
+                  {
+                    "end_index": 9,
+                    "formula": {
+                      "content": "B’_{L}",
+                      "height": 21,
+                      "img_url": "https://pic1.zhimg.com/v2-9affd22881a73d250ce47efb4284a7a7.jpg?source=7e7ef6e2&needBackground=1",
+                      "url": "https://example.invalid/answer/captured-a",
+                      "width": 23
+                    },
+                    "start_index": 5,
+                    "type": "formula"
+                  },
+                  {
+                    "end_index": 48,
+                    "formula": {
+                      "content": "1",
+                      "height": 16,
+                      "img_url": "https://picx.zhimg.com/v2-c4f67819c861abcfb530c0b1a5bfd8c6.jpg?source=7e7ef6e2&needBackground=1",
+                      "url": "https://example.invalid/answer/captured-a",
+                      "width": 9
+                    },
+                    "start_index": 44,
+                    "type": "formula"
+                  }
+                ],
+                "text": "1点处的 [公式] 指的是勒让德常数（Legendre’s constant），它等于 [公式] 。"
+              },
+              {
+                "indent_level": 1,
+                "marks": [
+                  {
+                    "end_index": 9,
+                    "formula": {
+                      "content": "2^{-1}({\\rm mod}\\ 7)",
+                      "height": 24,
+                      "img_url": "https://pic1.zhimg.com/v2-0069d20eb067e373150e58d3bcb86fcf.jpg?source=7e7ef6e2&needBackground=1",
+                      "url": "https://example.invalid/answer/captured-a",
+                      "width": 86
+                    },
+                    "start_index": 5,
+                    "type": "formula"
+                  },
+                  {
+                    "end_index": 52,
+                    "formula": {
+                      "content": "2\\times x\\  {\\rm mod}\\ 7=1",
+                      "height": 16,
+                      "img_url": "https://picx.zhimg.com/v2-f54177e03383f9726fe4126204906284.jpg?source=7e7ef6e2&needBackground=1",
+                      "url": "https://example.invalid/answer/captured-a",
+                      "width": 122
+                    },
+                    "start_index": 48,
+                    "type": "formula"
+                  },
+                  {
+                    "end_index": 60,
+                    "formula": {
+                      "content": "4",
+                      "height": 16,
+                      "img_url": "https://picx.zhimg.com/v2-90ddcee709cac07aa9f5386f685b7f89.jpg?source=7e7ef6e2&needBackground=1",
+                      "url": "https://example.invalid/answer/captured-a",
+                      "width": 9
+                    },
+                    "start_index": 56,
+                    "type": "formula"
+                  }
+                ],
+                "text": "4点处的 [公式] 这个表达式并没有任何问题，它指的是与2相乘以后mod 7等于1的数，即满足 [公式]，显然 [公式] 是符合条件的最小数。"
+              },
+              {
+                "indent_level": 1,
+                "marks": [
+                  {
+                    "end_index": 9,
+                    "formula": {
+                      "content": "6.\\bar{9}=6.999...",
+                      "height": 19,
+                      "img_url": "https://pic1.zhimg.com/v2-a9ac51f658ae5b137e489ea81af7df74.jpg?source=7e7ef6e2&needBackground=1",
+                      "url": "https://example.invalid/answer/captured-a",
+                      "width": 100
+                    },
+                    "start_index": 5,
+                    "type": "formula"
+                  },
+                  {
+                    "end_index": 20,
+                    "formula": {
+                      "content": "7",
+                      "height": 16,
+                      "img_url": "https://picx.zhimg.com/v2-0ca91f69f4faa8ac580e2350c43556d7.jpg?source=7e7ef6e2&needBackground=1",
+                      "url": "https://example.invalid/answer/captured-a",
+                      "width": 9
+                    },
+                    "start_index": 16,
+                    "type": "formula"
+                  }
+                ],
+                "text": "7点处的 [公式] 是严格等于 [公式] 的，并不是约等于，这是不需要解释的常识了。"
+              },
+              {
+                "indent_level": 1,
+                "marks": [
+                  {
+                    "end_index": 10,
+                    "formula": {
+                      "content": "\\begin{pmatrix}5\\\\ 2\\end{pmatrix}",
+                      "height": 46,
+                      "img_url": "https://picx.zhimg.com/v2-feca0d5435e46faba90023b0b5ec8bb3.jpg?source=7e7ef6e2&needBackground=1",
+                      "url": "https://example.invalid/answer/captured-a",
+                      "width": 40
+                    },
+                    "start_index": 6,
+                    "type": "formula"
+                  },
+                  {
+                    "end_index": 44,
+                    "formula": {
+                      "content": "\\begin{pmatrix}5\\\\ 2\\end{pmatrix}=\\frac{5!}{2!(5-2)!}=10",
+                      "height": 48,
+                      "img_url": "https://picx.zhimg.com/v2-41dd60b43468182685478444574623c8.jpg?source=7e7ef6e2&needBackground=1",
+                      "url": "https://example.invalid/answer/captured-a",
+                      "width": 181
+                    },
+                    "start_index": 40,
+                    "type": "formula"
+                  }
+                ],
+                "text": "10点处的 [公式] 表示的是从五个互不相同的物体中随机抽取两个的结果数，它是 [公式] 。"
+              }
+            ],
+            "type": "unordered"
+          },
+          "type": "list_node"
+        },
+        {
+          "id": "captured-a-segment-005",
+          "image": {
+            "description": "用户············的时钟",
+            "height": 391,
+            "is_gif": false,
+            "layout": "normal",
+            "original_token": "captured-a-original-image-1",
+            "original_urls": [
+              "https://pica.zhimg.com/v2-aee5e58d7c38a90df1c970980e8614cd.jpg?source=7e7ef6e2&needBackground=1"
+            ],
+            "status": "normal",
+            "token": "captured-a-image-1",
+            "urls": [
+              "https://pic1.zhimg.com/v2-aee5e58d7c38a90df1c970980e8614cd.jpg?source=7e7ef6e2&needBackground=1"
+            ],
+            "width": 375
+          },
+          "type": "image"
+        },
+        {
+          "id": "captured-a-segment-006",
+          "image": {
+            "description": "用户············对时钟的『解释』",
+            "height": 547,
+            "is_gif": false,
+            "layout": "normal",
+            "original_token": "captured-a-original-image-2",
+            "original_urls": [
+              "https://picx.zhimg.com/v2-55e59b545143bc89ff9625cac379c1a3.jpg?source=7e7ef6e2&needBackground=1"
+            ],
+            "status": "normal",
+            "token": "captured-a-image-2",
+            "urls": [
+              "https://picx.zhimg.com/v2-55e59b545143bc89ff9625cac379c1a3.jpg?source=7e7ef6e2&needBackground=1"
+            ],
+            "width": 559
+          },
+          "type": "image"
+        }
+      ]
+    }
+  ]
+}

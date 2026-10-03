@@ -1,0 +1,84 @@
+{
+  "source": "capture-derived",
+  "originalArrayIndex": 4,
+  "sanitization": "Identity spans keep their UTF-16 lengths; IDs, opaque metadata and navigation/paging URLs are replaced. Public image CDN URLs, body order, mark ranges and formula source are retained.",
+  "pages": [
+    {
+      "paging": "{\"is_end\":true,\"next\":\"https://example.invalid/next-content-render?offset=20&url_token=captured-e&content_type=answer&version_id=captured-version-e\",\"is_start\":true,\"previous\":\"https://example.invalid/next-content-render?offset=0&url_token=captured-e&content_type=answer&version_id=captured-version-e\",\"totals\":0}",
+      "segments": [
+        {
+          "id": "captured-e-segment-001",
+          "paragraph": {
+            "marks": [],
+            "pid": "captured-e-paragraph-001",
+            "text": "质能相当方程"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-e-segment-002",
+          "paragraph": {
+            "marks": [],
+            "pid": "captured-e-paragraph-002",
+            "text": "其实我们常用的结论只是精确方程的很好的近似"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-e-segment-003",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 16,
+                "entity_word": {
+                  "attach_info_bytes": "AAEC",
+                  "id": "captured-e-entity-3-1-1",
+                  "type": "search",
+                  "url": "https://example.invalid/search?q=captured-term",
+                  "word": "狭义相对论"
+                },
+                "start_index": 11,
+                "type": "entity_word"
+              },
+              {
+                "end_index": 27,
+                "entity_word": {
+                  "attach_info_bytes": "AAEC",
+                  "id": "captured-e-entity-3-1-2",
+                  "type": "search",
+                  "url": "https://example.invalid/search?q=captured-term",
+                  "word": "二项式定理"
+                },
+                "start_index": 22,
+                "type": "entity_word"
+              }
+            ],
+            "pid": "captured-e-paragraph-003",
+            "text": "推导方法简单来说就是把狭义相对论的质量公式用二项式定理展开"
+          },
+          "type": "paragraph"
+        },
+        {
+          "id": "captured-e-segment-004",
+          "paragraph": {
+            "marks": [
+              {
+                "end_index": 29,
+                "link": {
+                  "href": "https://example.invalid/reading/captured-e-4-1-1",
+                  "icon_name": "zhicon_icon_24_paper_plain_text",
+                  "link_type": "text"
+                },
+                "start_index": 2,
+                "type": "link"
+              }
+            ],
+            "pid": "captured-e-paragraph-004",
+            "text": "详见 zhihu.com/answer/963344..."
+          },
+          "type": "paragraph"
+        }
+      ]
+    }
+  ]
+}

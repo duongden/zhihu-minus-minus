@@ -1,0 +1,111 @@
+{
+  "source": "synthetic",
+  "pages": [
+    {
+      "paging": "{\"is_end\":false,\"next\":\"https://example.invalid/next-content-render?url_token=synthetic-b&content_type=answer&version_id=synthetic-v1&offset=20\",\"is_start\":true,\"previous\":\"https://example.invalid/next-content-render?url_token=synthetic-b&content_type=answer&version_id=synthetic-v1&offset=0\",\"totals\":0}",
+      "segments": [
+        {
+          "id": "b-heading",
+          "type": "heading",
+          "heading": {
+            "level": 2,
+            "text": "标题与重叠标记",
+            "marks": [
+              {
+                "type": "bold",
+                "start_index": 0,
+                "end_index": 7
+              }
+            ]
+          }
+        },
+        {
+          "id": "b-overlap",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-b-overlap",
+            "text": "这段粗体与检索词的范围相互重叠。",
+            "marks": [
+              {
+                "type": "bold",
+                "start_index": 2,
+                "end_index": 11
+              },
+              {
+                "type": "entity_word",
+                "start_index": 5,
+                "end_index": 8,
+                "entity_word": {
+                  "attach_info_bytes": "AAEC",
+                  "id": "synthetic-entity",
+                  "type": "search",
+                  "url": "https://example.invalid/search?q=synthetic",
+                  "word": "检索词"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "id": "b-body",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-b-body",
+            "text": "首屏只含部分正文，下面的按钮仅加载本地续页。",
+            "marks": []
+          }
+        },
+        {
+          "id": "b-heading-two",
+          "type": "heading",
+          "heading": {
+            "level": 2,
+            "text": "第二个标题",
+            "marks": []
+          }
+        },
+        {
+          "id": "b-end",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-b-end",
+            "text": "这一段在本地续页中重复，用于检查节点去重。",
+            "marks": []
+          }
+        }
+      ]
+    },
+    {
+      "paging": "{\"is_end\":true,\"next\":\"https://example.invalid/next-content-render?url_token=synthetic-b&content_type=answer&version_id=synthetic-v1&offset=40\",\"is_start\":false,\"previous\":\"https://example.invalid/next-content-render?url_token=synthetic-b&content_type=answer&version_id=synthetic-v1&offset=20\",\"totals\":0}",
+      "segments": [
+        {
+          "id": "b-end",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-b-end",
+            "text": "续页更新了相同节点的文字，原来的顺序保持不变。",
+            "marks": []
+          }
+        },
+        {
+          "id": "b-next",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-b-next",
+            "text": "这是本地第二页的新增段落。",
+            "marks": []
+          }
+        },
+        {
+          "id": "b-final",
+          "type": "paragraph",
+          "paragraph": {
+            "pid": "pid-b-final",
+            "text": "此时正文 paging.is_end 为 true。",
+            "marks": []
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -26,6 +26,8 @@
 - `nativeInteractions.ts`：回答知识点与选区的完整身份、源范围/文本校验，以及不进入业务接口时的本地复制文本。
 - `bridge.ts`：WebView 消息类型、文本选择结构与运行时字段验证。
 - `queryPolicy.ts`：列表正文复用、统一查询 key 和 Pager 相邻预取策略。
+- `structuredContent.ts`：原生 `structured_content` 的字段校验与 JSON → `ZhihuDocument` 映射，不经过 HTML/XML。
+- `components/ZhihuStructuredContent.tsx`：独立结构化正文渲染器，按分段数据展开收起，提供原生分段与 tiqian 文本流对照。
 - `index.ts`：供应用层使用的稳定公共入口。
 
 仓库根目录的 `components/ZhihuContent.tsx` 和 `components/ZhihuDOMContent.tsx` 仅保留兼容转发，不再包含实现。新代码统一使用：
@@ -38,13 +40,17 @@ import { ZhihuContent } from '@/features/rich-content';
 
 当前组件继续接收 HTML 字符串或想法分段数组。`ZhihuContentProps`、`LinkCardProps`、`RichContentObjectType` 从公共入口导出；`contentArray` 复用 `types/zhihu.ts` 的 `ZhihuContentSegment`，知识点元数据复用 `ZhihuSegmentInfo`、`ZhihuSegmentMark` 和 `ZhihuSegmentReaction`。单数 `RichContentObjectType` 表示正文对象，复数 `RichContentEntityType` 表示查询接口类型。
 
+`structured_content` 使用 `types/zhihu.ts` 中的 `ZhihuStructuredContent` 类型，独立组件 `ZhihuStructuredContent` 直接消费 JSON 分段，覆盖 paragraph、heading、list_node、image、hr，以及 bold、link、entity_word、formula。原生分段模式生成 React Native 节点；tiqian 模式先映射到 `ZhihuDocument`，再交给原生文本流，均不序列化为 HTML/XML。重叠 marks 按范围端点拆分，公式使用源码或 `img_url`，保留字面文本中的 `<`、`&` 等字符。偏移单位尚未由非 BMP 样本证实，有歧义的文字保守显示为纯文本；不生成业务段评用的 paragraphId，也不配用旧 `segment_infos`。
+
+开发构建从“我的 → 富文本测试案例 → structured_content 渲染对照”进入独立测试页。五个主要案例来自用户附件的真实回答，保留全部 48 个分段、99 个 marks 和分页标志，覆盖列表公式、标题与重叠词条、密集公式与分隔、图片布局、段落与链接。身份文字按原长度替换，ID、业务链接和不透明上下文脱敏；正文图和公式图保留原公开 HTTPS 地址，运行时加载，仓库不新增下载图片。可以切换渲染器、展开收起分段、查看脱敏 JSON；额外合成案例演示本地续页追加。样本放在 `fixtures/inbox/structured-content/`，由 `dev/structuredCases.ts` 显式登记，案例切换不写持久设置、不调用正文或互动接口。
+
 `normalizeZhihuDocument` 初步将HTML和知识点元数据转换为 `ZhihuDocument`，`normalizeZhihuContentSegments`处理想法的结构化text/image/link_card等分段，由 `compileZhihuDocument` 和 `native-v2` 后端消费。业务正文可通过持久设置选择该后端，开发页面也可显式覆盖。现有 RNRH / WebView 链路仍各自接收HTML，想法保留完整结构化fallback。该模型与知乎 API 原始 JSON 分开定义：
 
 - `ZhihuBlock` 用 `type` 区分段落、标题、图片、块级公式、列表、引用、代码、视频、链接卡片、表格、分隔线和未支持结构。表格按表头、表体和表尾保留行/单元格，单元格支持对齐、合并跨度和嵌套 `blocks`。
 - `ZhihuInlineRun` 覆盖文本、粗体、强调、下划线、删除线、高亮、上下标、行内代码、键盘输入、链接、行内图片/公式、脚注引用、两种知识点结构、换行和未支持结构。容器的 `children` 保留嵌套格式，列表项和引用的 `blocks` 保留块级嵌套。
 - 节点具有稳定 `id`，文档和子节点数组只读。知乎 `data-pid` 单独存为 `paragraphId`，知识点 `range` 按 UTF-16 文本偏移使用半开区间 `[start, end)`。
 - 图片/视频资源保存 URL、可选原始 URL、尺寸、MIME 类型和离线 URI。公式必须提供 LaTeX 或图片，`inlineFormula` 与 `blockFormula` 分开建模。
-- 链接的 `kind` 保留普通链接、@ 提及和 # 话题语义；图片的 `role` 区分正文图与日报作者头像。
+- 链接的 `kind` 保留普通链接、@ 提及和 # 话题语义；图片的 `role` 区分正文图与日报作者头像，可选 `layout` 保留结构化正文的 normal/small 布局。
 - `unsupported` 保留来源类型和纯文本 fallback，便于后续规范化测试识别遗漏；不把任意字符串并入 `type` 联合。
 - 脚注定义只存于 `document.footnotes`，行内 `footnoteReference.definitionId` 指向定义的节点 ID。展示编号 `label` 与节点 ID 分开，允许多次引用同一定义。
 
@@ -95,7 +101,7 @@ WebView 正文在 JS 侧经过 HTML 标签、属性、URL 和内联样式白名�
 
 Enriched组件、专属dialect normalizer、相关测试、依赖和native patch已于2026-09-30正式移除；[实验01](./docs/renderer-v2-experiment-01-enriched-html.md)仅保留历史研究，不再提供运行入口或fallback。tiqian-super-mini在Android/iOS以外的平台或模块未包含的客户端回退到RNRH。
 
-通常使用 `ZhihuContent` 让正文遵循持久偏好；需要固定后端时可显式传入 `renderer="native-v2"`。该外壳已经封装完整RNRH fallback及图片/链接交互。直接使用 `ZhihuNativeContent` 时必须提供 `renderFallback: () => React.ReactNode`，由宿主返回完整的RNRH正文adapter，仅供无模块/不支持平台降级；首次native测量使用同排版骨架或宿主placeholder，避免先显示经典正文再切换样式。模块本身无需反向依赖外壳。V2源选区和知识点事件仅在原生模块可用时生效。
+通常使用 `ZhihuContent` 让正文遵循持久偏好；需要固定后端时可显式传入 `renderer="native-v2"`。该外壳已经封装完整RNRH fallback及图片/链接交互。直接使用 `ZhihuNativeContent` 时必须提供 `renderFallback: () => React.ReactNode`，由宿主返回完整的正文 adapter，供无模块/不支持平台降级；HTML 宿主使用 RNRH，结构化宿主使用独立的 JSON 分段组件。首次native测量使用同排版骨架或宿主placeholder。模块本身无需反向依赖外壳。V2源选区和知识点事件仅在原生模块可用时生效。
 
 ## 真实正文的启用入口
 
@@ -139,7 +145,7 @@ npm test -- features/rich-content/tests --runInBand
 
 本轮Android V2已完成prebuild、arm64 Debug构建及vivo真机功能查看；Enriched移除前后的验证记录与未验证项见 [实验03](./docs/renderer-v2-experiment-03-native-flow.md)。iOS新增UIKit/TextKit初步adapter，其构建与平台验证另行记录；尚无双端Release验证。Tiqian保留为[历史集成草案](./docs/renderer-v2-experiment-02-tiqian.md)，是否需要接入取决于后续系统布局能力的实际缺口。
 
-案例页只展示已经登记到 `fixtures/cases/` 与 manifest 的稳定样本，`inbox/` 不会直接进入 UI。新增并登记 JSON case 后，Metro 的 fixture context 会自动发现文件，不需要再修改页面注册表。生产构建不显示入口，直接访问 `/dev/*` 也会被重定向到首页。
+稳定案例列表只展示已经登记到 `fixtures/cases/` 与 manifest 的样本；Metro 的 fixture context 会自动发现新增登记文件。独立的 structured_content 对照页使用 `dev/structuredCases.ts` 明确选取的 inbox 样本，不扫描任意附件。生产构建不显示入口，直接访问 `/dev/*` 也会被重定向到首页。
 
 ## 当前范围
 

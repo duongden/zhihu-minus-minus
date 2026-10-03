@@ -61,7 +61,7 @@ if (process.argv.includes('--json')) {
       images: `${stats.activeImages}/${stats.totalImages}`,
       formulas: stats.formulaImages,
       videos: stats.videoBoxes,
-      segments: stats.segmentInfos,
+      segments: stats.structuredSegments ?? stats.segmentInfos,
       validation: analyzeInbox
         ? 'unregistered'
         : errors.length === 0

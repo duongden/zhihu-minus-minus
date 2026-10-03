@@ -68,6 +68,31 @@ export default function RichContentFixturesScreen() {
         ListHeaderComponent={
           <RNView>
             <BouncyButton
+              onPress={() => router.push('/dev/rich-content/structured')}
+              style={[
+                styles.card,
+                {
+                  backgroundColor: surfaceColor,
+                  borderColor,
+                  marginBottom: 12,
+                },
+              ]}
+            >
+              <RNView style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>
+                  structured_content 渲染对照
+                </Text>
+                <Ionicons
+                  name="layers-outline"
+                  size={20}
+                  color={primaryColor}
+                />
+              </RNView>
+              <Text type="secondary" style={styles.meta}>
+                脱敏 JSON、分段展开收起、原生分段与 tiqian 文本流
+              </Text>
+            </BouncyButton>
+            <BouncyButton
               onPress={() => router.push('/dev/rich-content/prototype')}
               style={[
                 styles.card,
