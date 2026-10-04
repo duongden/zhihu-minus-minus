@@ -30,16 +30,16 @@ beforeEach(() => {
   jest.mocked(SecureStore.getItemAsync).mockResolvedValue(null);
 });
 
-test('defaults to RNRH with visual feedback enabled in settings version 14', () => {
-  expect(useSettingsStore.getState().richContentRenderer).toBe('rnrh');
+test('defaults to tiqian-super-mini with visual feedback enabled in settings version 15', () => {
+  expect(useSettingsStore.getState().richContentRenderer).toBe('native-v2');
   expect(useSettingsStore.getState().enablePressFeedback).toBe(true);
-  expect(useSettingsStore.persist.getOptions().version).toBe(14);
+  expect(useSettingsStore.persist.getOptions().version).toBe(15);
 });
 
 test.each([
   [{ useWebView: true }, 'webview'],
-  [{ useWebView: false }, 'rnrh'],
-  [{}, 'rnrh'],
+  [{ useWebView: false }, 'native-v2'],
+  [{}, 'native-v2'],
 ] as const)('migrates the legacy renderer toggle %j to %s', async (legacy, renderer) => {
   const migrated = await migrate(legacy);
   expect(migrated.richContentRenderer).toBe(renderer);
@@ -47,7 +47,6 @@ test.each([
 });
 
 test.each<RichContentRenderer>([
-  'rnrh',
   'webview',
   'native-v2',
 ])('preserves an existing valid renderer %s over the legacy toggle', async (renderer) => {
@@ -66,7 +65,7 @@ test('recovers invalid persisted renderer values using the legacy setting', asyn
   ).toBe('webview');
   expect(
     (await migrate({ richContentRenderer: null })).richContentRenderer,
-  ).toBe('rnrh');
+  ).toBe('native-v2');
 });
 
 test('retains unrelated settings and the earlier settings migrations', async () => {
@@ -122,7 +121,7 @@ test('hydrates legacy settings and writes back only the new renderer field', asy
       fontSizeScale: 1.3,
       enablePressFeedback: true,
     },
-    version: 14,
+    version: 15,
   });
   expect(JSON.parse(persistedJson).state).not.toHaveProperty('useWebView');
 });
@@ -174,6 +173,15 @@ test('sanitizes invalid renderer updates and retains a valid renderer during oth
   updateSettings({
     richContentRenderer: 'invalid',
   } as unknown as Partial<AppSettings>);
-  expect(useSettingsStore.getState().richContentRenderer).toBe('rnrh');
+  expect(useSettingsStore.getState().richContentRenderer).toBe('native-v2');
   expect(useSettingsStore.getState().fontSizeScale).toBe(1.4);
+});
+
+test('migrates removed RNRH preferences without changing explicit WebView preferences', async () => {
+  expect(
+    (await migrate({ richContentRenderer: 'rnrh' }, 14)).richContentRenderer,
+  ).toBe('native-v2');
+  expect(
+    (await migrate({ richContentRenderer: 'webview' }, 14)).richContentRenderer,
+  ).toBe('webview');
 });

@@ -68,14 +68,8 @@ export default function RichContentFixtureDetailScreen() {
     );
   }
 
-  const usesStructuredPinContent = Boolean(fixture.contentArray);
-  const rendererLabel = usesStructuredPinContent
-    ? 'Pin 结构化内容'
-    : renderer === 'webview'
-      ? 'WebView / DOM'
-      : renderer === 'native-v2'
-        ? 'tiqian-super-mini'
-        : 'RNRH';
+  const rendererLabel =
+    renderer === 'webview' ? 'WebView / DOM' : 'tiqian-super-mini';
 
   return (
     <RNView style={[styles.screen, { backgroundColor }]}>
@@ -111,32 +105,10 @@ export default function RichContentFixtureDetailScreen() {
               </Text>
               <RNView style={styles.rendererButtons}>
                 <BouncyButton
-                  onPress={() => selectRenderer('rnrh')}
-                  disabled={usesStructuredPinContent}
-                  style={[
-                    styles.rendererButton,
-                    renderer === 'rnrh' && !usesStructuredPinContent
-                      ? { backgroundColor: primaryColor }
-                      : { borderColor },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.rendererButtonText,
-                      renderer === 'rnrh' && !usesStructuredPinContent
-                        ? { color: onPrimary }
-                        : undefined,
-                    ]}
-                  >
-                    RNRH
-                  </Text>
-                </BouncyButton>
-                <BouncyButton
                   onPress={() => selectRenderer('webview')}
-                  disabled={usesStructuredPinContent}
                   style={[
                     styles.rendererButton,
-                    renderer === 'webview' && !usesStructuredPinContent
+                    renderer === 'webview'
                       ? { backgroundColor: primaryColor }
                       : { borderColor },
                   ]}
@@ -144,9 +116,7 @@ export default function RichContentFixtureDetailScreen() {
                   <Text
                     style={[
                       styles.rendererButtonText,
-                      renderer === 'webview' && !usesStructuredPinContent
-                        ? { color: onPrimary }
-                        : undefined,
+                      renderer === 'webview' ? { color: onPrimary } : undefined,
                     ]}
                   >
                     WebView
@@ -154,10 +124,9 @@ export default function RichContentFixtureDetailScreen() {
                 </BouncyButton>
                 <BouncyButton
                   onPress={() => selectRenderer('native-v2')}
-                  disabled={usesStructuredPinContent}
                   style={[
                     styles.rendererButton,
-                    renderer === 'native-v2' && !usesStructuredPinContent
+                    renderer === 'native-v2'
                       ? { backgroundColor: primaryColor }
                       : { borderColor },
                   ]}
@@ -165,7 +134,7 @@ export default function RichContentFixtureDetailScreen() {
                   <Text
                     style={[
                       styles.rendererButtonText,
-                      renderer === 'native-v2' && !usesStructuredPinContent
+                      renderer === 'native-v2'
                         ? { color: onPrimary }
                         : undefined,
                     ]}

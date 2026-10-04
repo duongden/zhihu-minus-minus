@@ -9,34 +9,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import {
-  ActivityIndicator,
-  Dimensions,
-  type GestureResponderEvent,
-  Image,
-  type ImageProps,
-  type ImageStyle,
-  Linking,
-  Pressable,
-  View as RNView,
-  type StyleProp,
-  StyleSheet,
-  type TextStyle,
-  useWindowDimensions,
-  type ViewStyle,
-} from 'react-native';
-import RenderHtml, {
-  type CustomBlockRenderer,
-  type CustomTagRendererRecord,
-  type DomVisitorCallbacks,
-  defaultSystemFonts,
-  type MixedStyleRecord,
-  type RenderersProps,
-  type TNode,
-  useNormalizedUrl,
-  useRendererProps,
-} from 'react-native-render-html';
-import { SvgUri } from 'react-native-svg';
+import { ActivityIndicator, Image, Linking, StyleSheet } from 'react-native';
 import {
   getAnswer,
   reactAnswerSegment,
@@ -56,7 +29,6 @@ import {
   View,
 } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
-import { typography } from '@/constants/designTokens';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import type {
   ZhihuSegmentInfo,
@@ -72,24 +44,10 @@ import {
 import { getZhihuErrorStatus } from '@/utils/zhihuError';
 import type { ZhihuDocument, ZhihuLinkCardBlock } from '../document';
 import {
-  DAILY_AVATAR_SIZE,
-  isDailyAvatar,
-  type RichContentVariant,
-} from '../imagePolicy';
-import {
   getNativeHighlightDisplayText,
   resolveNativeAnswerSegment,
   resolveNativeAnswerSelection,
 } from '../nativeInteractions';
-import {
-  createRichContentMetrics,
-  RICH_CONTENT_BLOCK_FORMULA_HEIGHT,
-  RICH_CONTENT_INLINE_FORMULA_HEIGHT,
-  RICH_CONTENT_LIST_INDENT,
-  RICH_CONTENT_LIST_ITEM_SPACING,
-  RICH_CONTENT_PARAGRAPH_SPACING,
-  RICH_CONTENT_UNKNOWN_IMAGE_HEIGHT,
-} from '../presentation';
 import type { RichTextFlow } from '../richText';
 import { createSelectionReactionOptions } from '../selectionReaction';
 import type {
@@ -136,19 +94,6 @@ function parseLinkCardMetadata(value: unknown): LinkCardMetadata | null {
   return asRecord(value) as LinkCardMetadata | null;
 }
 
-function getLinkCardMetadata(
-  linkCardInfo: Record<string, unknown> | undefined,
-  ...urls: Array<string | undefined>
-): LinkCardMetadata | null {
-  if (!linkCardInfo) return null;
-  for (const url of urls) {
-    if (!url) continue;
-    const metadata = parseLinkCardMetadata(linkCardInfo[url]);
-    if (metadata) return metadata;
-  }
-  return null;
-}
-
 function getString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
@@ -189,23 +134,6 @@ function getLinkCardImage(display: LinkCardDisplay | null): string | undefined {
     getImageUrl(content?.thumbnail) ||
     getImageUrl(content?.url) ||
     getImageUrl(content?.src)
-  );
-}
-
-interface LinkCardElementLike {
-  name?: string;
-  tagName?: string;
-  attributes?: Record<string, string | undefined>;
-  attribs?: Record<string, string | undefined>;
-}
-
-function isLinkCardElement(element: LinkCardElementLike): boolean {
-  const tagName = element?.name || element?.tagName;
-  const attributes = element?.attributes || element?.attribs || {};
-  return (
-    tagName === 'a' &&
-    (attributes.class?.includes('LinkCard') ||
-      attributes['data-draft-type'] === 'link-card')
   );
 }
 
@@ -354,12 +282,6 @@ export const LinkCard: React.FC<LinkCardProps> = React.memo(
   },
 );
 
-interface TextSlice {
-  text: string;
-  interaction?: SegmentInteraction;
-  isLiked?: boolean;
-}
-
 type SegmentInteraction = ZhihuSegmentReaction & {
   mark?: ZhihuSegmentMark;
 };
@@ -376,500 +298,6 @@ interface ActiveSegment {
   startIndex: number;
   endIndex: number;
 }
-
-function sliceParagraphText(
-  fullText: string,
-  marks: ZhihuSegmentInfo['marks'] | undefined,
-): TextSlice[] {
-  if (!fullText) return [];
-  if (!marks || marks.length === 0) {
-    return [{ text: fullText }];
-  }
-
-  const sortedMarks = [...marks].sort((a, b) => a.start_index - b.start_index);
-  const slices: TextSlice[] = [];
-  let currentIndex = 0;
-
-  for (const mark of sortedMarks) {
-    const { start_index, end_index } = mark;
-    const interaction =
-      mark.seg_info?.like_count ||
-      mark.seg_info?.comment_count ||
-      mark.seg_info?.is_like
-        ? mark.seg_info
-        : mark.master_seg_info?.like_count ||
-            mark.master_seg_info?.comment_count ||
-            mark.master_seg_info?.is_like
-          ? mark.master_seg_info
-          : null;
-
-    if (!interaction) continue;
-
-    if (start_index > currentIndex) {
-      slices.push({ text: fullText.slice(currentIndex, start_index) });
-    }
-
-    if (end_index > start_index) {
-      slices.push({
-        text: fullText.slice(start_index, end_index),
-        interaction: { ...interaction, mark },
-        isLiked: !!interaction.is_like,
-      });
-      currentIndex = end_index;
-    }
-  }
-
-  if (currentIndex < fullText.length) {
-    slices.push({ text: fullText.slice(currentIndex) });
-  }
-
-  return slices.length > 0 ? slices : [{ text: fullText }];
-}
-
-function getTNodeText(node: TNode | null | undefined): string {
-  if (!node) return '';
-  return node.type === 'text'
-    ? node.data
-    : node.children.map(getTNodeText).join('');
-}
-
-interface ParagraphRendererProps {
-  segmentMap: Map<string, ZhihuSegmentInfo>;
-  onPress: (
-    pid: string,
-    segment: ZhihuSegmentInfo,
-    interaction: SegmentInteraction,
-  ) => void;
-  fontSize?: number;
-  lineHeight?: number;
-}
-
-interface ImageRendererProps {
-  onPress: (src: string) => void;
-  onLongPress?: (src: string) => void;
-  width: number;
-  colorScheme: 'light' | 'dark';
-  variant: RichContentVariant;
-}
-
-interface LinkCardRendererProps {
-  onLinkCardPress: (url: string) => void;
-  surfaceColor: string;
-  colorScheme: 'light' | 'dark';
-  linkCardInfo?: Record<string, unknown>;
-}
-
-type ZhihuRenderersProps = Omit<Partial<RenderersProps>, 'a' | 'img'> & {
-  a: { onPress: (event: GestureResponderEvent, href: string) => void };
-  img: ImageRendererProps;
-  linkcard: LinkCardRendererProps;
-  p: ParagraphRendererProps;
-};
-
-const P_Renderer: CustomBlockRenderer = ({ TDefaultRenderer, ...props }) => {
-  const { tnode } = props;
-  const rendererProps = useRendererProps('p');
-  const textColor = useThemeColor({}, 'text');
-  const textSecondaryColor = useThemeColor({}, 'textSecondary');
-  const lightPrimaryColor = useThemeColor({}, 'primary_60');
-
-  if (!rendererProps) return <TDefaultRenderer {...props} />;
-
-  const {
-    segmentMap,
-    onPress,
-    fontSize = typography.fontSize.subtitle,
-    lineHeight = typography.fontSize.subtitle * 1.5,
-  } = rendererProps as unknown as ParagraphRendererProps;
-  const isBlockquoteParagraph = tnode.parent?.tagName === 'blockquote';
-  const paragraphTextColor = isBlockquoteParagraph
-    ? textSecondaryColor
-    : textColor;
-  const blockquoteParagraphStyle = isBlockquoteParagraph
-    ? {
-        color: textSecondaryColor,
-        fontSize,
-        lineHeight,
-      }
-    : undefined;
-
-  const pid = tnode.attributes['data-pid'];
-  const segment = pid ? segmentMap.get(pid) : null;
-  const fullText = segment?.text || getTNodeText(tnode) || '';
-  const slices = sliceParagraphText(fullText, segment?.marks);
-  const hasAnyInteraction = slices.some((s) => s.interaction);
-
-  if (!hasAnyInteraction || !pid || !segment) {
-    return (
-      <TDefaultRenderer
-        {...props}
-        style={[props.style, blockquoteParagraphStyle as unknown as ViewStyle]}
-      />
-    );
-  }
-
-  const textFontSize = fontSize;
-  const textLineHeight = lineHeight;
-
-  return (
-    <Text
-      style={[
-        props.style as unknown as StyleProp<TextStyle>,
-        {
-          color: paragraphTextColor,
-          fontSize: textFontSize,
-          lineHeight: textLineHeight,
-          marginBottom: 14,
-          marginTop: 0,
-        },
-      ]}
-    >
-      {slices.map((slice, idx) => {
-        const interaction = slice.interaction;
-        if (interaction) {
-          return (
-            <Text
-              // biome-ignore lint/suspicious/noArrayIndexKey: slices 是单个 segment 一次性切分出的结果,同一 segment 的切分稳定;slice.text 会重复,不能当 key。
-              key={idx}
-              onPress={() => onPress(pid, segment, interaction)}
-              style={{
-                color: paragraphTextColor,
-                fontSize: textFontSize,
-                lineHeight: textLineHeight,
-                textDecorationLine: 'underline',
-                textDecorationStyle: 'dashed',
-                textDecorationColor: lightPrimaryColor,
-              }}
-            >
-              {slice.text}
-            </Text>
-          );
-        }
-        return (
-          <Text
-            // biome-ignore lint/suspicious/noArrayIndexKey: 同上,与相邻分支共用一次 slices.map。
-            key={idx}
-            style={{
-              color: paragraphTextColor,
-              fontSize: textFontSize,
-              lineHeight: textLineHeight,
-            }}
-          >
-            {slice.text}
-          </Text>
-        );
-      })}
-    </Text>
-  );
-};
-
-const LazyImage: React.FC<{
-  src: string;
-  style: StyleProp<ViewStyle>;
-  resizeMode: 'contain' | 'cover' | 'stretch' | 'center';
-  resizeMethod?: 'auto' | 'resize' | 'scale';
-  colorScheme: 'light' | 'dark';
-  borderRadius?: number;
-  onLoad?: ImageProps['onLoad'];
-}> = ({ src, style, resizeMode, resizeMethod, borderRadius = 12, onLoad }) => {
-  const [visible, setVisible] = useState(false);
-  const containerRef = useRef<RNView>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const themeColors = useRuntimeThemeColors();
-  const placeholderColor = themeColors.contentPlaceholder;
-
-  useEffect(() => {
-    if (visible) return;
-
-    const checkVisibility = () => {
-      containerRef.current?.measureInWindow((_x, y, _width, height) => {
-        if (y === undefined) return;
-        const { height: screenHeight } = Dimensions.get('window');
-        // Load when it's within viewport + 400px scroll-ahead buffer
-        if (y < screenHeight + 400 && y + height > -400) {
-          setVisible(true);
-          if (timerRef.current) {
-            clearInterval(timerRef.current);
-            timerRef.current = null;
-          }
-        }
-      });
-    };
-
-    checkVisibility();
-    timerRef.current = setInterval(checkVisibility, 400);
-
-    return () => {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
-    };
-  }, [visible]);
-
-  return (
-    <RNView
-      ref={containerRef}
-      style={[
-        style,
-        {
-          backgroundColor: placeholderColor,
-          borderRadius,
-          overflow: 'hidden',
-          justifyContent: 'center',
-          alignItems: 'center',
-        },
-      ]}
-    >
-      {visible ? (
-        <Image
-          source={{ uri: src }}
-          style={[StyleSheet.absoluteFill, { borderRadius }]}
-          resizeMode={resizeMode}
-          resizeMethod={resizeMethod}
-          onLoad={onLoad}
-        />
-      ) : (
-        <ActivityIndicator size="small" color={themeColors.textTertiary} />
-      )}
-    </RNView>
-  );
-};
-
-const IMG_Renderer: CustomBlockRenderer = ({ tnode }) => {
-  const { src, width: attrWidth, height: attrHeight, eeimg } = tnode.attributes;
-  const rendererProps = useRendererProps('img');
-  const themeColors = useRuntimeThemeColors();
-  const [svgError, setSvgError] = useState(false);
-  const [intrinsicAspectRatio, setIntrinsicAspectRatio] = useState<
-    number | null
-  >(null);
-
-  if (!rendererProps) return null;
-  const {
-    onPress,
-    onLongPress,
-    width: contentWidth,
-    colorScheme,
-    variant,
-  } = rendererProps as unknown as ImageRendererProps;
-
-  const originalWidth = parseInt(attrWidth as string, 10) || 0;
-  const originalHeight = parseInt(attrHeight as string, 10) || 0;
-
-  if (!src || src.startsWith('data:image/svg')) {
-    return null;
-  }
-
-  const isFormula =
-    src.includes('zhihu.com/equation') || eeimg === '1' || eeimg === '2';
-  const alt = tnode.attributes.alt || '';
-
-  // 优先级：eeimg=2 为块级，eeimg=1 为行内；如果缺失则根据源码内容启发式判断
-  const isBlockFormula =
-    eeimg === '2' ||
-    (!eeimg && (alt.includes('\\begin') || alt.includes('\\\\')));
-
-  let displayHeight = RICH_CONTENT_UNKNOWN_IMAGE_HEIGHT;
-  let displayWidth: number | string = contentWidth;
-
-  if (originalWidth > 0 && originalHeight > 0) {
-    if (isFormula && originalHeight < 100 && originalWidth < contentWidth) {
-      // 小公式保持原比例，不拉伸到全屏
-      displayWidth = originalWidth;
-      displayHeight = originalHeight;
-    } else {
-      displayHeight = (contentWidth * originalHeight) / originalWidth;
-    }
-  } else if (isFormula) {
-    // 默认高度估计
-    displayHeight = isBlockFormula
-      ? RICH_CONTENT_BLOCK_FORMULA_HEIGHT
-      : RICH_CONTENT_INLINE_FORMULA_HEIGHT;
-    displayWidth = isBlockFormula
-      ? contentWidth
-      : Math.min(contentWidth, Math.max(40, alt.length * 8));
-  } else if (intrinsicAspectRatio) {
-    displayHeight = contentWidth / intrinsicAspectRatio;
-  }
-
-  const imageStyle: ImageStyle = {
-    width: displayWidth,
-    height: displayHeight,
-  };
-
-  // 如果是公式，且是暗色模式，使用 tintColor 将黑色公式变为白色
-  if (isFormula && colorScheme === 'dark') {
-    imageStyle.tintColor = themeColors.text;
-  }
-
-  // 确保 src 有协议
-  const finalSrc = src.startsWith('//') ? `https:${src}` : src;
-
-  if (isDailyAvatar(tnode.attributes, variant)) {
-    return (
-      <Pressable onPress={() => onPress(finalSrc)} style={{ marginRight: 10 }}>
-        <LazyImage
-          src={finalSrc}
-          style={{ width: DAILY_AVATAR_SIZE, height: DAILY_AVATAR_SIZE }}
-          resizeMode="cover"
-          resizeMethod="resize"
-          colorScheme={colorScheme}
-          borderRadius={DAILY_AVATAR_SIZE / 2}
-        />
-      </Pressable>
-    );
-  }
-
-  if (isFormula && !isBlockFormula) {
-    return (
-      <Text onPress={() => onPress(finalSrc)}>
-        {svgError ? (
-          <Text
-            style={{
-              color: themeColors.text,
-              fontSize: 16,
-            }}
-          >
-            {alt || '公式'}
-          </Text>
-        ) : (
-          <SvgUri
-            uri={finalSrc}
-            width={displayWidth}
-            height={displayHeight}
-            color={themeColors.text}
-            onError={() => setSvgError(true)}
-          />
-        )}
-      </Text>
-    );
-  }
-
-  return (
-    <View
-      className={
-        isFormula
-          ? `my-1.5 items-center bg-transparent ${isBlockFormula ? 'w-full' : ''}`
-          : 'my-2.5 items-center w-full bg-transparent'
-      }
-    >
-      <Pressable
-        onPress={() => onPress(finalSrc)}
-        onLongPress={() => onLongPress?.(finalSrc)}
-        className="bg-transparent"
-      >
-        {isFormula ? (
-          svgError ? (
-            <Text
-              style={{
-                color: themeColors.text,
-                fontSize: 16,
-              }}
-            >
-              {alt || '公式加载失败'}
-            </Text>
-          ) : (
-            <SvgUri
-              uri={finalSrc}
-              width={displayWidth}
-              height={displayHeight}
-              color={themeColors.text}
-              onError={() => setSvgError(true)}
-            />
-          )
-        ) : (
-          <LazyImage
-            src={finalSrc}
-            style={imageStyle}
-            resizeMode="contain"
-            resizeMethod="resize"
-            colorScheme={colorScheme}
-            onLoad={(event) => {
-              if (originalWidth > 0 && originalHeight > 0) return;
-              const { width, height } = event.nativeEvent.source;
-              if (width > 0 && height > 0) {
-                setIntrinsicAspectRatio(width / height);
-              }
-            }}
-          />
-        )}
-      </Pressable>
-    </View>
-  );
-};
-
-const LinkCardRenderer: CustomBlockRenderer = ({
-  tnode,
-  TDefaultRenderer,
-  ...props
-}) => {
-  const rawUrl = tnode.attributes.href;
-  const normalizedUrl = useNormalizedUrl(rawUrl || '');
-  const anchorRendererProps = useRendererProps('a');
-  const rendererProps = useRendererProps('linkcard');
-
-  if (!isLinkCardElement(tnode)) {
-    const onPress =
-      anchorRendererProps?.onPress && normalizedUrl
-        ? (event: GestureResponderEvent) =>
-            anchorRendererProps.onPress?.(
-              event,
-              normalizedUrl,
-              tnode.attributes,
-              (tnode.attributes.target as
-                | '_blank'
-                | '_self'
-                | '_parent'
-                | '_top'
-                | undefined) || '_blank',
-            )
-        : props.onPress;
-    return <TDefaultRenderer tnode={tnode} {...props} onPress={onPress} />;
-  }
-
-  if (!rendererProps) {
-    return <TDefaultRenderer tnode={tnode} {...props} />;
-  }
-  const { onLinkCardPress, surfaceColor, colorScheme, linkCardInfo } =
-    rendererProps as unknown as LinkCardRendererProps;
-
-  const url = rawUrl ? extractZhihuRedirectTarget(rawUrl) : rawUrl;
-  const metadata = getLinkCardMetadata(linkCardInfo, rawUrl, url);
-  const draftTitle = tnode.attributes['data-draft-title'];
-  const textTitle = getTNodeText(tnode).trim();
-  const title = !isLikelyUrl(draftTitle)
-    ? draftTitle
-    : !isLikelyUrl(textTitle)
-      ? textTitle
-      : undefined;
-
-  if (url) {
-    return (
-      <View style={{ width: '100%' }}>
-        <LinkCard
-          url={url}
-          title={title}
-          image={tnode.attributes['data-draft-cover']}
-          cardInfo={metadata}
-          onPress={onLinkCardPress}
-          surfaceColor={surfaceColor}
-          colorScheme={colorScheme}
-        />
-      </View>
-    );
-  }
-
-  return <TDefaultRenderer tnode={tnode} {...props} />;
-};
-
-const renderers: CustomTagRendererRecord = {
-  p: P_Renderer,
-  img: IMG_Renderer,
-  a: LinkCardRenderer,
-};
-
-const IGNORED_DOM_TAGS = ['noscript'];
-const SYSTEM_FONTS = [...defaultSystemFonts, 'Inter', 'Roboto'];
 
 export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
   ({
@@ -891,23 +319,16 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
     variant = 'default',
   }) => {
     const colorScheme = useColorScheme();
-    const { width } = useWindowDimensions();
     const settings = useSettingsStore();
     const fontSizeScale = fontSizeOverride ?? settings.fontSizeScale;
     const lineHeightScale = lineHeightOverride ?? settings.lineHeightScale;
-    const metrics = useMemo(
-      () => createRichContentMetrics(fontSizeScale, lineHeightScale),
-      [fontSizeScale, lineHeightScale],
-    );
     const selectedRenderer: RichContentRenderer =
       renderer ??
       (useNative && settings.richContentRenderer === 'webview'
-        ? 'rnrh'
+        ? 'native-v2'
         : settings.richContentRenderer);
     const themeColors = useRuntimeThemeColors();
-    const textColor = themeColors.text;
     const textSecondaryColor = useThemeColor({}, 'textSecondary');
-    const borderColor = useThemeColor({}, 'border');
     const contentBorderColor = useThemeColor({}, 'contentBorder');
     const inverseTextColor = themeColors.onPrimary;
     const surfaceColor = useThemeColor({}, 'surface');
@@ -925,35 +346,6 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
     const [viewerImage, setViewerImage] = useState<string | null>(null);
     const [viewerImages, setViewerImages] = useState<string[]>([]);
     const [actionSheetUrl, setActionSheetUrl] = useState<string | null>(null);
-    const [shouldRender, setShouldRender] = useState(true);
-    const [domReady, setDomReady] = useState(false);
-    const [useNativeFallback, setUseNativeFallback] = useState(false);
-
-    // 延迟解析 HTML 已不再需要，直接渲染以保证丝滑
-    React.useEffect(() => {
-      setShouldRender(true);
-    }, []);
-
-    // 备选方案：如果 DOM 组件加载太慢或失败，回退到原生渲染
-    React.useEffect(() => {
-      if (
-        selectedRenderer === 'webview' &&
-        !contentArray &&
-        content &&
-        !domReady
-      ) {
-        const timer = setTimeout(() => {
-          if (!domReady) {
-            console.log(
-              'DOM component timeout, falling back to native rendering',
-            );
-            setUseNativeFallback(true);
-          }
-        }, 3500);
-        return () => clearTimeout(timer);
-      }
-    }, [content, domReady, contentArray, selectedRenderer]);
-
     const handleInternalLink = useCallback(
       (url: string) => {
         if (!url) return;
@@ -1099,353 +491,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
       [type],
     );
 
-    const domVisitors = useMemo<DomVisitorCallbacks>(
-      () => ({
-        onElement: (element) => {
-          if (element.name === 'img') {
-            const { attribs } = element;
-            const originalToken = attribs['data-original-token']?.trim();
-            let actualSrc = (
-              attribs['data-actualsrc'] ||
-              attribs['data-original'] ||
-              attribs.src ||
-              ''
-            ).trim();
-
-            if (actualSrc && originalToken) {
-              const tokenRegex = /v2-[a-fA-F0-9]{32}/;
-              if (tokenRegex.test(actualSrc)) {
-                actualSrc = actualSrc.replace(tokenRegex, originalToken);
-              }
-            }
-
-            if (actualSrc) {
-              // 确保有协议
-              attribs.src = actualSrc.startsWith('//')
-                ? `https:${actualSrc}`
-                : actualSrc;
-            }
-            if (attribs['data-rawwidth'])
-              attribs.width = attribs['data-rawwidth'];
-            if (attribs['data-rawheight'])
-              attribs.height = attribs['data-rawheight'];
-          }
-          if (element.name === 'p') {
-            const pid = element.attribs['data-pid'];
-            const segment = pid ? segmentMap.get(pid) : null;
-            const interaction = findActiveInteraction(segment);
-            if (
-              interaction &&
-              (interaction.like_count > 0 ||
-                interaction.comment_count > 0 ||
-                interaction.is_like)
-            ) {
-              element.attribs.class = `${element.attribs.class || ''} segment-interactable`;
-              if (interaction.is_like) {
-                element.attribs.class += ' segment-liked';
-              }
-            }
-          }
-        },
-      }),
-      [segmentMap, findActiveInteraction],
-    );
-
-    const renderersProps = useMemo<ZhihuRenderersProps>(
-      () => ({
-        p: {
-          segmentMap,
-          onPress: handlePress,
-          fontSize: metrics.body.fontSize,
-          lineHeight: metrics.body.lineHeight,
-        },
-        a: {
-          onPress: (_event: GestureResponderEvent, href: string) =>
-            handleInternalLink(href),
-        },
-        linkcard: {
-          onLinkCardPress: handleInternalLink,
-          surfaceColor,
-          colorScheme,
-          linkCardInfo,
-        },
-        img: {
-          onPress: (src: string) => {
-            setViewerImage(src);
-            setViewerVisible(true);
-          },
-          onLongPress: (src: string) => {
-            setActionSheetUrl(src);
-          },
-          width: width - 40,
-          colorScheme,
-          variant,
-        },
-      }),
-      [
-        segmentMap,
-        handlePress,
-        linkCardInfo,
-        colorScheme,
-        handleInternalLink,
-        surfaceColor,
-        width,
-        metrics,
-        variant,
-      ],
-    );
-
     const primaryColor = useThemeColor({}, 'primary');
-    const linkColor = themeColors.link;
-    const lightPrimaryColor = useThemeColor({}, 'primary_40');
-
-    const classesStyles = useMemo(
-      () => ({
-        'segment-interactable': {
-          textDecorationLine: 'underline',
-          textDecorationStyle: 'dashed',
-          textDecorationColor: lightPrimaryColor,
-        },
-        'segment-liked': {
-          textDecorationLine: 'underline',
-          textDecorationStyle: 'dashed',
-          textDecorationColor: lightPrimaryColor,
-        },
-        ...(variant === 'daily'
-          ? {
-              meta: {
-                flexDirection: 'row' as const,
-                alignItems: 'center' as const,
-                flexWrap: 'wrap' as const,
-                minHeight: DAILY_AVATAR_SIZE,
-                marginBottom: 20,
-              },
-              author: {
-                color: textColor,
-                fontSize: 15 * fontSizeScale,
-                fontWeight: '600' as const,
-              },
-              bio: {
-                color: textSecondaryColor,
-                flexGrow: 1,
-                flexShrink: 1,
-                fontSize: 14 * fontSizeScale,
-              },
-              'question-title': { display: 'none' as const },
-            }
-          : {}),
-      }),
-      [
-        fontSizeScale,
-        lightPrimaryColor,
-        textColor,
-        textSecondaryColor,
-        variant,
-      ],
-    );
-
-    const tagsStyles = useMemo(
-      () => ({
-        p: {
-          color: textColor,
-          fontSize: metrics.body.fontSize,
-          lineHeight: metrics.body.lineHeight,
-          marginBottom: RICH_CONTENT_PARAGRAPH_SPACING,
-          marginTop: 0,
-          textAlign: typographyOptions?.justify ? 'justify' : 'left',
-        },
-        b: { color: textColor, fontWeight: 'bold' },
-        strong: { color: textColor, fontWeight: 'bold' },
-        img: { borderRadius: 12, marginVertical: 10, display: 'inline' },
-        blockquote: {
-          borderLeftWidth: 3,
-          borderLeftColor: primaryColor,
-          paddingLeft: RICH_CONTENT_PARAGRAPH_SPACING,
-          paddingRight: 10,
-          backgroundColor: 'transparent',
-          paddingVertical: 10,
-          marginVertical: 12,
-          fontSize: metrics.body.fontSize,
-          lineHeight: metrics.body.lineHeight,
-          color: textSecondaryColor,
-        },
-        h1: {
-          color: textColor,
-          fontSize: metrics.headings.h1.fontSize,
-          fontWeight: 'bold',
-          marginTop: metrics.headings.h1.marginTop,
-          marginBottom: metrics.headings.h1.marginBottom,
-          lineHeight: metrics.headings.h1.lineHeight,
-        },
-        h2: {
-          color: textColor,
-          fontSize: metrics.headings.h2.fontSize,
-          fontWeight: 'bold',
-          marginTop: metrics.headings.h2.marginTop,
-          marginBottom: metrics.headings.h2.marginBottom,
-          lineHeight: metrics.headings.h2.lineHeight,
-        },
-        h3: {
-          color: textColor,
-          fontSize: metrics.headings.h3.fontSize,
-          fontWeight: 'bold',
-          marginTop: metrics.headings.h3.marginTop,
-          marginBottom: metrics.headings.h3.marginBottom,
-          lineHeight: metrics.headings.h3.lineHeight,
-        },
-        h4: {
-          color: textColor,
-          fontSize: metrics.headings.h4.fontSize,
-          fontWeight: 'bold',
-          marginTop: metrics.headings.h4.marginTop,
-          marginBottom: metrics.headings.h4.marginBottom,
-          lineHeight: metrics.headings.h4.lineHeight,
-        },
-        h5: {
-          color: textColor,
-          fontSize: metrics.headings.h5.fontSize,
-          fontWeight: 'bold',
-          marginTop: metrics.headings.h5.marginTop,
-          marginBottom: metrics.headings.h5.marginBottom,
-          lineHeight: metrics.headings.h5.lineHeight,
-        },
-        h6: {
-          color: textColor,
-          fontSize: metrics.headings.h6.fontSize,
-          fontWeight: 'bold',
-          marginTop: metrics.headings.h6.marginTop,
-          marginBottom: metrics.headings.h6.marginBottom,
-          lineHeight: metrics.headings.h6.lineHeight,
-        },
-        ul: {
-          paddingLeft: RICH_CONTENT_LIST_INDENT,
-          color: textColor,
-          marginVertical: 8,
-          fontSize: metrics.body.fontSize,
-          lineHeight: metrics.body.lineHeight,
-        },
-        ol: {
-          paddingLeft: RICH_CONTENT_LIST_INDENT,
-          color: textColor,
-          marginVertical: 8,
-          fontSize: metrics.body.fontSize,
-          lineHeight: metrics.body.lineHeight,
-        },
-        li: {
-          marginBottom: RICH_CONTENT_LIST_ITEM_SPACING,
-          color: textColor,
-          fontSize: metrics.body.fontSize,
-          lineHeight: metrics.body.lineHeight,
-        },
-        hr: {
-          height: 1,
-          backgroundColor: contentBorderColor,
-          marginVertical: 20,
-        },
-        figure: { marginVertical: 12, alignItems: 'center' },
-        figcaption: {
-          color: textSecondaryColor,
-          fontSize: metrics.captionFontSize,
-          marginTop: 6,
-          textAlign: 'center',
-          opacity: 0.7,
-        },
-        span: { color: textColor },
-        div: { color: textColor },
-        a: { color: linkColor, textDecorationLine: 'none' },
-        code: {
-          backgroundColor: borderColor,
-          borderRadius: 4,
-          paddingHorizontal: 5,
-          paddingVertical: 2,
-          fontFamily: 'monospace',
-          fontSize: metrics.codeFontSize,
-        },
-      }),
-      [
-        textColor,
-        textSecondaryColor,
-        borderColor,
-        contentBorderColor,
-        metrics,
-        primaryColor,
-        linkColor,
-        typographyOptions?.justify,
-      ],
-    );
-
-    const defaultTextProps = useMemo(
-      () => ({ selectable, lineBreakStrategyIOS: 'standard' as const }),
-      [selectable],
-    );
-
-    const renderPinContent = () => {
-      if (!contentArray) return null;
-      return contentArray.map((item, index) => {
-        if (item.type === 'text') {
-          return (
-            <RenderHtml
-              // biome-ignore lint/suspicious/noArrayIndexKey: contentArray 是想法正文的解析结果,按原文顺序混排文本/图片/链接卡片。ZhihuContentSegment 没有 id,内容本身也不保证唯一,index 是这里唯一稳定的标识。
-              key={index}
-              contentWidth={width - 40}
-              source={{ html: `<div>${item.content}</div>` }}
-              renderers={renderers}
-              tagsStyles={tagsStyles as unknown as MixedStyleRecord}
-              classesStyles={classesStyles as unknown as MixedStyleRecord}
-              domVisitors={domVisitors}
-              systemFonts={SYSTEM_FONTS}
-              renderersProps={
-                renderersProps as unknown as Partial<RenderersProps>
-              }
-              ignoredDomTags={IGNORED_DOM_TAGS}
-              defaultTextProps={defaultTextProps}
-            />
-          );
-        }
-        if (item.type === 'image' && item.url) {
-          const imageUrl = item.url;
-          return (
-            <View
-              // biome-ignore lint/suspicious/noArrayIndexKey: 同上,与相邻分支共用一次 contentArray.map。
-              key={index}
-              className="my-2.5 items-center w-full bg-transparent"
-            >
-              <BouncyButton
-                className="rounded-xl"
-                onPress={() => {
-                  setViewerImage(imageUrl);
-                  setViewerVisible(true);
-                }}
-              >
-                <Image
-                  source={{ uri: imageUrl }}
-                  className="rounded-xl"
-                  style={{ width: width - 40, height: 250 }}
-                  resizeMode="cover"
-                />
-              </BouncyButton>
-            </View>
-          );
-        }
-        if (item.type === 'link_card' && item.url) {
-          return (
-            <LinkCard
-              // biome-ignore lint/suspicious/noArrayIndexKey: 同上,与相邻分支共用一次 contentArray.map。
-              key={index}
-              url={item.url}
-              title={item.data_draft_title}
-              image={item.data_draft_cover}
-              onPress={handleInternalLink}
-              surfaceColor={surfaceColor}
-              colorScheme={colorScheme}
-            />
-          );
-        }
-        return null;
-      });
-    };
-
-    const onReadyCallback = useCallback(() => setDomReady(true), []);
     const onImagePressCallback = useCallback(
       (src: string, gallery?: readonly string[]) => {
         setViewerImage(src);
@@ -1551,8 +597,6 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
         type,
         selectedRenderer,
       };
-      setDomReady(false);
-      setUseNativeFallback(false);
       setTextSelection(null);
       setModalVisible(false);
       setActiveSegment(null);
@@ -1596,38 +640,26 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
         notifyError: () => showToast('操作失败，请重试'),
       }),
     );
-    const domStyle = useMemo(
-      () => ({ backgroundColor: 'transparent', minHeight: 400 }),
-      [],
+    const renderWebViewContent = () => (
+      <ZhihuDOMContent
+        htmlContent={content || ''}
+        contentArray={contentArray}
+        segmentInfosStr={JSON.stringify(segmentInfos)}
+        linkCardInfoStr={JSON.stringify(linkCardInfo || {})}
+        colorScheme={colorScheme}
+        onReady={onLayoutReady}
+        onImagePress={onImagePressCallback}
+        onImageLongPress={onImageLongPressCallback}
+        onLinkPress={handleInternalLink}
+        onSegmentPress={onSegmentPressCallback}
+        onTextSelected={type === 'answer' ? onTextSelectedCallback : undefined}
+        selectable={selectable}
+        variant={variant}
+        fontSizeScale={fontSizeScale}
+        lineHeightScale={lineHeightScale}
+        typographyOptions={typographyOptions}
+      />
     );
-    const nativeContentSource = useMemo(
-      () => ({ html: `<div>${content || ''}</div>` }),
-      [content],
-    );
-    const renderRnrhContent = () => (
-      <View>
-        <RenderHtml
-          contentWidth={width - 40}
-          source={nativeContentSource}
-          renderers={renderers}
-          tagsStyles={tagsStyles as unknown as MixedStyleRecord}
-          classesStyles={classesStyles as unknown as MixedStyleRecord}
-          domVisitors={domVisitors}
-          systemFonts={SYSTEM_FONTS}
-          renderersProps={renderersProps as unknown as Partial<RenderersProps>}
-          ignoredDomTags={IGNORED_DOM_TAGS}
-          defaultTextProps={defaultTextProps}
-        />
-      </View>
-    );
-
-    if (!shouldRender && !contentArray) {
-      return (
-        <View className="h-[200px] justify-center items-center bg-transparent">
-          <ActivityIndicator size="small" color={primaryColor} />
-        </View>
-      );
-    }
 
     return (
       <View className="bg-transparent">
@@ -1650,44 +682,12 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
             onSelectionChange={onNativeTextSelectedCallback}
             renderLinkCard={renderNativeLinkCard}
             selectable={selectable}
-            renderFallback={contentArray ? renderPinContent : renderRnrhContent}
+            renderFallback={renderWebViewContent}
             renderPlaceholder={renderPlaceholder}
             onLayoutReady={onLayoutReady}
           />
-        ) : contentArray ? (
-          renderPinContent()
-        ) : selectedRenderer === 'rnrh' || useNativeFallback ? (
-          renderRnrhContent()
         ) : (
-          <View style={{ minHeight: 400 }}>
-            {!domReady && !useNativeFallback && (
-              <View className="absolute inset-0 z-10 justify-center items-center bg-transparent">
-                <ActivityIndicator size="small" color={primaryColor} />
-                <Text type="secondary" className="mt-4 text-xs opacity-50">
-                  正在建立连接...
-                </Text>
-              </View>
-            )}
-            <ZhihuDOMContent
-              htmlContent={content || ''}
-              segmentInfosStr={JSON.stringify(segmentInfos)}
-              linkCardInfoStr={JSON.stringify(linkCardInfo || {})}
-              colorScheme={colorScheme}
-              onReady={onReadyCallback}
-              onImagePress={onImagePressCallback}
-              onImageLongPress={onImageLongPressCallback}
-              onLinkPress={handleInternalLink}
-              onSegmentPress={onSegmentPressCallback}
-              onTextSelected={
-                type === 'answer' ? onTextSelectedCallback : undefined
-              }
-              variant={variant}
-              fontSizeScale={fontSizeScale}
-              lineHeightScale={lineHeightScale}
-              typographyOptions={typographyOptions}
-              style={domStyle}
-            />
-          </View>
+          renderWebViewContent()
         )}
 
         <ActionSheet

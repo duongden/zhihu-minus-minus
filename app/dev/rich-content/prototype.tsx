@@ -32,7 +32,6 @@ type DecorationKind = NonNullable<
 >;
 const rendererChoices: readonly { id: RichContentRenderer; title: string }[] = [
   { id: 'native-v2', title: 'tiqian-super-mini' },
-  { id: 'rnrh', title: 'RNRH' },
   { id: 'webview', title: 'WebView' },
 ];
 const lineChoices: readonly { id: DecorationKind; title: string }[] = [
@@ -386,7 +385,7 @@ export default function RichContentPrototypeScreen() {
               {Platform.OS === 'android' || Platform.OS === 'ios'
                 ? '开发构建缺少原生文字模块'
                 : '平台暂不支持原生文字模块'}
-              ，正文使用 RNRH fallback
+              ，正文使用 WebView fallback
               与其图片、链接交互；本地选区和知识点菜单在 tiqian-super-mini
               中演示。
             </Text>
@@ -415,7 +414,7 @@ export default function RichContentPrototypeScreen() {
                   content={currentCase.html}
                   objectId={`prototype-${caseId}`}
                   type="article"
-                  renderer="rnrh"
+                  renderer="webview"
                   selectable
                   variant={currentCase.variant}
                   fontSizeScale={fontSizeScale}

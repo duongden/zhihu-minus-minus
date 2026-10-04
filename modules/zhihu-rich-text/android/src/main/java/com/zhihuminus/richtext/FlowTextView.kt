@@ -32,6 +32,9 @@ internal class FlowTextView(context: Context) : TextView(context) {
   private var moved = false
   private var longPressed = false
   private var hadSelection = false
+  private var handlingTouchEvent = false
+  val suppressTouchFocusScroll: Boolean
+    get() = handlingTouchEvent && !longPressed && !hadSelection
 
   init {
     setPadding(0, 0, 0, 0)
@@ -59,7 +62,12 @@ internal class FlowTextView(context: Context) : TextView(context) {
         if (abs(event.x - downX) > touchSlop || abs(event.y - downY) > touchSlop) moved = true
       }
     }
-    val handled = super.onTouchEvent(event)
+    handlingTouchEvent = true
+    val handled = try {
+      super.onTouchEvent(event)
+    } finally {
+      handlingTouchEvent = false
+    }
     if (event.actionMasked == MotionEvent.ACTION_UP && !moved && !longPressed && !hadSelection) {
       if (selectionStart < 0 || selectionStart == selectionEnd) {
         val action = findActionAt(event.x, event.y)

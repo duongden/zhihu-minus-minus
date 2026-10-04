@@ -77,7 +77,7 @@ jest.mock('../store/useSettingsStore', () => ({
       surfaceStyle: 'layered',
       fontSizeScale: 1,
       lineHeightScale: 1.5,
-      richContentRenderer: 'rnrh',
+      richContentRenderer: 'native-v2',
       updateSettings: set,
     })),
 }));

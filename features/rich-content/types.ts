@@ -6,7 +6,7 @@ import type { RichContentVariant } from './imagePolicy';
 export type RichContentObjectType = 'answer' | 'article' | 'pin' | 'question';
 
 /** 用户可选择的正文后端；单个正文可通过 renderer 显式覆盖设置。 */
-export type RichContentRenderer = 'rnrh' | 'webview' | 'native-v2';
+export type RichContentRenderer = 'webview' | 'native-v2';
 
 /** Layout-only experiments; source text and persistent settings stay intact. */
 export interface RichContentTypographyOptions {
@@ -37,7 +37,7 @@ export interface ZhihuContentProps {
   fontSizeScale?: number;
   lineHeightScale?: number;
   typographyOptions?: RichContentTypographyOptions;
-  /** 跳过 WebView；用户选用 Native V2 时仍遵循其设置。 */
+  /** 优先使用原生文字排版；缺少模块时仍回退 WebView。 */
   useNative?: boolean;
   selectable?: boolean;
   variant?: RichContentVariant;

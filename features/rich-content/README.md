@@ -8,7 +8,7 @@
 
 ## 目录
 
-- `components/`：RNRH、WebView/DOM，以及 tiqian-super-mini 的文字流/独立媒体 adapter；原生文字模块支持Android和iOS。
+- `components/`：WebView/DOM，以及 tiqian-super-mini 的文字流/独立媒体 adapter；原生文字模块支持Android和iOS。
 - `normalization/`：中立 HTML → `ZhihuDocument` 初步转换与危险节点/URL过滤。
 - `docs/`：Renderer V2 架构、真机基准计划和阶段性结论。
 - `fixtures/inbox/`：可以持续投递的脱敏知乎 API `.json` 样本。
@@ -44,7 +44,7 @@ import { ZhihuContent } from '@/features/rich-content';
 
 开发构建从“我的 → 富文本测试案例 → structured_content 渲染对照”进入独立测试页。五个主要案例来自用户附件的真实回答，保留全部 48 个分段、99 个 marks 和分页标志，覆盖列表公式、标题与重叠词条、密集公式与分隔、图片布局、段落与链接。身份文字按原长度替换，ID、业务链接和不透明上下文脱敏；正文图和公式图保留原公开 HTTPS 地址，运行时加载，仓库不新增下载图片。可以切换渲染器、展开收起分段、查看脱敏 JSON；额外合成案例演示本地续页追加。样本放在 `fixtures/inbox/structured-content/`，由 `dev/structuredCases.ts` 显式登记，案例切换不写持久设置、不调用正文或互动接口。
 
-`normalizeZhihuDocument` 初步将HTML和知识点元数据转换为 `ZhihuDocument`，`normalizeZhihuContentSegments`处理想法的结构化text/image/link_card等分段，由 `compileZhihuDocument` 和 `native-v2` 后端消费。业务正文可通过持久设置选择该后端，开发页面也可显式覆盖。现有 RNRH / WebView 链路仍各自接收HTML，想法保留完整结构化fallback。该模型与知乎 API 原始 JSON 分开定义：
+`normalizeZhihuDocument` 初步将HTML和知识点元数据转换为 `ZhihuDocument`，`normalizeZhihuContentSegments`处理想法的结构化text/image/link_card等分段，由 `compileZhihuDocument` 和 `native-v2` 后端消费。业务正文可通过持久设置选择该后端，开发页面也可显式覆盖。WebView 链路接收HTML，想法分段在同一 WebView 中保留文字、图片和卡片。该模型与知乎 API 原始 JSON 分开定义：
 
 - `ZhihuBlock` 用 `type` 区分段落、标题、图片、块级公式、列表、引用、代码、视频、链接卡片、表格、分隔线和未支持结构。表格按表头、表体和表尾保留行/单元格，单元格支持对齐、合并跨度和嵌套 `blocks`。
 - `ZhihuInlineRun` 覆盖文本、粗体、强调、下划线、删除线、高亮、上下标、行内代码、键盘输入、链接、行内图片/公式、脚注引用、两种知识点结构、换行和未支持结构。容器的 `children` 保留嵌套格式，列表项和引用的 `blocks` 保留块级嵌套。
@@ -97,17 +97,17 @@ const document = {
 
 WebView 正文在 JS 侧经过 HTML 标签、属性、URL 和内联样式白名单；正文和元数据嵌入脚本时另行转义 HTML 分隔符。脚注元数据按文本构造 DOM，卡片描述通过 inert template 提取文本。桥接图片/链接再次验证 URL，页面导航交给宿主处理，避免内容链接替换渲染页。DOM Range 同时处理文字节点与元素子节点边界的选区，跨出真实段落的选区会清除业务选择。KaTeX 脚本、CSS 与 WOFF2 字体由已安装的锁定依赖生成并随应用打包，WebView 公式不再依赖 CDN；公式渲染失败时，正文文字、交互和高度初始化仍继续。正文色和链接色由共享 runtime palette 解析，读取阅读背景与对比度偏好。合成安全回归见 `fixtures/cases/webview-untrusted-content-001.json`，不代表完整浏览器 CSS 或任意嵌入内容支持。
 
-该bridge仍仅服务WebView。独立Android/iOS模块提供带flowId/textVersion的选择、高度和action事件，JS校验当前IR身份后派发；滚动/ready/error协议尚未完整。`ZhihuContent` 默认读取正文后端设置，经典路径仍是RNRH，显式 `renderer` 优先于用户偏好。
+该bridge仍仅服务WebView。独立Android/iOS模块提供带flowId/textVersion的选择、高度和action事件，JS校验当前IR身份后派发；滚动/ready/error协议尚未完整。`ZhihuContent` 默认读取正文后端设置，新安装默认采用 tiqian-super-mini，显式 `renderer` 优先于用户偏好。
 
-Enriched组件、专属dialect normalizer、相关测试、依赖和native patch已于2026-09-30正式移除；[实验01](./docs/renderer-v2-experiment-01-enriched-html.md)仅保留历史研究，不再提供运行入口或fallback。tiqian-super-mini在Android/iOS以外的平台或模块未包含的客户端回退到RNRH。
+Enriched组件、专属dialect normalizer、相关测试、依赖和native patch已于2026-09-30正式移除；[实验01](./docs/renderer-v2-experiment-01-enriched-html.md)仅保留历史研究，不再提供运行入口或fallback。tiqian-super-mini在Android/iOS以外的平台或模块未包含的客户端回退到 WebView。
 
-通常使用 `ZhihuContent` 让正文遵循持久偏好；需要固定后端时可显式传入 `renderer="native-v2"`。该外壳已经封装完整RNRH fallback及图片/链接交互。直接使用 `ZhihuNativeContent` 时必须提供 `renderFallback: () => React.ReactNode`，由宿主返回完整的正文 adapter，供无模块/不支持平台降级；HTML 宿主使用 RNRH，结构化宿主使用独立的 JSON 分段组件。首次native测量使用同排版骨架或宿主placeholder。模块本身无需反向依赖外壳。V2源选区和知识点事件仅在原生模块可用时生效。
+通常使用 `ZhihuContent` 让正文遵循持久偏好；需要固定后端时可显式传入 `renderer="native-v2"`。该外壳已经封装完整 WebView fallback及图片/链接交互。直接使用 `ZhihuNativeContent` 时必须提供 `renderFallback: () => React.ReactNode`，由宿主返回完整的正文 adapter，供无模块/不支持平台降级；HTML 宿主使用 WebView，结构化宿主使用独立的 JSON 分段组件。首次native测量使用同排版骨架或宿主placeholder。模块本身无需反向依赖外壳。V2源选区和知识点事件仅在原生模块可用时生效。
 
 ## 真实正文的启用入口
 
 该后端于2026-10-01按用户选择命名为 `tiqian-super-mini`（原称Native V2）。设置与开发页面使用新名字；公共 `renderer` 值及持久偏好仍为 `native-v2`，已有选择无需迁移。文字布局继续使用Android TextView和iOS TextKit，Tiqian规则研究仍见相关文档。
 
-“设置 → 外观与阅读 → 正文排版”提供经典排版（RNRH）、tiqian-super-mini（原生排版）、网页排版（WebView）。“功能开关 → 正文排版”也会进入同一页面。选择tiqian-super-mini后，普通业务正文即可采用新后端，无需进入开发案例。默认仍为经典排版；`richContentRenderer`在settings version 13中持久化，迁移旧 `useWebView=true` 为网页，其余旧值为经典。缺模块或不支持的平台按本次渲染回退RNRH，不改写保存的偏好。
+“设置 → 外观与阅读 → 正文排版”提供 tiqian-super-mini（默认）和网页排版（WebView）；“功能开关 → 正文排版”进入同一页面。settings version 15 将旧 `rnrh` 或未设置的偏好迁移为 `native-v2`，保留显式 WebView 偏好和旧 `useWebView=true`。缺少模块或不支持的平台按本次渲染回退 WebView，不改写保存的偏好。RNRH 组件、依赖与运行入口已删除，历史实验记录中的 RNRH 仅供参考。
 
 信息流外层的 `FeedExcerpt` 按用户决定单独保留原有React Native `Text`摘要，不进入tiqian-super-mini。长按预览在获取数据和正文首测期间可保留现有摘要placeholder，完成后显示所选正文后端；这不是独立的native摘要渲染入口。
 
@@ -123,7 +123,7 @@ tiqian-super-mini选区已接回回答的既有业务菜单，但仅开放可逐
 
 反应接口保留完整片段ID集合，并安全解析服务端新建segId。回答段评链接携带原始片段文本和完整段落/范围，当前评论页的根评论和直接回复才使用段评接口；旧链接缺少这些字段时仍可阅读，需重新选择原文后发段评。独立replies页沿用原有comment-ID回复流程，本轮未扩展。
 
-真实知乎格式的补齐以现有RNRH/WebView实现及稳定fixtures为依据，具体覆盖与剩余边界见 [存量案例审计](./docs/renderer-v2-experiment-03-native-flow.md#存量知乎格式审计)。合成演示与真实API格式分别验证，不能仅凭页面中出现“脚注”或“卡片”就认定已覆盖知乎的属性和元数据格式。
+真实知乎格式的补齐以中立文档模型、WebView实现及稳定fixtures为依据，具体覆盖与剩余边界见 [存量案例审计](./docs/renderer-v2-experiment-03-native-flow.md#存量知乎格式审计)。合成演示与真实API格式分别验证，不能仅凭页面中出现“脚注”或“卡片”就认定已覆盖知乎的属性和元数据格式。
 
 ## 常用命令
 
@@ -137,11 +137,11 @@ npm test -- features/rich-content/tests --runInBand
 
 ## 开发构建案例页
 
-开发构建可从“我的 → 富文本测试案例（开发）”打开案例列表，再进入“tiqian-super-mini 原型”。原型使用六组合成内容，提供tiqian-super-mini、RNRH、WebView三后端对照、字号/行高/排版和装饰调节、源选区面板与本地知识点菜单，不提交业务操作。稳定fixture页读取 `fixtures/manifest.json`，也可切换这三个后端；这些切换仅影响当前案例，不写入生产正文偏好。正文交互默认关闭，临时打开后需注意样本可能保留真实对象ID。
+开发构建可从“我的 → 富文本测试案例（开发）”打开案例列表，再进入“tiqian-super-mini 原型”。原型使用六组合成内容，提供tiqian-super-mini、WebView 两后端对照、字号/行高/排版和装饰调节、源选区面板与本地知识点菜单，不提交业务操作。稳定fixture页读取 `fixtures/manifest.json`，也可切换这两个后端；这些切换仅影响当前案例，不写入生产正文偏好。正文交互默认关闭，临时打开后需注意样本可能保留真实对象ID。
 
 开发deeplink可用 `zhihu--:///dev/rich-content/prototype?caseId=attachments` 选择合成案例；caseId只接受页面六个已知标识，忽略无效值，不接受URL中的任意HTML。iOS CLI模拟器命令见 [开发指南](../../docs/DEVELOPMENT.md)。
 
-三个后端统一经过 `ZhihuContent` 的交互外壳，复用站内/站外链接分流、内容宽度、图片预览及共享排版指标。Android/iOS V2模块直接消费IR，初步支持选择事件、自定义装饰和行内附件；完整附件几何和无障碍映射仍需后续验收。tiqian-super-mini需要重新生成并编译development build，不能运行于Expo Go；模块缺失时可继续用RNRH查看内容。
+两个后端统一经过 `ZhihuContent` 的交互外壳，复用站内/站外链接分流、内容宽度、图片预览及共享排版指标。Android/iOS V2模块直接消费IR，初步支持选择事件、自定义装饰和行内附件；完整附件几何和无障碍映射仍需后续验收。tiqian-super-mini需要重新生成并编译development build，不能运行于Expo Go；模块缺失时可继续用 WebView 查看内容。
 
 本轮Android V2已完成prebuild、arm64 Debug构建及vivo真机功能查看；Enriched移除前后的验证记录与未验证项见 [实验03](./docs/renderer-v2-experiment-03-native-flow.md)。iOS新增UIKit/TextKit初步adapter，其构建与平台验证另行记录；尚无双端Release验证。Tiqian保留为[历史集成草案](./docs/renderer-v2-experiment-02-tiqian.md)，是否需要接入取决于后续系统布局能力的实际缺口。
 
@@ -149,9 +149,9 @@ npm test -- features/rich-content/tests --runInBand
 
 ## 当前范围
 
-项目已经完成测试集集中、Android Debug 基线、正文复用和 Pager 相邻预取，并新增中立normalization、Rich Text IR、Android文字流功能原型及初步iOS UIKit/TextKit adapter。Enriched运行链路已正式删除，tiqian-super-mini已提供真实正文的用户可选入口。双端完整平台验收、完整知乎覆盖、跨媒体选择、媒体生命周期与Release对照仍待完成，新安装默认仍是经典排版。
+项目已经完成测试集集中、Android Debug 基线、正文复用和 Pager 相邻预取，并新增中立normalization、Rich Text IR、Android文字流功能原型及初步iOS UIKit/TextKit adapter。Enriched运行链路已正式删除，tiqian-super-mini已提供真实正文的用户可选入口。双端完整平台验收、完整知乎覆盖、跨媒体选择、媒体生命周期与Release对照仍待完成，新安装默认采用 tiqian-super-mini。
 
-真机试用后优先推进tiqian-super-mini。RNRH继续维护经典正文与迁移fallback；WebView保留为用户可选后端及开发对照。
+真机试用后优先推进tiqian-super-mini。tiqian-super-mini 为默认正文后端；WebView 保留为用户可选后端、缺模块 fallback 及开发对照。
 
 下一阶段按 [Renderer V2 迁移计划](./docs/renderer-v2-plan.md) 推进：
 
@@ -159,12 +159,16 @@ npm test -- features/rich-content/tests --runInBand
 2. 扩充现有 `ZhihuDocument` normalization、Rich Text IR与source map的真实内容覆盖。
 3. 验证并完善tiqian-super-mini的iOS adapter与双端一致性；仅在系统布局存在明确缺口时再评估Tiqian接入。
 4. 已补充密集样式样本及原生附件 viewport 预取/释放实现；后续完成 Release 混合媒体生命周期验收和纯文本上限矩阵，文本分段/虚拟化由 [Release 基准](./docs/benchmark-plan.md) 决定。
-5. 基于双端验收结果选择默认 backend，经 feature flag 逐步接管，达到替换条件后移除 RNRH。
+5. 完成双端 Release 验收，持续检查默认后端与 WebView fallback。
 
-RNRH 保留为当前实现、对照和迁移期 fallback；WebView 保留为 fallback/实验。桌面微基准、已有 Debug 数据和第三方实践不能代替本仓 native backend 的真机验收。
+RNRH 已删除；WebView 保留为可选后端和 fallback。桌面微基准、已有 Debug 数据和第三方实践不能代替本仓 native backend 的真机验收。
 
 ## 2026-10-01 优化与离线资源
 
 `flowLayout.ts` 以端点扫描计算有效度量样式，保持 span 原顺序、重复样式及相邻等价区间的身份；不因 paint/action 更新重复测量。密集合成样本、可复现桌面测量、资源包成本及双端附件生命周期边界见 [专项记录](./docs/optimizations-2026-10-01.md)。
 
 `npm run generate:rich-content:katex` 从安装的 KaTeX 生成 `assets/katex-style.json` 与 `assets/katex-runtime.json`，`postinstall` 自动执行；`node features/rich-content/tools/bundle-katex.mjs --check` 可检查资源是否与当前锁定包一致。资源包含 MIT license，CSS 与 runtime 分包以避免旧 DOM 公式组件重复携带不使用的 auto-render 脚本。更换 KaTeX 时必须同步锁文件与生成资源。
+
+## 2026-10-05 静态审查
+
+本轮仅做静态审查与自动检查，不运行模拟器。移除 RNRH 后，正文只保留 tiqian-super-mini 和 WebView，想法的 WebView fallback 使用一个正文视图。WebView 首载占位不再挂载覆盖正文的触摸层；高度按正文自身测量，正文滚动交给宿主，宽表格保留内部横向滚动。Android 引用线与选择焦点相关修正及未验证边界见实验03的本轮记录。真机触摸、选择和性能仍需后续验证。

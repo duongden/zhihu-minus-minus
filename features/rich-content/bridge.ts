@@ -58,6 +58,7 @@ function parseTextSelectionInfo(value: unknown): TextSelectionInfo | null {
 /** Decode untrusted WebView data without exposing its contents in diagnostics. */
 export function parseRichContentBridgeMessage(
   raw: string,
+  documentIdentity?: number,
 ): RichContentBridgeMessage | null {
   let value: unknown;
   try {
@@ -67,6 +68,11 @@ export function parseRichContentBridgeMessage(
   }
 
   if (!isRecord(value)) return null;
+  if (
+    documentIdentity !== undefined &&
+    value.documentIdentity !== documentIdentity
+  )
+    return null;
 
   switch (value.type) {
     case 'height':

@@ -83,7 +83,7 @@ function isValidSurfaceStyle(v: unknown): v is SurfaceStyle {
 }
 
 function isValidRichContentRenderer(v: unknown): v is RichContentRenderer {
-  return v === 'rnrh' || v === 'webview' || v === 'native-v2';
+  return v === 'webview' || v === 'native-v2';
 }
 
 function sanitizeRecommendAdInterval(value: unknown): number {
@@ -189,7 +189,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   defaultTab: 'recommend',
   localCityName: null,
   borderRadius: 12,
-  richContentRenderer: 'rnrh',
+  richContentRenderer: 'native-v2',
   enablePrivateMessaging: false,
   enablePressFeedback: true,
   pressOpacity: 0.82,
@@ -253,7 +253,7 @@ export const useSettingsStore = create<SettingsState>()(
             nextSettings.surfaceStyle = 'layered';
           }
           if (!isValidRichContentRenderer(nextSettings.richContentRenderer)) {
-            nextSettings.richContentRenderer = 'rnrh';
+            nextSettings.richContentRenderer = 'native-v2';
           }
           if (typeof nextSettings.enablePressFeedback !== 'boolean') {
             nextSettings.enablePressFeedback = true;
@@ -285,7 +285,7 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'zhihu-settings-storage',
       storage: createJSONStorage(() => settingsStorage),
-      version: 14,
+      version: 15,
       migrate: (rawPersistedState: unknown, version: number) => {
         const persistedState =
           normalizePersistedSettingsState(rawPersistedState);
@@ -405,15 +405,15 @@ export const useSettingsStore = create<SettingsState>()(
           persistedState.recommendRequestAdInterval,
         );
 
-        // v13 replaces the WebView toggle with an explicit renderer choice.
-        // Preserve valid new values when a backup contains both formats.
+        // v15 removes RNRH. Preserve WebView/native choices and migrate classic
+        // or unset choices to tiqian-super-mini; keep legacy WebView preference.
         persistedState.richContentRenderer = isValidRichContentRenderer(
           persistedState.richContentRenderer,
         )
           ? persistedState.richContentRenderer
           : persistedState.useWebView === true
             ? 'webview'
-            : 'rnrh';
+            : 'native-v2';
         delete persistedState.useWebView;
 
         // v14 adds a visual-feedback switch without changing existing styles.

@@ -57,13 +57,8 @@ const CONTENT_RENDERER_OPTIONS: readonly {
   description: string;
 }[] = [
   {
-    value: 'rnrh',
-    label: '经典排版',
-    description: '保持现有阅读体验，适用于多数正文。',
-  },
-  {
     value: 'native-v2',
-    label: '原生排版（实验）',
+    label: 'tiqian-super-mini（默认）',
     description: 'tiqian super mini 版；更好的公式、图片、划线...的中文排版。',
   },
   {

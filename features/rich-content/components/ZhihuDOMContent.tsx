@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { type StyleProp, View, type ViewStyle } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useRuntimeThemeColors } from '@/components/Themed';
 import { radii, typography } from '@/constants/designTokens';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import type { ZhihuContentSegment } from '@/types/zhihu';
 import katexRuntime from '../assets/katex-runtime.json';
 import katexStyle from '../assets/katex-style.json';
 import {
@@ -27,6 +28,7 @@ export type { TextSelectionInfo } from '../bridge';
 
 export interface ZhihuDOMContentProps {
   htmlContent: string;
+  contentArray?: readonly ZhihuContentSegment[];
   segmentInfosStr?: string;
   linkCardInfoStr?: string;
   colorScheme: 'light' | 'dark';
@@ -41,10 +43,64 @@ export interface ZhihuDOMContentProps {
   fontSizeScale?: number;
   lineHeightScale?: number;
   typographyOptions?: RichContentTypographyOptions;
+  selectable?: boolean;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => {
+    const entities: Record<string, string> = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    };
+    return entities[character];
+  });
+}
+
+/** Preserve pin ordering in one document, then apply the shared HTML allowlist. */
+function contentSegmentsToHtml(
+  contentArray: readonly ZhihuContentSegment[],
+): string {
+  const attribute = (name: string, value: string | undefined) =>
+    typeof value === 'string' ? ` ${name}="${escapeHtml(value)}"` : '';
+  const sizeAttribute = (name: string, value: number | undefined) =>
+    typeof value === 'number' && Number.isFinite(value) && value > 0
+      ? attribute(name, String(value))
+      : '';
+  return contentArray
+    .map((segment) => {
+      if (segment.type === 'text')
+        return `<div>${typeof segment.content === 'string' ? segment.content : typeof segment.own_text === 'string' ? segment.own_text : ''}</div>`;
+      if (segment.type === 'image')
+        return `<img${attribute('src', segment.url)}${sizeAttribute('data-rawwidth', segment.width)}${sizeAttribute('data-rawheight', segment.height)}>`;
+      if (segment.type === 'link_card') {
+        const title =
+          typeof segment.data_draft_title === 'string'
+            ? segment.data_draft_title
+            : typeof segment.title === 'string'
+              ? segment.title
+              : '链接';
+        return `<a data-draft-type="link-card"${attribute('href', segment.url)}${attribute('data-draft-cover', segment.data_draft_cover)}>${escapeHtml(title)}</a>`;
+      }
+      if (segment.type === 'video') {
+        const videoId = segment.video_id || segment.video_bo_id;
+        const url =
+          segment.url ||
+          (videoId && /^\d+$/.test(videoId)
+            ? `https://www.zhihu.com/zvideo/${videoId}`
+            : undefined);
+        return `<p><a${attribute('href', url)}>${escapeHtml(typeof segment.title === 'string' ? segment.title : '视频')}</a></p>`;
+      }
+      return `<div>${typeof segment.content === 'string' ? segment.content : typeof segment.own_text === 'string' ? segment.own_text : ''}</div><p>${escapeHtml(typeof segment.title === 'string' ? segment.title : '[暂不支持的想法内容]')}</p>`;
+    })
+    .join('');
 }
 
 export default React.memo(function ZhihuDOMContent({
   htmlContent,
+  contentArray,
   segmentInfosStr,
   linkCardInfoStr,
   onImagePress,
@@ -58,19 +114,25 @@ export default React.memo(function ZhihuDOMContent({
   fontSizeScale: fontSizeOverride,
   lineHeightScale: lineHeightOverride,
   typographyOptions,
+  selectable = true,
 }: ZhihuDOMContentProps) {
   const [height, setHeight] = useState(400);
   const safeHtmlContent = useMemo(
-    () => sanitizeRichContentHtml(htmlContent),
-    [htmlContent],
+    () =>
+      sanitizeRichContentHtml(
+        contentArray ? contentSegmentsToHtml(contentArray) : htmlContent,
+      ),
+    [contentArray, htmlContent],
   );
 
   const themeColors = useRuntimeThemeColors();
   const textColor = themeColors.text;
   const settings = useSettingsStore();
-  const metrics = createRichContentMetrics(
-    fontSizeOverride ?? settings.fontSizeScale,
-    lineHeightOverride ?? settings.lineHeightScale,
+  const fontSizeScale = fontSizeOverride ?? settings.fontSizeScale;
+  const lineHeightScale = lineHeightOverride ?? settings.lineHeightScale;
+  const metrics = useMemo(
+    () => createRichContentMetrics(fontSizeScale, lineHeightScale),
+    [fontSizeScale, lineHeightScale],
   );
   const headingStyles = Object.entries(metrics.headings)
     .map(
@@ -115,7 +177,10 @@ export default React.memo(function ZhihuDOMContent({
       `
       : '';
 
-  const html = `
+  const documentVersion = useRef(0);
+  const renderingDocument = useMemo(() => {
+    const documentIdentity = ++documentVersion.current;
+    const html = `
     <!DOCTYPE html>
     <html lang="zh-Hans">
     <head>
@@ -124,16 +189,21 @@ export default React.memo(function ZhihuDOMContent({
       <script>${katexRuntime.script.replace(/<\/script/gi, '<\\/script')}</script>
       <script>${katexRuntime.autoRender.replace(/<\/script/gi, '<\\/script')}</script>
       <style>
+        html {
+          overflow: hidden;
+        }
         body {
           margin: 0;
           padding: 0;
           background-color: transparent !important;
           max-width: 100%;
-          overflow-x: hidden;
-          -webkit-user-select: text;
-          user-select: text;
+          overflow: hidden;
+          -webkit-user-select: ${selectable ? 'text' : 'none'};
+          user-select: ${selectable ? 'text' : 'none'};
         }
         .zhihu-content {
+          display: flow-root;
+          min-height: 1px;
           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
           font-size: ${metrics.body.fontSize}px;
           line-height: ${metrics.body.lineHeight}px;
@@ -239,7 +309,6 @@ export default React.memo(function ZhihuDOMContent({
         }
         .zhihu-content blockquote {
           border-left: 4px solid ${primaryColor};
-          padding-left: 18px;
           background-color: transparent;
           padding: 12px 18px;
           margin: 15px 0;
@@ -251,6 +320,21 @@ export default React.memo(function ZhihuDOMContent({
           color: ${themeColors.textSecondary};
           font-size: ${metrics.body.fontSize}px;
           line-height: ${metrics.body.lineHeight}px;
+        }
+        .zhihu-content blockquote > :last-child {
+          margin-bottom: 0;
+        }
+        .zhihu-content table {
+          display: block;
+          max-width: 100%;
+          overflow-x: auto;
+          border-collapse: collapse;
+          margin: 15px 0;
+        }
+        .zhihu-content td, .zhihu-content th {
+          border: 1px solid ${themeColors.contentBorder};
+          padding: 8px;
+          vertical-align: top;
         }
         .zhihu-content h1, .zhihu-content h2, .zhihu-content h3, .zhihu-content h4, .zhihu-content h5, .zhihu-content h6 { color: ${textColor}; text-align: start; }
         ${headingStyles}
@@ -275,6 +359,12 @@ export default React.memo(function ZhihuDOMContent({
     <body>
       <div id="content" class="zhihu-content"></div>
       <script>
+        const documentIdentity = ${documentIdentity};
+        function postBridgeMessage(message) {
+          window.ReactNativeWebView.postMessage(JSON.stringify(
+            Object.assign({ documentIdentity }, message)
+          ));
+        }
         const htmlContent = ${serializeInlineScriptValue(safeHtmlContent)};
         const segmentInfosStr = ${serializeInlineScriptValue(segmentInfosStr || '[]')};
         const linkCardInfoStr = ${serializeInlineScriptValue(linkCardInfoStr || '{}')};
@@ -513,7 +603,7 @@ export default React.memo(function ZhihuDOMContent({
               strict: false,
             });
           } catch (_) {
-            // CDN or formula failures keep text, interactions and height reporting available.
+            // Formula failures keep text, interactions and height reporting available.
           }
         }
 
@@ -561,7 +651,7 @@ export default React.memo(function ZhihuDOMContent({
                   if (!imageTouchStart) return;
                   imageTouchTimer = null;
                   isLongPress = true;
-                  window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'image_long_press', src: src }));
+                  postBridgeMessage({ type: 'image_long_press', src: src });
                 }, 450);
               }
               break;
@@ -613,7 +703,7 @@ export default React.memo(function ZhihuDOMContent({
               e.preventDefault();
               const href = cardTarget.getAttribute('data-link-card-url') || cardTarget.getAttribute('href');
               if (href) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'link', href }));
+                postBridgeMessage({ type: 'link', href });
               }
               return;
             }
@@ -623,7 +713,7 @@ export default React.memo(function ZhihuDOMContent({
             if (target.tagName === 'IMG') {
               const src = target.getAttribute('src');
               if (src) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'image', src }));
+                postBridgeMessage({ type: 'image', src });
                 return;
               }
             }
@@ -631,14 +721,14 @@ export default React.memo(function ZhihuDOMContent({
               e.preventDefault();
               const href = target.getAttribute('href');
               if (href) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'link', href }));
+                postBridgeMessage({ type: 'link', href });
                 return;
               }
             }
             if ((target.tagName === 'P' || target.tagName === 'SPAN') && target.classList.contains('segment-interactable')) {
               const pid = target.getAttribute('data-pid');
               if (pid) {
-                window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'segment', pid }));
+                postBridgeMessage({ type: 'segment', pid });
                 return;
               }
             }
@@ -671,8 +761,8 @@ export default React.memo(function ZhihuDOMContent({
           clearTimeout(selectionTimeout);
           selectionTimeout = setTimeout(function() {
             var selection = window.getSelection();
-            if (!selection || selection.isCollapsed || !selection.toString().trim()) {
-              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'selection', info: null }));
+            if (!selection || !selection.rangeCount || selection.isCollapsed || !selection.toString().trim()) {
+              postBridgeMessage({ type: 'selection', info: null });
               return;
             }
             var text = selection.toString();
@@ -684,7 +774,7 @@ export default React.memo(function ZhihuDOMContent({
               var endPid = endP.getAttribute('data-pid');
               var sOff = getTextOffset(startP, range.startContainer, range.startOffset);
               var eOff = getTextOffset(endP, range.endContainer, range.endOffset);
-              window.ReactNativeWebView.postMessage(JSON.stringify({
+              postBridgeMessage({
                 type: 'selection',
                 info: {
                   text: text,
@@ -693,9 +783,9 @@ export default React.memo(function ZhihuDOMContent({
                   startOffset: sOff,
                   endOffset: eOff
                 }
-              }));
+              });
             } else {
-              window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'selection', info: null }));
+              postBridgeMessage({ type: 'selection', info: null });
             }
           }, 300);
         });
@@ -711,28 +801,34 @@ export default React.memo(function ZhihuDOMContent({
           Array.from(container.children).forEach(function(node) {
             if (/^(P|H[1-6]|UL|OL|BLOCKQUOTE)$/.test(node.tagName)) {
               node.style.boxSizing = 'border-box';
-              node.style.width = measure + 'px';
+              if (node.style.width !== measure + 'px') node.style.width = measure + 'px';
               node.style.marginLeft = 'auto';
               node.style.marginRight = 'auto';
             }
           });
         }
 
+        var lastHeight = 0;
         function sendHeight() {
           updateTextMeasure();
-          const height = Math.max(
-            document.body.scrollHeight,
-            document.documentElement.scrollHeight,
-            document.body.offsetHeight,
-            document.documentElement.offsetHeight,
+          // document/body scrollHeight includes the WebView viewport itself.
+          // Measure the flow-root content so shorter replacements can shrink.
+          const height = Math.max(1, Math.ceil(Math.max(
+            container.getBoundingClientRect().height,
             container.scrollHeight
-          );
-          window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'height', height }));
+          )));
+          if (height === lastHeight) return;
+          lastHeight = height;
+          postBridgeMessage({ type: 'height', height });
         }
 
         // Font face completion can follow math insertion; measure its final metrics.
         if (document.fonts && document.fonts.ready) document.fonts.ready.then(sendHeight);
         window.onload = sendHeight;
+        window.addEventListener('resize', sendHeight);
+        // Images can finish after the startup timers, including without ResizeObserver.
+        container.addEventListener('load', sendHeight, true);
+        container.addEventListener('error', sendHeight, true);
         setTimeout(sendHeight, 100);
         setTimeout(sendHeight, 500);
         setTimeout(sendHeight, 1000);
@@ -741,25 +837,54 @@ export default React.memo(function ZhihuDOMContent({
         // Resize observer for dynamic content
         if (window.ResizeObserver) {
           const observer = new ResizeObserver(sendHeight);
-          observer.observe(document.body);
+          observer.observe(container);
         }
       </script>
     </body>
     </html>
   `;
 
-  // WebView treats a newly-created source object as a new document. Keep it
-  // stable when a parent re-renders without changing the HTML string.
-  const source = useMemo(() => ({ html }), [html]);
+    return { documentIdentity, source: { html } };
+  }, [
+    safeHtmlContent,
+    segmentInfosStr,
+    linkCardInfoStr,
+    textColor,
+    primaryColor,
+    metrics,
+    headingStyles,
+    dailyStyles,
+    selectable,
+    typographyOptions?.lineBreak,
+    typographyOptions?.justify,
+    typographyOptions?.autoSpacing,
+    typographyOptions?.trimPunctuation,
+    typographyOptions?.integerMeasure,
+    themeColors.backgroundSecondary,
+    themeColors.backgroundTertiary,
+    themeColors.border,
+    themeColors.contentBorder,
+    themeColors.contentBorderStrong,
+    themeColors.iconMuted,
+    themeColors.textSecondary,
+  ]);
+  const activeDocument = useRef(renderingDocument);
+  activeDocument.current = renderingDocument;
 
   return (
     <View style={[{ width: '100%', height }, style]}>
       <WebView
-        source={source}
+        source={renderingDocument.source}
         style={{ backgroundColor: 'transparent' }}
         scrollEnabled={false}
+        showsVerticalScrollIndicator={false}
+        showsHorizontalScrollIndicator={false}
         onMessage={(event) => {
-          const data = parseRichContentBridgeMessage(event.nativeEvent.data);
+          if (activeDocument.current !== renderingDocument) return;
+          const data = parseRichContentBridgeMessage(
+            event.nativeEvent.data,
+            renderingDocument.documentIdentity,
+          );
           if (!data) return;
 
           switch (data.type) {
@@ -794,6 +919,7 @@ export default React.memo(function ZhihuDOMContent({
           }
         }}
         onShouldStartLoadWithRequest={(request) => {
+          if (activeDocument.current !== renderingDocument) return false;
           if (
             request.url === 'about:blank' ||
             request.url.startsWith('about:blank#')

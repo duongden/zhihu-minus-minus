@@ -277,7 +277,7 @@ export default function GuestDetailScreen() {
             </View>
           )}
 
-          {/* 4. 预览正文 (若存在完整 HTML 内容，使用原生 RenderHtml 渲染，否则退回到摘要) */}
+          {/* 4. 预览正文 (若存在完整 HTML 内容，使用所选正文后端渲染，否则退回到摘要) */}
           <View className="px-5 mt-3 bg-transparent">
             {item.content ? (
               <ZhihuContent

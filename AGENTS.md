@@ -13,7 +13,7 @@ Zhihu-- 是 Expo SDK 55 / React Native 0.83 / React 19 客户端，使用严格�
 - 网络：`api/client.ts` 中的 Axios 客户端及 X-ZSE-96 签名；`api/zhihu/*.ts` 对知乎响应使用显式类型和规范化函数；
 - 本地数据：Expo SQLite，迁移集中在 `storage/localDatabase.ts`；另有 Feed 缓存、曝光去重和 SecureStore 持久状态；
 - 样式与列表：NativeWind、运行时主题 token、FlashList；
-- 富文本：`features/rich-content/` 的统一公共入口，RNRH 仍处于迁移期 fallback；
+- 富文本：`features/rich-content/` 的统一公共入口，tiqian-super-mini 默认，WebView 作为可选后端与 fallback；
 - 监控与统计：`utils/telemetry.ts` 统一适配 Sentry 和可选 Firebase Analytics，设置页提供隐私开关；
 - 原生扩展：`plugins/` 中的 Expo config plugins，`modules/` 中的本地原生模块；构建配置位于 `app.json`、`app.config.ts`、`eas.json` 和 `.github/workflows/`。
 
@@ -68,7 +68,7 @@ Cookie、`z_c0`、`d_c0`、`_xsrf`、X-ZSE 请求头、完整 Axios config、Sen
 - 统一使用 `import { ZhihuContent } from '@/features/rich-content'`。`components/ZhihuContent.tsx` 和 `components/ZhihuDOMContent.tsx` 仅是兼容转发。
 - 修复正文解析或渲染问题时，将脱敏样本放入 `fixtures/inbox/`；确认结构后登记到 `fixtures/cases/` 与 manifest。
 - 至少运行 `npm run analyze:rich-content` 和 `npm test -- features/rich-content/tests --runInBand`；完整变更运行 `npm run check`。
-- RNRH 当前是迁移期实现与 fallback，目标架构见 `features/rich-content/docs/renderer-v2-plan.md`；不要重新扩大旧实现的公共边界。
+- RNRH 已删除；tiqian-super-mini 为默认后端，缺原生模块回退 WebView。目标架构见 `features/rich-content/docs/renderer-v2-plan.md`；不要重新引入已删除的后端。
 
 ### 路由、存储与原生配置
 

@@ -49,7 +49,7 @@ const SEARCH_ENTRIES: ReadonlyArray<SearchEntry> = [
     icon: 'color-palette-outline',
     href: '/settings/appearance',
     keywords:
-      '外观 阅读 正文 排版 原生 实验 tiqian super mini tiqian-super-mini native v2 经典 rnrh 网页 webview 主题 模式 深色 浅色 系统 颜色 字体 字号 行高 背景 对比度 表面 导航 底部 栏目 启动页 震动 触感 按压 视觉反馈 无反馈 水波纹 缩放 液态玻璃',
+      '外观 阅读 正文 排版 原生 实验 tiqian super mini tiqian-super-mini native v2 网页 webview 主题 模式 深色 浅色 系统 颜色 字体 字号 行高 背景 对比度 表面 导航 底部 栏目 启动页 震动 触感 按压 视觉反馈 无反馈 水波纹 缩放 液态玻璃',
   },
   {
     label: '过滤与推荐',
@@ -65,7 +65,7 @@ const SEARCH_ENTRIES: ReadonlyArray<SearchEntry> = [
     icon: 'options-outline',
     href: '/settings/features',
     keywords:
-      '功能 开关 正文 排版 原生 tiqian-super-mini native v2 rnrh webview 网页 渲染 私信 im 聊天 浏览 历史 记录',
+      '功能 开关 正文 排版 原生 tiqian-super-mini native v2 webview 网页 渲染 私信 im 聊天 浏览 历史 记录',
   },
   {
     label: '分享数据（App崩溃报告&匿名数据）',
