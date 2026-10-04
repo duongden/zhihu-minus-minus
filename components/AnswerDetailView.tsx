@@ -488,7 +488,7 @@ export const AnswerDetailView = ({
               <Text
                 style={{
                   fontSize: 21,
-                  lineHeight: 29 * fontSizeScale,
+                  lineHeight: 29,
                   fontWeight: '700',
                 }}
               >
@@ -509,7 +509,7 @@ export const AnswerDetailView = ({
                 <Text
                   style={{
                     fontSize: 15,
-                    lineHeight: 22 * fontSizeScale,
+                    lineHeight: 22,
                     fontWeight: '600',
                   }}
                   numberOfLines={1}
@@ -519,7 +519,7 @@ export const AnswerDetailView = ({
                 {answer?.author?.headline ? (
                   <Text
                     type="secondary"
-                    style={{ fontSize: 12, lineHeight: 18 * fontSizeScale }}
+                    style={{ fontSize: 12, lineHeight: 18 }}
                     numberOfLines={1}
                   >
                     {answer.author.headline}

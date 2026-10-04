@@ -8,12 +8,23 @@ import ZhihuDOMContent, {
 } from '../components/ZhihuDOMContent';
 
 let mockWebViewProps: WebViewProps;
-jest.mock('react-native-webview', () => ({
-  WebView: (props: WebViewProps) => {
-    mockWebViewProps = props;
-    return null;
-  },
-}));
+const mockInjectJavaScript = jest.fn<void, [string]>();
+jest.mock('react-native-webview', () => {
+  const { forwardRef, useImperativeHandle } =
+    jest.requireActual<typeof import('react')>('react');
+  return {
+    WebView: forwardRef<
+      { injectJavaScript: (script: string) => void },
+      WebViewProps
+    >((props, ref) => {
+      mockWebViewProps = props;
+      useImperativeHandle(ref, () => ({
+        injectJavaScript: mockInjectJavaScript,
+      }));
+      return null;
+    }),
+  };
+});
 jest.mock('../../../components/Themed', () => ({
   useRuntimeThemeColors: () => ({
     ...require('../../../constants/designTokens').colors.light,
@@ -25,6 +36,10 @@ jest.mock('../../../components/Themed', () => ({
 jest.mock('../../../store/useSettingsStore', () => ({
   useSettingsStore: () => ({ fontSizeScale: 1, lineHeightScale: 1.5 }),
 }));
+
+beforeEach(() => {
+  mockInjectJavaScript.mockClear();
+});
 
 async function renderPage(overrides: Partial<ZhihuDOMContentProps> = {}) {
   const onLinkPress = jest.fn();
@@ -88,7 +103,7 @@ test.each([
     getElementById: () => container,
     addEventListener: jest.fn(),
     body: { scrollHeight: 800, offsetHeight: 800 },
-    documentElement: { scrollHeight: 800, offsetHeight: 800 },
+    documentElement: { scrollHeight: 800, offsetHeight: 800, style: {} },
   };
   const window = {
     ReactNativeWebView: { postMessage },
@@ -215,6 +230,120 @@ test('preserves mixed pin content safely in a single document with outer scrolli
   expect(mockWebViewProps.showsHorizontalScrollIndicator).toBe(false);
 });
 
+test('starts with selection disabled and reapplies it after the document loads', async () => {
+  const { html } = await renderPage({ selectable: false });
+  const removeAllRanges = jest.fn();
+  const container = {
+    innerHTML: '',
+    querySelectorAll: () => [],
+    addEventListener: jest.fn(),
+  };
+  const document: {
+    documentElement?: { style: Record<string, string> };
+    getElementById: () => typeof container;
+    addEventListener: typeof jest.fn;
+  } = {
+    getElementById: () => container,
+    addEventListener: jest.fn(),
+  };
+  const window = {
+    getSelection: () => ({ removeAllRanges }),
+    addEventListener: jest.fn(),
+  };
+  const context = { document, window, setTimeout: jest.fn() };
+  vm.runInNewContext(
+    mockWebViewProps.injectedJavaScriptBeforeContentLoaded ?? '',
+    context,
+  );
+  expect(removeAllRanges).toHaveBeenCalledTimes(1);
+  document.documentElement = { style: {} };
+  vm.runInNewContext(inlineScript(html), context);
+  expect(document.documentElement.style).toEqual({
+    userSelect: 'none',
+    webkitUserSelect: 'none',
+  });
+  vm.runInNewContext(mockWebViewProps.injectedJavaScript ?? '', context);
+  expect(document.documentElement.style.userSelect).toBe('none');
+  expect(removeAllRanges).toHaveBeenCalledTimes(2);
+
+  // A platform can skip its before-load injection; the document still starts disabled.
+  document.documentElement.style = {};
+  vm.runInNewContext(inlineScript(html), {
+    ...context,
+    window: { addEventListener: jest.fn() },
+  });
+  expect(document.documentElement.style.userSelect).toBe('none');
+});
+
+test('toggles selection without reloading and rejects delayed events and scripts across disable/enable', async () => {
+  const onTextSelected = jest.fn();
+  const { html, view, props } = await renderPage({ onTextSelected });
+  const source = mockWebViewProps.source;
+  const originalCallback = mockWebViewProps.onMessage;
+  const enabledScript = mockWebViewProps.injectedJavaScript ?? '';
+  type MessageEvent = Parameters<NonNullable<WebViewProps['onMessage']>>[0];
+  const info = {
+    text: '正文',
+    startParagraphId: 'one',
+    endParagraphId: 'one',
+    startOffset: 0,
+    endOffset: 2,
+  };
+  const event = (selectionRevision: number) =>
+    ({
+      nativeEvent: {
+        data: bridgeMessage(html, {
+          type: 'selection',
+          info,
+          selectionRevision,
+        }),
+      },
+    }) as MessageEvent;
+  await act(() => originalCallback?.(event(0)));
+  expect(onTextSelected).toHaveBeenLastCalledWith(info);
+  const removeAllRanges = jest.fn();
+  const document = { documentElement: { style: {} as Record<string, string> } };
+  const window: {
+    getSelection: () => { removeAllRanges: typeof removeAllRanges };
+    __zhihuTextSelectable?: boolean;
+  } = { getSelection: () => ({ removeAllRanges }) };
+  const context = { document, window };
+  vm.runInNewContext(enabledScript, context);
+  mockInjectJavaScript.mockClear();
+
+  await view.rerender(<ZhihuDOMContent {...props} selectable={false} />);
+  expect(mockWebViewProps.source).toBe(source);
+  expect(onTextSelected).toHaveBeenLastCalledWith(null);
+  expect(mockInjectJavaScript).toHaveBeenCalledTimes(1);
+  const disabledScript = mockInjectJavaScript.mock.calls[0][0];
+  vm.runInNewContext(disabledScript, context);
+  expect(document.documentElement.style.userSelect).toBe('none');
+  expect(removeAllRanges).toHaveBeenCalledTimes(1);
+  await act(() => {
+    originalCallback?.(event(0));
+    mockWebViewProps.onMessage?.(event(1));
+  });
+  expect(onTextSelected).toHaveBeenCalledTimes(2);
+
+  await view.rerender(<ZhihuDOMContent {...props} selectable />);
+  expect(mockWebViewProps.source).toBe(source);
+  expect(mockInjectJavaScript).toHaveBeenCalledTimes(2);
+  vm.runInNewContext(mockInjectJavaScript.mock.calls[1][0], context);
+  expect(document.documentElement.style.userSelect).toBe('text');
+  vm.runInNewContext(disabledScript, context);
+  vm.runInNewContext(enabledScript, context);
+  expect(window.__zhihuTextSelectable).toBe(true);
+  expect(document.documentElement.style.userSelect).toBe('text');
+  await act(() => {
+    originalCallback?.(event(0));
+    mockWebViewProps.onMessage?.(event(1));
+  });
+  expect(onTextSelected).toHaveBeenCalledTimes(2);
+  await act(() => mockWebViewProps.onMessage?.(event(2)));
+  expect(onTextSelected).toHaveBeenCalledTimes(3);
+  expect(onTextSelected).toHaveBeenLastCalledWith(info);
+});
+
 test('builds untrusted footnote labels and definitions as text nodes', async () => {
   const { html } = await renderPage();
   interface Element {
@@ -310,6 +439,10 @@ test('maps element selection boundaries through a DOM range and clears selection
   vm.runInNewContext(inlineScript(html), {
     document,
     window: {
+      __zhihuSelectionDocumentIdentity: JSON.parse(bridgeMessage(html, {}))
+        .documentIdentity,
+      __zhihuTextSelectable: true,
+      __zhihuSelectionRevision: 0,
       ReactNativeWebView: { postMessage },
       addEventListener: jest.fn(),
       getSelection: () => ({
@@ -335,6 +468,7 @@ test('maps element selection boundaries through a DOM range and clears selection
   ]);
   expect(JSON.parse(postMessage.mock.calls.at(-1)?.[0] as string)).toEqual({
     documentIdentity: JSON.parse(bridgeMessage(html, {})).documentIdentity,
+    selectionRevision: 0,
     type: 'selection',
     info: {
       text: '乙丙',
@@ -348,7 +482,11 @@ test('maps element selection boundaries through a DOM range and clears selection
   listeners.get('selectionchange')?.();
   timers.pop()?.();
   expect(postMessage).toHaveBeenLastCalledWith(
-    bridgeMessage(html, { type: 'selection', info: null }),
+    bridgeMessage(html, {
+      type: 'selection',
+      info: null,
+      selectionRevision: 0,
+    }),
   );
 });
 

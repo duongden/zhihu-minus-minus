@@ -1,6 +1,6 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { type StyleProp, View, type ViewStyle } from 'react-native';
-import { WebView } from 'react-native-webview';
+import { WebView, type WebViewProps } from 'react-native-webview';
 import { useRuntimeThemeColors } from '@/components/Themed';
 import { radii, typography } from '@/constants/designTokens';
 import { useSettingsStore } from '@/store/useSettingsStore';
@@ -117,6 +117,15 @@ export default React.memo(function ZhihuDOMContent({
   selectable = true,
 }: ZhihuDOMContentProps) {
   const [height, setHeight] = useState(400);
+  const webViewRef = useRef<WebView<WebViewProps>>(null);
+  const selectionState = useRef({ selectable, revision: 0 });
+  if (selectionState.current.selectable !== selectable)
+    selectionState.current = {
+      selectable,
+      revision: selectionState.current.revision + 1,
+    };
+  const textSelectionCallback = useRef(onTextSelected);
+  textSelectionCallback.current = onTextSelected;
   const safeHtmlContent = useMemo(
     () =>
       sanitizeRichContentHtml(
@@ -191,6 +200,8 @@ export default React.memo(function ZhihuDOMContent({
       <style>
         html {
           overflow: hidden;
+          -webkit-user-select: none;
+          user-select: none;
         }
         body {
           margin: 0;
@@ -198,8 +209,8 @@ export default React.memo(function ZhihuDOMContent({
           background-color: transparent !important;
           max-width: 100%;
           overflow: hidden;
-          -webkit-user-select: ${selectable ? 'text' : 'none'};
-          user-select: ${selectable ? 'text' : 'none'};
+          -webkit-user-select: inherit;
+          user-select: inherit;
         }
         .zhihu-content {
           display: flow-root;
@@ -360,7 +371,18 @@ export default React.memo(function ZhihuDOMContent({
       <div id="content" class="zhihu-content"></div>
       <script>
         const documentIdentity = ${documentIdentity};
+        window.__zhihuDocumentIdentity = documentIdentity;
+        if (window.__zhihuSelectionDocumentIdentity !== documentIdentity) {
+          window.__zhihuTextSelectable = false;
+          window.__zhihuSelectionRevision = 0;
+        }
+        if (document.documentElement) {
+          var userSelect = window.__zhihuTextSelectable === true ? 'text' : 'none';
+          document.documentElement.style.webkitUserSelect = userSelect;
+          document.documentElement.style.userSelect = userSelect;
+        }
         function postBridgeMessage(message) {
+          if (message.type === 'selection') message.selectionRevision = window.__zhihuSelectionRevision;
           window.ReactNativeWebView.postMessage(JSON.stringify(
             Object.assign({ documentIdentity }, message)
           ));
@@ -759,9 +781,11 @@ export default React.memo(function ZhihuDOMContent({
         var selectionTimeout;
         document.addEventListener('selectionchange', function() {
           clearTimeout(selectionTimeout);
+          var selectionRevision = window.__zhihuSelectionRevision;
           selectionTimeout = setTimeout(function() {
+            if (selectionRevision !== window.__zhihuSelectionRevision) return;
             var selection = window.getSelection();
-            if (!selection || !selection.rangeCount || selection.isCollapsed || !selection.toString().trim()) {
+            if (window.__zhihuTextSelectable !== true || !selection || !selection.rangeCount || selection.isCollapsed || !selection.toString().trim()) {
               postBridgeMessage({ type: 'selection', info: null });
               return;
             }
@@ -854,7 +878,6 @@ export default React.memo(function ZhihuDOMContent({
     metrics,
     headingStyles,
     dailyStyles,
-    selectable,
     typographyOptions?.lineBreak,
     typographyOptions?.justify,
     typographyOptions?.autoSpacing,
@@ -870,11 +893,39 @@ export default React.memo(function ZhihuDOMContent({
   ]);
   const activeDocument = useRef(renderingDocument);
   activeDocument.current = renderingDocument;
+  const selectionScript = `
+    (function() {
+      var identity = ${renderingDocument.documentIdentity};
+      var revision = ${selectionState.current.revision};
+      if (window.__zhihuDocumentIdentity !== undefined && window.__zhihuDocumentIdentity !== identity) return;
+      if (window.__zhihuSelectionDocumentIdentity === identity && window.__zhihuSelectionRevision > revision) return;
+      var clearSelection = !${selectable} || (window.__zhihuSelectionDocumentIdentity === identity && window.__zhihuSelectionRevision < revision);
+      window.__zhihuSelectionDocumentIdentity = identity;
+      window.__zhihuSelectionRevision = revision;
+      window.__zhihuTextSelectable = ${selectable};
+      if (document.documentElement) {
+        document.documentElement.style.webkitUserSelect = '${selectable ? 'text' : 'none'}';
+        document.documentElement.style.userSelect = '${selectable ? 'text' : 'none'}';
+      }
+      if (clearSelection && window.getSelection) {
+        var selection = window.getSelection();
+        if (selection) selection.removeAllRanges();
+      }
+    })();
+    true;
+  `;
+  useEffect(() => {
+    webViewRef.current?.injectJavaScript(selectionScript);
+    if (!selectable) textSelectionCallback.current?.(null);
+  }, [selectionScript, selectable]);
 
   return (
     <View style={[{ width: '100%', height }, style]}>
       <WebView
+        ref={webViewRef}
         source={renderingDocument.source}
+        injectedJavaScriptBeforeContentLoaded={selectionScript}
+        injectedJavaScript={selectionScript}
         style={{ backgroundColor: 'transparent' }}
         scrollEnabled={false}
         showsVerticalScrollIndicator={false}
@@ -914,7 +965,18 @@ export default React.memo(function ZhihuDOMContent({
               onSegmentPress(data.pid);
               break;
             case 'selection':
-              onTextSelected?.(data.info);
+              {
+                if (!selectionState.current.selectable) return;
+                const message: unknown = JSON.parse(event.nativeEvent.data);
+                if (
+                  !message ||
+                  typeof message !== 'object' ||
+                  !('selectionRevision' in message) ||
+                  message.selectionRevision !== selectionState.current.revision
+                )
+                  return;
+                textSelectionCallback.current?.(data.info);
+              }
               break;
           }
         }}
