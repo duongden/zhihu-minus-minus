@@ -27,7 +27,7 @@
 - `bridge.ts`：WebView 消息类型、文本选择结构与运行时字段验证。
 - `queryPolicy.ts`：列表正文复用、统一查询 key 和 Pager 相邻预取策略。
 - `structuredContent.ts`：原生 `structured_content` 的字段校验与 JSON → `ZhihuDocument` 映射，不经过 HTML/XML。
-- `components/ZhihuStructuredContent.tsx`：独立结构化正文渲染器，按分段数据展开收起，提供原生分段与 tiqian 文本流对照。
+- `components/ZhihuStructuredContent.tsx`：结构化正文渲染器，供预览列表和开发对照按分段数据展开收起。
 - `index.ts`：供应用层使用的稳定公共入口。
 
 仓库根目录的 `components/ZhihuContent.tsx` 和 `components/ZhihuDOMContent.tsx` 仅保留兼容转发，不再包含实现。新代码统一使用：
@@ -40,7 +40,7 @@ import { ZhihuContent } from '@/features/rich-content';
 
 当前组件继续接收 HTML 字符串或想法分段数组。`ZhihuContentProps`、`LinkCardProps`、`RichContentObjectType` 从公共入口导出；`contentArray` 复用 `types/zhihu.ts` 的 `ZhihuContentSegment`，知识点元数据复用 `ZhihuSegmentInfo`、`ZhihuSegmentMark` 和 `ZhihuSegmentReaction`。单数 `RichContentObjectType` 表示正文对象，复数 `RichContentEntityType` 表示查询接口类型。
 
-`structured_content` 使用 `types/zhihu.ts` 中的 `ZhihuStructuredContent` 类型，独立组件 `ZhihuStructuredContent` 直接消费 JSON 分段，覆盖 paragraph、heading、list_node、image、hr，以及 bold、link、entity_word、formula。原生分段模式生成 React Native 节点；tiqian 模式先映射到 `ZhihuDocument`，再交给原生文本流，均不序列化为 HTML/XML。重叠 marks 按范围端点拆分，公式使用源码或 `img_url`，保留字面文本中的 `<`、`&` 等字符。偏移单位尚未由非 BMP 样本证实，有歧义的文字保守显示为纯文本；不生成业务段评用的 paragraphId，也不配用旧 `segment_infos`。
+`structured_content` 使用 `types/zhihu.ts` 中的 `ZhihuStructuredContent` 类型，组件 `ZhihuStructuredContent` 直接消费 JSON 分段，覆盖 paragraph、heading、list_node、image、hr，以及 bold、link、entity_word、formula。原生分段模式生成 React Native 节点；tiqian 模式先映射到 `ZhihuDocument`，再交给原生文本流，均不序列化为 HTML/XML。重叠 marks 按范围端点拆分，公式使用源码或 `img_url`，保留字面文本中的 `<`、`&` 等字符。偏移单位尚未由非 BMP 样本证实，有歧义的文字保守显示为纯文本；不生成业务段评用的 paragraphId，也不配用旧 `segment_infos`。
 
 开发构建从“我的 → 富文本测试案例 → structured_content 渲染对照”进入独立测试页。五个主要案例来自用户附件的真实回答，保留全部 48 个分段、99 个 marks 和分页标志，覆盖列表公式、标题与重叠词条、密集公式与分隔、图片布局、段落与链接。身份文字按原长度替换，ID、业务链接和不透明上下文脱敏；正文图和公式图保留原公开 HTTPS 地址，运行时加载，仓库不新增下载图片。可以切换渲染器、展开收起分段、查看脱敏 JSON；额外合成案例演示本地续页追加。样本放在 `fixtures/inbox/structured-content/`，由 `dev/structuredCases.ts` 显式登记，案例切换不写持久设置、不调用正文或互动接口。
 
@@ -172,3 +172,7 @@ RNRH 已删除；WebView 保留为可选后端和 fallback。桌面微基准、�
 ## 2026-10-05 静态审查
 
 本轮仅做静态审查与自动检查，不运行模拟器。移除 RNRH 后，正文只保留 tiqian-super-mini 和 WebView，想法的 WebView fallback 使用一个正文视图。WebView 首载占位不再挂载覆盖正文的触摸层；高度按正文自身测量，正文滚动交给宿主，宽表格保留内部横向滚动。Android 引用线与选择焦点相关修正及未验证边界见实验03的本轮记录。真机触摸、选择和性能仍需后续验证。
+
+## 回答预览列表
+
+回答阅读方式与正文后端分开设置：前者决定点击普通卡片后的入口，后者决定 HTML 详情正文的排版。预览列表直接消费新接口的 `structured_content`，复用中立文档及 tiqian 文本流；模块不可用时使用 JSON 分段 adapter。展开收起按真实 segments 进行，正文续页与外层回答列表分别管理。服务端未支持的结构或请求失败会明确显示详情入口，不回填成旧正文，也不构造业务段评标记。开发对照保留页面内的渲染与展开设置，不写入生产阅读方式。

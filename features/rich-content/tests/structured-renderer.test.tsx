@@ -266,6 +266,46 @@ describe('isolated structured-content renderer', () => {
     expect(screen.getByLabelText('合成图片')).toBeVisible();
   });
 
+  it('keeps expansion controlled when recycled and reports incomplete body paging', async () => {
+    const onExpandedChange = jest.fn();
+    const onLoadMore = jest.fn();
+    const props = {
+      content: content(),
+      documentId: 'answer:one',
+      renderer: 'blocks' as const,
+      expanded: false,
+      onExpandedChange,
+      hasMore: true,
+      onLoadMore,
+      resources,
+    };
+    const host = await render(<StructuredRenderer {...props} />);
+    await fireEvent.press(screen.getByTestId('structured-content-toggle'));
+    expect(onExpandedChange).toHaveBeenCalledWith(true);
+    expect(screen.queryByLabelText('合成图片')).toBeNull();
+    await host.rerender(<StructuredRenderer {...props} expanded />);
+    expect(screen.getByLabelText('合成图片')).toBeVisible();
+    await fireEvent.press(screen.getByText('加载更多正文'));
+    expect(onLoadMore).toHaveBeenCalledTimes(1);
+    await host.rerender(
+      <StructuredRenderer
+        {...props}
+        expanded
+        hasMore={false}
+        onLoadMore={undefined}
+        loadMoreError="正文尚未完整，请进入详情继续阅读"
+      />,
+    );
+    expect(screen.getByText('正文尚未完整，请进入详情继续阅读')).toBeVisible();
+    expect(screen.queryByText('加载更多正文')).toBeNull();
+    await host.rerender(
+      <StructuredRenderer {...props} documentId="answer:two" />,
+    );
+    expect(screen.queryByLabelText('合成图片')).toBeNull();
+    expect(screen.queryByText('加载更多正文')).toBeNull();
+    expect(parseDocument).not.toHaveBeenCalled();
+  });
+
   it('falls back to independent JSON blocks when the native module is missing', async () => {
     mockNativeAvailable = false;
     await render(

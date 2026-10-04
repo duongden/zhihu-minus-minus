@@ -9,6 +9,8 @@ import capturedE from '../fixtures/inbox/structured-content/capture-derived/answ
 import headingOverlap from '../fixtures/inbox/structured-content/heading-overlap.json';
 import { parseZhihuStructuredContent } from '../structuredContent';
 
+export { mergeStructuredContentPages } from '../structuredContent';
+
 export interface StructuredContentCase {
   id: string;
   title: string;
@@ -100,19 +102,3 @@ export const structuredContentCases: readonly StructuredContentCase[] = [
     resources,
   },
 ];
-
-/** Replace duplicate IDs in place while appending genuinely new segments. */
-export function mergeStructuredContentPages(
-  pages: readonly ZhihuStructuredContent[],
-): ZhihuStructuredContent {
-  const latest = pages[pages.length - 1];
-  if (!latest) throw new Error('结构化正文案例缺少本地页面');
-  const segments = new Map<
-    string,
-    ZhihuStructuredContent['segments'][number]
-  >();
-  for (const page of pages) {
-    for (const segment of page.segments) segments.set(segment.id, segment);
-  }
-  return { paging: latest.paging, segments: [...segments.values()] };
-}

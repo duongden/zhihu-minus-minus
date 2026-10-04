@@ -46,7 +46,10 @@ let mockParams: {
   id: string;
   questionId: string;
   sortBy: string;
+  readingMode?: string;
 };
+let mockReadingMode: 'detail' | 'preview-list' = 'detail';
+const mockPreviewProps = jest.fn();
 let mockPages: { data: { id: string }[] }[] | undefined;
 let mockPagerProps: PagerProps;
 let mockPagerMounts: number;
@@ -133,6 +136,22 @@ jest.mock('../components/AnswerDetailView', () => {
     },
   };
 });
+jest.mock('../components/AnswerPreviewList', () => ({
+  AnswerPreviewList: (props: {
+    answerId: string;
+    questionId?: string;
+    title?: string;
+  }) => {
+    mockPreviewProps(props);
+    return jest
+      .requireActual<typeof import('react')>('react')
+      .createElement(
+        jest.requireActual<typeof import('react-native')>('react-native').Text,
+        { testID: 'answer-preview-list' },
+        props.answerId,
+      );
+  },
+}));
 jest.mock('../components/DetailNavigationHeader', () => ({
   DetailNavigationHeader: (props: HeaderProps) => {
     mockHeaderProps = props;
@@ -165,14 +184,26 @@ jest.mock('../components/BouncyButton', () => ({
     jest.requireActual<typeof import('react-native')>('react-native').Pressable,
 }));
 jest.mock('../store/useSettingsStore', () => ({
-  useSettingsStore: Object.assign(() => false, {
-    getState: () => ({
-      primaryColor: null,
-      readingBackground: 'default',
-      textContrast: 'standard',
-      surfaceStyle: 'layered',
-    }),
-  }),
+  useSettingsStore: Object.assign(
+    (
+      selector: (state: {
+        enableBrowseHistory: boolean;
+        answerReadingMode: string;
+      }) => unknown,
+    ) =>
+      selector({
+        enableBrowseHistory: false,
+        answerReadingMode: mockReadingMode,
+      }),
+    {
+      getState: () => ({
+        primaryColor: null,
+        readingBackground: 'default',
+        textContrast: 'standard',
+        surfaceStyle: 'layered',
+      }),
+    },
+  ),
 }));
 jest.mock('../features/rich-content', () => ({
   getNeighborAnswerIds: () => [],
@@ -302,6 +333,7 @@ function renderedAnswerIds(): string[] {
 }
 
 beforeEach(() => {
+  mockReadingMode = 'detail';
   jest.clearAllMocks();
   mockParams = { id: '42', questionId: '7', sortBy: 'default' };
   mockPages = undefined;
@@ -954,4 +986,25 @@ describe('answer header state across pager navigation', () => {
     await page.rerender(React.createElement(AnswerDetailScreen));
     expect(mockHeaderProps.collapsed).toBe(false);
   });
+});
+
+test('routes preview mode to the list and honors its explicit detail escape', async () => {
+  mockReadingMode = 'preview-list';
+  mockParams = { ...mockParams, sortBy: 'created' };
+  const host = await render(React.createElement(AnswerDetailScreen));
+  expect(host.getByTestId('answer-preview-list')).toHaveTextContent(
+    mockParams.id,
+  );
+  expect(mockPreviewProps).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      answerId: mockParams.id,
+      questionId: mockParams.questionId,
+      sortBy: 'created',
+    }),
+  );
+  expect(mockPagerMounts).toBe(0);
+  mockParams = { ...mockParams, readingMode: 'detail' };
+  await host.rerender(React.createElement(AnswerDetailScreen));
+  expect(host.queryByTestId('answer-preview-list')).toBeNull();
+  expect(mockPagerMounts).toBe(1);
 });

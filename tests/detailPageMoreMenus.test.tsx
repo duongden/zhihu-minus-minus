@@ -461,6 +461,11 @@ test('switching between an article and daily story with the same ID does not reu
 test('question and answer more entries target distinct content and preserve author actions', async () => {
   const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   const host = await render(<QuestionDetail />);
+  await pressButton(host.getByRole('button', { name: '阅读 合成作者 的回答' }));
+  expect(mockPush).toHaveBeenCalledWith({
+    pathname: '/answer/[id]',
+    params: { id: '84', questionId: '7', title: '合成问题', sortBy: 'default' },
+  });
   await pressButton(host.getByRole('button', { name: '问题更多操作' }));
   expect(host.getByText('menu:question:7')).toBeTruthy();
   expect(mockMenuProps.data?.url).toBe('https://www.zhihu.com/question/7');
@@ -468,7 +473,7 @@ test('question and answer more entries target distinct content and preserve auth
   await act(() => mockMenuProps.onClose());
 
   const answerButtons = host.getAllByRole('button', { name: '回答更多操作' });
-  expect(answerButtons).toHaveLength(2);
+  expect(answerButtons).toHaveLength(1);
   for (const button of answerButtons) {
     await pressButton(button);
     expect(host.getByText('menu:answer:84')).toBeTruthy();

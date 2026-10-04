@@ -30,10 +30,10 @@ beforeEach(() => {
   jest.mocked(SecureStore.getItemAsync).mockResolvedValue(null);
 });
 
-test('defaults to tiqian-super-mini with visual feedback enabled in settings version 15', () => {
+test('defaults to tiqian-super-mini with visual feedback enabled in settings version 16', () => {
   expect(useSettingsStore.getState().richContentRenderer).toBe('native-v2');
   expect(useSettingsStore.getState().enablePressFeedback).toBe(true);
-  expect(useSettingsStore.persist.getOptions().version).toBe(15);
+  expect(useSettingsStore.persist.getOptions().version).toBe(16);
 });
 
 test.each([
@@ -121,7 +121,7 @@ test('hydrates legacy settings and writes back only the new renderer field', asy
       fontSizeScale: 1.3,
       enablePressFeedback: true,
     },
-    version: 15,
+    version: 16,
   });
   expect(JSON.parse(persistedJson).state).not.toHaveProperty('useWebView');
 });
@@ -184,4 +184,22 @@ test('migrates removed RNRH preferences without changing explicit WebView prefer
   expect(
     (await migrate({ richContentRenderer: 'webview' }, 14)).richContentRenderer,
   ).toBe('webview');
+});
+
+test('adds the answer destination mode on upgrade while preserving explicit choices', async () => {
+  expect(await migrate({ richContentRenderer: 'webview' }, 15)).toMatchObject({
+    richContentRenderer: 'webview',
+    answerReadingMode: 'detail',
+  });
+  expect(
+    await migrate({ answerReadingMode: 'preview-list' }, 15),
+  ).toMatchObject({ answerReadingMode: 'preview-list' });
+  useSettingsStore
+    .getState()
+    .updateSettings({ answerReadingMode: 'preview-list' });
+  expect(useSettingsStore.getState().answerReadingMode).toBe('preview-list');
+  useSettingsStore.getState().updateSettings({
+    answerReadingMode: 'invalid',
+  } as unknown as Partial<AppSettings>);
+  expect(useSettingsStore.getState().answerReadingMode).toBe('detail');
 });

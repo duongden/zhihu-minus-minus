@@ -1,8 +1,7 @@
 /**
  * Captured contract for `GET https://api.zhihu.com/next-render`, observed from
- * the Android question feed on 2026-10-03. This module is not connected to the
- * runtime HTTP client. HTTP response data must still enter as `unknown` and be
- * validated/normalized before it is used as these types.
+ * the Android question feed on 2026-10-03. The preview runtime below validates
+ * HTTP data as `unknown`; these capture types are not a substitute for parsing.
  *
  * Required fields and literal unions describe this capture, not a verified
  * complete server schema. No credentials, device fingerprints, tracking
@@ -10,6 +9,22 @@
  */
 
 import type { ZhihuStructuredContent } from '@/types/zhihu';
+
+export {
+  buildZhihuNextRenderUrl,
+  getAnswerPreviewContinuation,
+  getNextContentRender,
+  getNextRender,
+  getStructuredContentContinuation,
+  normalizeZhihuAnswerPreviewPage,
+  validateZhihuRenderUrl,
+  type ZhihuAnswerPreviewItem,
+  type ZhihuAnswerPreviewPage,
+  type ZhihuPreviewAnswer,
+  type ZhihuPreviewLoginPrompt,
+  type ZhihuPreviewRequestOptions,
+  type ZhihuRenderContinuation,
+} from './answerPreview';
 
 /**
  * All nine parameters were present in the captured initial request. Whether

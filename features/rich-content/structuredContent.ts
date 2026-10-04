@@ -62,7 +62,7 @@ function strings(value: unknown): string[] {
   return array(value).map((entry) => string(entry));
 }
 
-/** Decode paging for inspection only; the test renderer never follows its URLs. */
+/** Decode pagination independently from the outer answer-list pagination. */
 export function parseStructuredContentPaging(
   value: unknown,
 ): ZhihuStructuredContentPaging {
@@ -235,6 +235,21 @@ export function parseZhihuStructuredContent(
   const paging = string(content.paging);
   parseStructuredContentPaging(paging);
   return { paging, segments: array(content.segments).map(parseSegment) };
+}
+
+/** Replace duplicate source IDs in place while appending new source segments. */
+export function mergeStructuredContentPages(
+  pages: readonly ZhihuStructuredContent[],
+): ZhihuStructuredContent {
+  const latest = pages[pages.length - 1];
+  if (!latest) throw new Error('结构化正文缺少页面');
+  const segments = new Map<
+    string,
+    ZhihuStructuredContent['segments'][number]
+  >();
+  for (const page of pages)
+    for (const segment of page.segments) segments.set(segment.id, segment);
+  return { paging: latest.paging, segments: [...segments.values()] };
 }
 
 export interface ZhihuStructuredContentNormalizationOptions {

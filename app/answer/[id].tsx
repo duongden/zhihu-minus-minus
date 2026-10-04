@@ -7,6 +7,7 @@ import client from '@/api/client';
 import { getAnswer } from '@/api/zhihu';
 import { recordReadHistory } from '@/api/zhihu/history';
 import { AnswerDetailView } from '@/components/AnswerDetailView';
+import { AnswerPreviewList } from '@/components/AnswerPreviewList';
 import { DetailNavigationHeader } from '@/components/DetailNavigationHeader';
 import { ShareMenu } from '@/components/ShareMenu';
 import { useThemeColor, View } from '@/components/Themed';
@@ -17,7 +18,29 @@ import { useZhihuInfiniteQuery } from '@/hooks/useZhihuInfiniteQuery';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import { getZhihuErrorStatus } from '@/utils/zhihuError';
 
-export default function AnswerDetailScreen() {
+export default function AnswerScreen() {
+  const params = useLocalSearchParams<{
+    id: string;
+    title?: string;
+    questionId?: string;
+    sortBy?: string;
+    readingMode?: string;
+  }>();
+  const mode = useSettingsStore((state) => state.answerReadingMode);
+  if (params.readingMode !== 'detail' && mode === 'preview-list') {
+    return (
+      <AnswerPreviewList
+        answerId={params.id}
+        questionId={params.questionId}
+        title={params.title}
+        sortBy={params.sortBy}
+      />
+    );
+  }
+  return <AnswerDetailScreen />;
+}
+
+function AnswerDetailScreen() {
   const {
     id,
     title: initialTitle,

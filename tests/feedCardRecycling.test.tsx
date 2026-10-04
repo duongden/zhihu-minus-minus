@@ -299,7 +299,7 @@ test('feed previews use the shared action builder with the current content ident
   expect(mockCopy).toHaveBeenCalledTimes(1);
 });
 
-test('creation cards reset their more menu and local expansion after identity recycling', async () => {
+test('ordinary creation cards navigate to answers and reset their more menu after identity recycling', async () => {
   const item = {
     id: 'original',
     title: '合成原创作',
@@ -308,8 +308,13 @@ test('creation cards reset their more menu and local expansion after identity re
   };
   const host = await render(<CreationCard item={item} type="answer" />);
   expect(host.queryByText('独立收藏按钮')).toBeNull();
-  await fireEvent.press(host.getByText('展开全文'));
-  expect(host.getByText('收起回答')).toBeTruthy();
+  expect(host.queryByText('展开全文')).toBeNull();
+  await fireEvent.press(host.getByText('合成原创作'));
+  expect(mockPush).toHaveBeenCalledWith({
+    pathname: '/answer/[id]',
+    params: { id: 'original', title: '合成原创作', questionId: 'question' },
+  });
+  mockPush.mockClear();
   const stopPropagation = jest.fn();
   await fireEvent.press(host.getByRole('button', { name: '更多操作' }), {
     stopPropagation,
@@ -326,5 +331,5 @@ test('creation cards reset their more menu and local expansion after identity re
   );
   expect(host.queryByText('更多:next')).toBeNull();
   expect(host.queryByText('收起回答')).toBeNull();
-  expect(host.getByText('展开全文')).toBeTruthy();
+  expect(host.queryByText('展开全文')).toBeNull();
 });

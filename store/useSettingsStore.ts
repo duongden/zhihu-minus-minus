@@ -82,6 +82,12 @@ function isValidSurfaceStyle(v: unknown): v is SurfaceStyle {
   );
 }
 
+export type AnswerReadingMode = 'detail' | 'preview-list';
+
+function isValidAnswerReadingMode(value: unknown): value is AnswerReadingMode {
+  return value === 'detail' || value === 'preview-list';
+}
+
 function isValidRichContentRenderer(v: unknown): v is RichContentRenderer {
   return v === 'webview' || v === 'native-v2';
 }
@@ -113,6 +119,8 @@ export interface AppSettings {
   localCityName: string | null;
   borderRadius: number;
   richContentRenderer: RichContentRenderer;
+  /** 点击回答卡片后的阅读方式；列表入口始终使用普通卡片。 */
+  answerReadingMode: AnswerReadingMode;
   enablePrivateMessaging: boolean;
   /** 是否开启按压时的水波纹、缩放与透明度变化 */
   enablePressFeedback: boolean;
@@ -190,6 +198,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   localCityName: null,
   borderRadius: 12,
   richContentRenderer: 'native-v2',
+  answerReadingMode: 'detail',
   enablePrivateMessaging: false,
   enablePressFeedback: true,
   pressOpacity: 0.82,
@@ -252,6 +261,9 @@ export const useSettingsStore = create<SettingsState>()(
           if (!isValidSurfaceStyle(nextSettings.surfaceStyle)) {
             nextSettings.surfaceStyle = 'layered';
           }
+          if (!isValidAnswerReadingMode(nextSettings.answerReadingMode)) {
+            nextSettings.answerReadingMode = 'detail';
+          }
           if (!isValidRichContentRenderer(nextSettings.richContentRenderer)) {
             nextSettings.richContentRenderer = 'native-v2';
           }
@@ -285,7 +297,7 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'zhihu-settings-storage',
       storage: createJSONStorage(() => settingsStorage),
-      version: 15,
+      version: 16,
       migrate: (rawPersistedState: unknown, version: number) => {
         const persistedState =
           normalizePersistedSettingsState(rawPersistedState);
@@ -421,6 +433,13 @@ export const useSettingsStore = create<SettingsState>()(
           typeof persistedState.enablePressFeedback === 'boolean'
             ? persistedState.enablePressFeedback
             : true;
+
+        // v16 adds the destination mode; existing entries continue to detail.
+        persistedState.answerReadingMode = isValidAnswerReadingMode(
+          persistedState.answerReadingMode,
+        )
+          ? persistedState.answerReadingMode
+          : 'detail';
 
         return persistedState as unknown as SettingsState;
       },

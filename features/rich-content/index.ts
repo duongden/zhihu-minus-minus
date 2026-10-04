@@ -99,6 +99,7 @@ export type {
 export { parseZhihuSegmentHighlight } from './segmentHighlight';
 export {
   getStructuredContentTextRuns,
+  mergeStructuredContentPages,
   normalizeZhihuStructuredContent,
   parseStructuredContentPaging,
   parseZhihuStructuredContent,

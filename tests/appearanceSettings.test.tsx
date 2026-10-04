@@ -78,6 +78,7 @@ jest.mock('../store/useSettingsStore', () => ({
       fontSizeScale: 1,
       lineHeightScale: 1.5,
       richContentRenderer: 'native-v2',
+      answerReadingMode: 'detail',
       updateSettings: set,
     })),
 }));
@@ -168,4 +169,13 @@ test.each([
             `${primaryColor}26`,
       ),
   ).toBe(true);
+});
+
+test('selects the answer destination mode without changing the body renderer', async () => {
+  const host = await render(<AppearanceSettings />);
+  await fireEvent.press(host.getByText('预览卡片列表'));
+  expect(useSettingsStore.getState().answerReadingMode).toBe('preview-list');
+  expect(useSettingsStore.getState().richContentRenderer).toBe('native-v2');
+  await fireEvent.press(host.getByText('回答详情'));
+  expect(useSettingsStore.getState().answerReadingMode).toBe('detail');
 });
