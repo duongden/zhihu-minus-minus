@@ -129,7 +129,7 @@ export function Text(
     ...flattenedStyle,
     color: flattenedStyle.color || color,
     fontSize: currentFontSize * fontSizeScale,
-    lineHeight: (currentLineHeight * lineHeightScale) / 1.5, // 修正比例
+    lineHeight: (currentLineHeight * fontSizeScale * lineHeightScale) / 1.5,
   };
 
   if (flattenedStyle.fontWeight || type === 'title' || type === 'subtitle') {

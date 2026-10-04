@@ -1,0 +1,6 @@
+{
+  "type": "answer",
+  "title": "合成列表段落排版回归",
+  "content": "<p>列表之前</p><ol start=\"3\"><li><blockquote><p data-pid=\"quoted-one\">引用第一段</p><p data-pid=\"quoted-two\">引用第二段</p></blockquote></li><li><img src=\"https://example.com/list-image.png\"><p data-pid=\"image-description\">图片说明</p></li><li><p data-pid=\"item-main\">最后一项</p><p data-pid=\"item-detail\">同一项的补充段落</p><ul><li>嵌套第一项</li><li>嵌套第二项</li></ul></li></ol><p>列表之后</p>",
+  "content_need_truncated": false
+}

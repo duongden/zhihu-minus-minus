@@ -180,7 +180,6 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
   });
   const [sortBy, setSortBy] = useState<'created' | 'voteups'>('created');
   const [followLoading, setFollowLoading] = useState(false);
-  const fontSizeScale = useSettingsStore((state) => state.fontSizeScale);
 
   const [headerHeight, setHeaderHeight] = useState(0);
   const [tabBarHeight, setTabBarHeight] = useState(52);
@@ -735,7 +734,7 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
                   className="font-bold text-[14px]"
                   style={{
                     fontSize: 14,
-                    lineHeight: 21 * fontSizeScale,
+                    lineHeight: 21,
                     color: isActive
                       ? linkColor
                       : Colors[colorScheme].textSecondary,
@@ -792,7 +791,7 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
               type={sortBy === item.key ? 'primary' : 'secondary'}
               className="text-[13px]"
               style={[
-                { fontSize: 13, lineHeight: 20 * fontSizeScale },
+                { fontSize: 13, lineHeight: 20 },
                 sortBy === item.key && { fontWeight: 'bold' },
               ]}
             >
@@ -1125,7 +1124,7 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
                 numberOfLines={1}
                 style={{
                   fontSize: 15,
-                  lineHeight: 23 * fontSizeScale,
+                  lineHeight: 23,
                   fontWeight: '700',
                 }}
               >
@@ -1134,7 +1133,7 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
               <Text
                 numberOfLines={1}
                 type="secondary"
-                style={{ fontSize: 11, lineHeight: 17 * fontSizeScale }}
+                style={{ fontSize: 11, lineHeight: 17 }}
               >
                 {`${activeMeta?.label || '个人主页'}${activeCount === undefined ? '' : ` · ${activeCount}`}`}
               </Text>

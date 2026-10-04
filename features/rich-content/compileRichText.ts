@@ -2,6 +2,7 @@ import type { ZhihuBlock, ZhihuDocument, ZhihuInlineRun } from './document';
 import {
   createRichContentMetrics,
   RICH_CONTENT_BODY_FONT_SIZE,
+  RICH_CONTENT_LIST_ITEM_SPACING,
   RICH_CONTENT_PARAGRAPH_SPACING,
 } from './presentation';
 import type {
@@ -36,7 +37,7 @@ interface FlowBuilder {
 interface ParagraphContext {
   kind?: 'quote' | 'listItem';
   indent?: number;
-  prefix?: string;
+  prefix?: { text: string; consumed: boolean };
 }
 
 const INLINE_SPANS = {
@@ -292,8 +293,16 @@ export function compileZhihuDocument(
         };
     }
     const start = builder.text.length;
-    if (context.prefix)
-      append(context.prefix, block.id, paragraphId, sourceOffset, 'synthetic');
+    if (context.prefix && !context.prefix.consumed) {
+      append(
+        context.prefix.text,
+        block.id,
+        paragraphId,
+        sourceOffset,
+        'synthetic',
+      );
+      context.prefix.consumed = true;
+    }
     sourceOffset = compileInline(block.children, paragraphId, sourceOffset);
     paragraphOffsets.set(offsetKey, sourceOffset);
     const kind =
@@ -333,16 +342,44 @@ export function compileZhihuDocument(
           prefix: context.prefix,
         });
       else if (block.type === 'list') {
+        // A nested list can precede its parent's own prose. Give the pending
+        // parent/footnote marker a semantic row instead of moving it after the
+        // nested items or letting their markers overwrite it.
+        if (context.prefix && !context.prefix.consumed)
+          compileParagraph(
+            {
+              id: `${block.id}:parent-marker`,
+              type: 'paragraph',
+              children: [],
+            },
+            context,
+          );
         block.items.forEach((item, index) => {
-          let prefix = block.ordered ? `${(block.start ?? 1) + index}. ` : '• ';
-          for (const itemBlock of item.blocks) {
-            compileBlocks([itemBlock], {
-              kind: 'listItem',
-              indent: (context.indent ?? 0) + fontSize * 1.2,
-              prefix,
-            });
-            prefix = '';
-          }
+          const precedingParagraph = builder.paragraphs.at(-1);
+          compileBlocks(item.blocks, {
+            kind: 'listItem',
+            indent: (context.indent ?? 0) + fontSize * 1.2,
+            // Containers share this marker; media does not consume it, and
+            // only the first text paragraph in this item displays it.
+            prefix: {
+              text: block.ordered ? `${(block.start ?? 1) + index}. ` : '• ',
+              consumed: false,
+            },
+          });
+          const lastParagraph = builder.paragraphs.at(-1);
+          if (
+            index < block.items.length - 1 &&
+            lastParagraph &&
+            lastParagraph !== precedingParagraph
+          )
+            builder.paragraphs[builder.paragraphs.length - 1] = {
+              ...lastParagraph,
+              // Compact text-ending items before the next item, retaining
+              // normal paragraph spacing within an item and after the list.
+              // A trailing media block flushes the builder; its independent
+              // geometry must not rewrite the preceding text's paragraph gap.
+              marginBottom: RICH_CONTENT_LIST_ITEM_SPACING,
+            };
         });
       } else {
         flush();
@@ -354,7 +391,9 @@ export function compileZhihuDocument(
   compileBlocks(document.blocks);
   if (document.footnotes?.length) {
     for (const definition of document.footnotes)
-      compileBlocks(definition.blocks, { prefix: `[${definition.label}] ` });
+      compileBlocks(definition.blocks, {
+        prefix: { text: `[${definition.label}] `, consumed: false },
+      });
   }
   flush();
   return { documentId: document.id, parts, diagnostics };

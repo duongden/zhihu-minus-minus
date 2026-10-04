@@ -7,7 +7,6 @@ import {
 } from 'react-native';
 import { BouncyButton } from '@/components/BouncyButton';
 import { Text, useThemeColor } from '@/components/Themed';
-import { useSettingsStore } from '@/store/useSettingsStore';
 
 interface FollowButtonProps {
   following: boolean;
@@ -34,7 +33,6 @@ export function FollowButton({
   const link = useThemeColor({}, 'link');
   const secondary = useThemeColor({}, 'textSecondary');
   const border = useThemeColor({}, 'border');
-  const fontScale = useSettingsStore((state) => state.fontSizeScale);
   const foreground = following ? secondary : link;
   const unavailable = loading || disabled;
 
@@ -67,7 +65,7 @@ export function FollowButton({
       <Text
         style={{
           fontSize: 14,
-          lineHeight: 21 * fontScale,
+          lineHeight: 21,
           fontWeight: '700',
           color: foreground,
         }}

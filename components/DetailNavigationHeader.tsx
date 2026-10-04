@@ -60,7 +60,6 @@ export function DetailNavigationHeader({
 }: DetailNavigationHeaderProps) {
   const insets = useSafeAreaInsets();
   const navigationHeight = useDetailNavigationHeight();
-  const fontSizeScale = useSettingsStore((state) => state.fontSizeScale);
   const background = useThemeColor({}, 'backgroundSecondary');
   const foreground = useThemeColor({}, 'text');
   const divider = useThemeColor({}, 'divider');
@@ -133,10 +132,7 @@ export function DetailNavigationHeader({
             disabled={!onTitlePress}
             style={styles.titleButton}
           >
-            <Text
-              numberOfLines={1}
-              style={[styles.title, { lineHeight: 20 * fontSizeScale }]}
-            >
+            <Text numberOfLines={1} style={styles.title}>
               {title}
             </Text>
           </BouncyButton>
@@ -151,7 +147,7 @@ export function DetailNavigationHeader({
               <Text
                 type="secondary"
                 numberOfLines={1}
-                style={[styles.authorName, { lineHeight: 18 * fontSizeScale }]}
+                style={styles.authorName}
               >
                 {author.name}
               </Text>

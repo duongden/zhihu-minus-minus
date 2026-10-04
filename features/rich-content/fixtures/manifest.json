@@ -394,6 +394,38 @@
         "type": "answer",
         "id": "synthetic-offline-formula"
       }
+    },
+    {
+      "id": "paragraph-list-layout-001",
+      "file": "./cases/paragraph-list-layout-001.json",
+      "contentPath": "content",
+      "sourceType": "answer",
+      "collectedAt": "2026-10-02",
+      "traits": [
+        "synthetic",
+        "list",
+        "paragraph",
+        "blockquote",
+        "image",
+        "json-envelope"
+      ],
+      "expected": {
+        "paragraphs": 7,
+        "headings": 0,
+        "figures": 0,
+        "figcaptions": 0,
+        "lists": 2,
+        "totalImages": 1,
+        "activeImages": 1,
+        "formulaImages": 0,
+        "noscripts": 0,
+        "videoBoxes": 0,
+        "linkCards": 0
+      },
+      "expectedMetadata": {
+        "type": "answer",
+        "content_need_truncated": false
+      }
     }
   ]
 }

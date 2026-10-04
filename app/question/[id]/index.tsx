@@ -640,7 +640,6 @@ export default function QuestionDetail() {
   const textColor = useThemeColor({}, 'text');
   const secondaryTextColor = useThemeColor({}, 'textSecondary');
   const navigationHeight = insets.top + useDetailNavigationHeight();
-  const fontSizeScale = useSettingsStore((state) => state.fontSizeScale);
   const queryClient = useQueryClient();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const screenTranslateX = useSharedValue(0);
@@ -1007,7 +1006,7 @@ export default function QuestionDetail() {
             <Text
               style={{
                 fontSize: 22,
-                lineHeight: 30 * fontSizeScale,
+                lineHeight: 30,
                 fontWeight: '700',
               }}
             >
@@ -1246,7 +1245,6 @@ export default function QuestionDetail() {
       id,
       initialTitle,
       navigationHeight,
-      fontSizeScale,
       scrollY,
       titleCollapseOffset,
       sortBy,

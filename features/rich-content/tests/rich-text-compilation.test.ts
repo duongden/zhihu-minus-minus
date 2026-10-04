@@ -179,6 +179,78 @@ describe('Text Flow Island compilation and source ranges', () => {
     });
   });
 
+  it('keeps one item marker through containers and media with stable source offsets and boundary spacing', () => {
+    const fixture: unknown = JSON.parse(
+      readFileSync(
+        path.join(
+          __dirname,
+          '../fixtures/cases/paragraph-list-layout-001.json',
+        ),
+        'utf8',
+      ),
+    );
+    if (
+      fixture === null ||
+      typeof fixture !== 'object' ||
+      !('content' in fixture) ||
+      typeof fixture.content !== 'string'
+    )
+      throw new Error('Expected the stored list content');
+    const parts = compile(fixture.content).parts;
+    expect(parts.map((part) => part.type)).toEqual(['flow', 'block', 'flow']);
+    const flows = parts
+      .filter((part) => part.type === 'flow')
+      .map((part) => part.flow);
+    expect(flows.map((flow) => flow.text)).toEqual([
+      '列表之前\n3. 引用第一段\n引用第二段',
+      '4. 图片说明\n5. 最后一项\n同一项的补充段落\n• 嵌套第一项\n• 嵌套第二项\n列表之后',
+    ]);
+    expect(
+      flows.map((flow) =>
+        flow.paragraphs.map((paragraph) => paragraph.marginBottom),
+      ),
+    ).toEqual([
+      [14, 14, 6],
+      [6, 14, 14, 6, 14, 14],
+    ]);
+    const quotedStart = flows[0].text.indexOf('引用第二段');
+    expect(
+      mapRichTextSelection(flows[0], quotedStart, quotedStart + 5),
+    ).toMatchObject({
+      text: '引用第二段',
+      start: { paragraphId: 'quoted-two', offset: 0 },
+      end: { paragraphId: 'quoted-two', offset: 5 },
+    });
+    expect(mapRichTextSelection(flows[1], 0, 7)).toMatchObject({
+      text: '4. 图片说明',
+      start: { paragraphId: 'image-description', offset: 0 },
+      end: { paragraphId: 'image-description', offset: 4 },
+    });
+
+    const mediaTail = compile(
+      '<ul><li><p>首项</p><img src="https://example.com/item-tail.png"></li><li>次项</li></ul>',
+    ).parts;
+    expect(mediaTail.map((part) => part.type)).toEqual([
+      'flow',
+      'block',
+      'flow',
+    ]);
+    expect(mediaTail[0]).toMatchObject({
+      flow: { text: '• 首项', paragraphs: [{ marginBottom: 14 }] },
+    });
+    const nestedFirst = firstFlow(
+      '<ol start="3"><li><ul><li>嵌套首项</li></ul><p data-pid="parent-tail">父项补充</p></li><li>下一项</li></ol>',
+    );
+    expect(nestedFirst.text).toBe('3. \n• 嵌套首项\n父项补充\n4. 下一项');
+    const tailStart = nestedFirst.text.indexOf('父项补充');
+    expect(
+      mapRichTextSelection(nestedFirst, tailStart, tailStart + 4),
+    ).toMatchObject({
+      start: { paragraphId: 'parent-tail', offset: 0 },
+      end: { paragraphId: 'parent-tail', offset: 4 },
+    });
+  });
+
   it('keeps the stored article short list formulas in their original sentences without generated paragraph breaks', () => {
     const fixture: unknown = JSON.parse(
       readFileSync(
@@ -226,6 +298,17 @@ describe('Text Flow Island compilation and source ranges', () => {
       'zhihu-rich-footnote:test%3Afootnote%3A1',
     );
     expect(flow.text).toBe('前[1]后\n[1] 说明');
+  });
+
+  it('adds a footnote label once through multiple definition paragraphs or a leading nested list', () => {
+    const flow = firstFlow(
+      '<p>前<a class="footnote-ref" data-numero="1">[1]</a>后</p><section class="footnotes"><ol><li data-numero="1"><p>说明</p><p>补充说明</p></li></ol></section>',
+    );
+    expect(flow.text).toBe('前[1]后\n[1] 说明\n补充说明');
+    const list = firstFlow(
+      '<p>前<a class="footnote-ref" data-numero="1">[1]</a>后</p><section class="footnotes"><ol><li data-numero="1"><ul><li>说明</li></ul><p>补充说明</p></li></ol></section>',
+    );
+    expect(list.text).toBe('前[1]后\n[1] \n• 说明\n补充说明');
   });
 
   it('produces stable content versions, changes them with content and rejects invalid selections', () => {
