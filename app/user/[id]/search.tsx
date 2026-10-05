@@ -18,6 +18,10 @@ import { useProfileSearch } from '@/components/profile/useProfileSearch';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { Text, useRuntimeThemeColors, View } from '@/components/Themed';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import {
+  type AnswerReadingContext,
+  getProfileAnswerReadingContext,
+} from '@/utils/answerReadingContext';
 
 export default function UserSearchScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -40,20 +44,31 @@ function ProfileSearchScreen({ id }: { id: string }) {
   const member = memberQuery.data;
   const search = useProfileSearch(member?.id);
   const hasQuery = search.query.trim().length > 0;
-  const items = useMemo(() => {
-    if (!member || search.pending || !hasQuery) return [];
+  const { items, answerContexts } = useMemo(() => {
+    const answerContexts = new Map<string, AnswerReadingContext>();
+    if (!member || search.pending || !hasQuery)
+      return { items: [], answerContexts };
     const seen = new Set<string>();
-    return (search.data?.pages || []).flatMap((page) =>
+    const items = (search.data?.pages || []).flatMap((page) =>
       page.data.flatMap((result) => {
         const item = toProfileSearchFeedItem(result, member, colors.link);
         if (!item) return [];
         const key = `${item.type}-${item.id}`;
         if (seen.has(key)) return [];
         seen.add(key);
+        answerContexts.set(
+          key,
+          getProfileAnswerReadingContext(
+            result.object.author ?? {},
+            member,
+            id,
+          ),
+        );
         return [item];
       }),
     );
-  }, [colors.link, hasQuery, member, search.data, search.pending]);
+    return { items, answerContexts };
+  }, [colors.link, hasQuery, id, member, search.data, search.pending]);
 
   const loadMore = (retry = false) => {
     if (
@@ -172,7 +187,12 @@ function ProfileSearchScreen({ id }: { id: string }) {
           key={search.searchTerm}
           data={items}
           keyExtractor={(item) => `user-search-${item.type}-${item.id}`}
-          renderItem={({ item }) => <FeedCard item={item} />}
+          renderItem={({ item }) => (
+            <FeedCard
+              item={item}
+              answerContext={answerContexts.get(`${item.type}-${item.id}`)}
+            />
+          )}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}

@@ -1,8 +1,11 @@
 import type {
+  ZhihuSegmentInfo,
+  ZhihuSegmentReaction,
   ZhihuStructuredContent,
   ZhihuStructuredContentMark,
   ZhihuStructuredContentPaging,
   ZhihuStructuredContentSegment,
+  ZhihuStructuredContentSegmentLikePayload,
   ZhihuStructuredContentTextPayload,
 } from '@/types/zhihu';
 import type {
@@ -62,7 +65,7 @@ function strings(value: unknown): string[] {
   return array(value).map((entry) => string(entry));
 }
 
-/** Decode paging for inspection only; the test renderer never follows its URLs. */
+/** Decode pagination independently from the outer answer-list pagination. */
 export function parseStructuredContentPaging(
   value: unknown,
 ): ZhihuStructuredContentPaging {
@@ -87,16 +90,39 @@ export function parseStructuredContentPaging(
   };
 }
 
-function parseMark(value: unknown, text: string): ZhihuStructuredContentMark {
+function parseMark(
+  value: unknown,
+  text: string,
+): ZhihuStructuredContentMark | null {
   const mark = record(value);
   const range = {
     start_index: integer(mark.start_index),
     end_index: integer(mark.end_index),
   };
-  if (range.end_index < range.start_index || range.end_index > text.length) {
+  if (
+    range.end_index <= range.start_index ||
+    range.end_index > text.length ||
+    bisectsSurrogate(text, range.start_index) ||
+    bisectsSurrogate(text, range.end_index)
+  ) {
     throw new Error(INVALID_CONTENT);
   }
   switch (mark.type) {
+    case 'seg_like': {
+      const reaction = record(mark.seg_like);
+      return {
+        ...range,
+        type: 'seg_like',
+        seg_like: {
+          comment_count: integer(reaction.comment_count),
+          count: integer(reaction.count),
+          is_like: boolean(reaction.is_like),
+          is_span: boolean(reaction.is_span),
+          my_comment_count: integer(reaction.my_comment_count),
+          seg_ids: strings(reaction.seg_ids),
+        },
+      };
+    }
     case 'bold':
       return { ...range, type: 'bold' };
     case 'link': {
@@ -144,7 +170,7 @@ function parseMark(value: unknown, text: string): ZhihuStructuredContentMark {
       };
     }
     default:
-      throw new Error(INVALID_CONTENT);
+      return null;
   }
 }
 
@@ -153,7 +179,17 @@ function parseText(value: unknown): ZhihuStructuredContentTextPayload {
   const text = string(payload.text);
   return {
     text,
-    marks: array(payload.marks).map((mark) => parseMark(mark, text)),
+    marks: (Array.isArray(payload.marks) ? payload.marks : []).flatMap(
+      (mark) => {
+        try {
+          const parsed = parseMark(mark, text);
+          return parsed ? [parsed] : [];
+        } catch {
+          // An annotation cannot make otherwise valid source prose unreadable.
+          return [];
+        }
+      },
+    ),
   };
 }
 
@@ -167,7 +203,10 @@ function parseSegment(value: unknown): ZhihuStructuredContentSegment {
       return {
         id,
         type: 'paragraph',
-        paragraph: { ...parseText(paragraph), pid: string(paragraph.pid) },
+        paragraph: {
+          ...parseText(paragraph),
+          pid: typeof paragraph.pid === 'string' ? paragraph.pid : '',
+        },
       };
     }
     case 'heading': {
@@ -178,12 +217,13 @@ function parseSegment(value: unknown): ZhihuStructuredContentSegment {
     }
     case 'list_node': {
       const list = record(segment.list_node);
-      if (list.type !== 'unordered') throw new Error(INVALID_CONTENT);
+      if (list.type !== 'unordered' && list.type !== 'ordered')
+        throw new Error(INVALID_CONTENT);
       return {
         id,
         type: 'list_node',
         list_node: {
-          type: 'unordered',
+          type: list.type,
           items: array(list.items).map((value) => {
             const item = record(value);
             return {
@@ -191,6 +231,26 @@ function parseSegment(value: unknown): ZhihuStructuredContentSegment {
               indent_level: integer(item.indent_level),
             };
           }),
+        },
+      };
+    }
+    case 'card': {
+      const card =
+        segment.card &&
+        typeof segment.card === 'object' &&
+        !Array.isArray(segment.card)
+          ? record(segment.card)
+          : {};
+      return {
+        id,
+        type: 'card',
+        card: {
+          title:
+            typeof card.title === 'string' && card.title.trim()
+              ? card.title
+              : '链接卡片',
+          url: typeof card.url === 'string' ? card.url : '',
+          cover: typeof card.cover === 'string' ? card.cover : '',
         },
       };
     }
@@ -221,13 +281,29 @@ function parseSegment(value: unknown): ZhihuStructuredContentSegment {
     }
     case 'hr':
       return { id, type: 'hr' };
-    default:
-      // Reject unknown structures before the independent test renderer runs.
-      throw new Error(INVALID_CONTENT);
+    default: {
+      const sourceType =
+        segment.type === 'unsupported' && typeof segment.sourceType === 'string'
+          ? segment.sourceType
+          : typeof segment.type === 'string'
+            ? segment.type
+            : 'unknown';
+      const payload = segment[sourceType];
+      const fallbackText =
+        typeof segment.text === 'string'
+          ? segment.text
+          : typeof segment.fallbackText === 'string'
+            ? segment.fallbackText
+            : payload && typeof payload === 'object' && 'text' in payload
+              ? payload.text
+              : undefined;
+      if (typeof fallbackText !== 'string') throw new Error(INVALID_CONTENT);
+      return { id, type: 'unsupported', sourceType, fallbackText };
+    }
   }
 }
 
-/** Unknown blocks/marks reject the whole body instead of silently losing text. */
+/** Missing body structure rejects the body; unsupported annotations keep prose. */
 export function parseZhihuStructuredContent(
   value: unknown,
 ): ZhihuStructuredContent {
@@ -237,19 +313,120 @@ export function parseZhihuStructuredContent(
   return { paging, segments: array(content.segments).map(parseSegment) };
 }
 
+/** Replace duplicate source IDs in place while appending new source segments. */
+export function mergeStructuredContentPages(
+  pages: readonly ZhihuStructuredContent[],
+): ZhihuStructuredContent {
+  const latest = pages[pages.length - 1];
+  if (!latest) throw new Error('结构化正文缺少页面');
+  const segments = new Map<
+    string,
+    ZhihuStructuredContent['segments'][number]
+  >();
+  for (const page of pages)
+    for (const segment of page.segments) segments.set(segment.id, segment);
+  return { paging: latest.paging, segments: [...segments.values()] };
+}
+
 export interface ZhihuStructuredContentNormalizationOptions {
   documentId?: string;
   /** Explicit trusted test assets, keyed by their validated source image URL. */
   resources?: Readonly<Record<string, ZhihuImageResource>>;
 }
 
-/** Source ranges are visual metadata only; no paragraph business ID is emitted. */
+/** Source ranges remain UTF-16 offsets into the unmodified paragraph text. */
 export type ZhihuStructuredContentInlineRun = ZhihuInlineRun & {
   readonly range?: ZhihuTextRange;
 };
 
 const MAX_LIST_DEPTH = 6;
-const NON_BMP_TEXT = /[\uD800-\uDBFF][\uDC00-\uDFFF]/;
+
+function bisectsSurrogate(text: string, offset: number): boolean {
+  return (
+    offset > 0 &&
+    offset < text.length &&
+    /[\uD800-\uDBFF]/.test(text[offset - 1]) &&
+    /[\uDC00-\uDFFF]/.test(text[offset])
+  );
+}
+
+function segmentReaction(
+  reaction: ZhihuStructuredContentSegmentLikePayload,
+): ZhihuSegmentReaction {
+  return {
+    like_count: reaction.count,
+    comment_count: reaction.comment_count,
+    is_like: reaction.is_like,
+    is_span: reaction.is_span,
+    my_comment_count: reaction.my_comment_count,
+    seg_ids: [...reaction.seg_ids],
+  };
+}
+
+function uniqueParagraphIds(content: ZhihuStructuredContent): Set<string> {
+  const counts = new Map<string, number>();
+  for (const segment of content.segments) {
+    if (segment.type !== 'paragraph') continue;
+    const pid = segment.paragraph.pid;
+    if (!pid || pid !== pid.trim()) continue;
+    counts.set(pid, (counts.get(pid) ?? 0) + 1);
+  }
+  return new Set(
+    [...counts].filter(([, count]) => count === 1).map(([pid]) => pid),
+  );
+}
+
+function unambiguousReactions(
+  marks: readonly ZhihuStructuredContentMark[],
+): Extract<ZhihuStructuredContentMark, { type: 'seg_like' }>[] {
+  const reactions = marks.filter(
+    (mark): mark is Extract<ZhihuStructuredContentMark, { type: 'seg_like' }> =>
+      mark.type === 'seg_like',
+  );
+  return reactions.filter(
+    (mark) =>
+      !reactions.some(
+        (other) =>
+          other !== mark &&
+          mark.start_index < other.end_index &&
+          other.start_index < mark.end_index,
+      ),
+  );
+}
+
+/** Project verified source paragraph identities and reactions into shared APIs. */
+export function getStructuredContentSegmentInfos(
+  content: ZhihuStructuredContent,
+): ZhihuSegmentInfo[] {
+  const parsed = parseZhihuStructuredContent(content);
+  const paragraphIds = uniqueParagraphIds(parsed);
+  return parsed.segments.flatMap((segment) => {
+    if (
+      segment.type !== 'paragraph' ||
+      !paragraphIds.has(segment.paragraph.pid)
+    )
+      return [];
+    const { pid, text, marks } = segment.paragraph;
+    // Existing business APIs require one exact text range in one paragraph.
+    // Atomic formula attachments and crossed/span reactions keep local actions.
+    if (marks.some((mark) => mark.type === 'formula')) return [];
+    const reactions = unambiguousReactions(marks).filter(
+      (mark) => !mark.seg_like.is_span,
+    );
+    if (!reactions.length) return [];
+    return [
+      {
+        pid,
+        text,
+        marks: reactions.map((mark) => ({
+          start_index: mark.start_index,
+          end_index: mark.end_index,
+          seg_info: segmentReaction(mark.seg_like),
+        })),
+      },
+    ];
+  });
+}
 
 function localTestUri(value: unknown): string | undefined {
   if (typeof value !== 'string' || !value.trim()) return undefined;
@@ -318,21 +495,19 @@ function textRun(
 
 /**
  * Scan mark endpoints directly in JSON text, retaining overlaps as nested runs.
- * Formula placeholders are one atomic attachment. Non-BMP text keeps its exact
- * source text because the captured mark index unit is not yet established.
+ * Formula placeholders are one atomic attachment. Verified paragraph reactions
+ * wrap their complete source range after the visual styles have been built.
  * No HTML/XML is produced, parsed, escaped or executed by this adapter.
  */
 export function getStructuredContentTextRuns(
   payload: ZhihuStructuredContentTextPayload,
   idPrefix: string,
   resources?: Readonly<Record<string, ZhihuImageResource>>,
+  paragraphId?: string,
 ): ZhihuInlineRun[] {
   const { text, marks } = parseText(payload);
   if (!text) return [];
-  if (NON_BMP_TEXT.test(text)) {
-    return [textRun(text, `${idPrefix}:plain`, 0, text.length)];
-  }
-  const formulas = marks
+  const formulaCandidates = marks
     .map((mark, index) => ({ mark, index }))
     .filter(
       (
@@ -342,17 +517,16 @@ export function getStructuredContentTextRuns(
         index: number;
       } => entry.mark.type === 'formula',
     );
-  for (let index = 0; index < formulas.length; index += 1) {
-    const current = formulas[index].mark;
-    for (const entry of formulas.slice(index + 1)) {
-      if (
-        current.start_index < entry.mark.end_index &&
-        entry.mark.start_index < current.end_index
-      ) {
-        throw new Error(INVALID_CONTENT);
-      }
-    }
-  }
+  // Conflicting attachments leave their literal placeholders visible.
+  const formulas = formulaCandidates.filter(
+    (current) =>
+      !formulaCandidates.some(
+        (other) =>
+          other !== current &&
+          current.mark.start_index < other.mark.end_index &&
+          other.mark.start_index < current.mark.end_index,
+      ),
+  );
   const endpoints = new Set([0, text.length]);
   for (const mark of marks) {
     endpoints.add(mark.start_index);
@@ -366,7 +540,7 @@ export function getStructuredContentTextRuns(
         ),
     )
     .sort((left, right) => left - right);
-  const runs: ZhihuInlineRun[] = [];
+  const runs: { run: ZhihuInlineRun; start: number; end: number }[] = [];
   for (let index = 0; index < boundaries.length - 1; index += 1) {
     const start = boundaries[index];
     const end = boundaries[index + 1];
@@ -414,6 +588,7 @@ export function getStructuredContentTextRuns(
       const mark = marks[markIndex];
       if (
         mark.type === 'formula' ||
+        mark.type === 'seg_like' ||
         mark.start_index > start ||
         mark.end_index < end
       )
@@ -441,9 +616,40 @@ export function getStructuredContentTextRuns(
         }
       }
     }
-    runs.push(run);
+    runs.push({ run, start, end });
   }
-  return runs;
+  // Formula paragraphs have no shared business metadata, even outside the
+  // attachment range, so keep their visual runs without segment click targets.
+  if (!paragraphId || formulaCandidates.length)
+    return runs.map(({ run }) => run);
+  const unambiguous = unambiguousReactions(marks);
+  const result: ZhihuInlineRun[] = [];
+  for (let index = 0; index < runs.length; index += 1) {
+    const entry = runs[index];
+    const mark = unambiguous.find(
+      (candidate) => candidate.start_index === entry.start,
+    );
+    const endIndex = mark
+      ? runs.findIndex(
+          (candidate, candidateIndex) =>
+            candidateIndex >= index && candidate.end === mark.end_index,
+        )
+      : -1;
+    if (!mark || endIndex < index) {
+      result.push(entry.run);
+      continue;
+    }
+    result.push({
+      id: `${idPrefix}:segment:${mark.start_index}:${mark.end_index}`,
+      type: 'segment',
+      paragraphId,
+      range: { start: mark.start_index, end: mark.end_index },
+      segInfo: segmentReaction(mark.seg_like),
+      children: runs.slice(index, endIndex + 1).map(({ run }) => run),
+    });
+    index = endIndex;
+  }
+  return result;
 }
 
 interface MutableList {
@@ -458,7 +664,8 @@ function listBlock(
   id: string,
   resources?: Readonly<Record<string, ZhihuImageResource>>,
 ): ZhihuBlock {
-  const root: MutableList = { id, type: 'list', ordered: false, items: [] };
+  const ordered = segment.list_node.type === 'ordered';
+  const root: MutableList = { id, type: 'list', ordered, items: [] };
   const stack = [root];
   for (const [index, item] of segment.list_node.items.entries()) {
     const targetDepth = Math.min(
@@ -472,7 +679,7 @@ function listBlock(
         const nested: MutableList = {
           id: `${id}:nested:${index}`,
           type: 'list',
-          ordered: false,
+          ordered,
           items: [],
         };
         // At most one new level per item; do not fabricate empty parent items.
@@ -500,27 +707,34 @@ function listBlock(
   return root;
 }
 
-/** Convert the five observed JSON block kinds straight to the semantic model. */
+/** Convert observed JSON blocks straight to the semantic model. */
 export function normalizeZhihuStructuredContent(
   content: ZhihuStructuredContent,
   options: ZhihuStructuredContentNormalizationOptions = {},
 ): ZhihuDocument {
   const parsed = parseZhihuStructuredContent(content);
+  const paragraphIds = uniqueParagraphIds(parsed);
   const documentId = options.documentId ?? 'structured-content';
   const blocks: ZhihuBlock[] = parsed.segments.map((segment, index) => {
     // Position disambiguates duplicate source IDs without losing their identity.
     const id = `${documentId}:segment:${index}:${segment.id}`;
     switch (segment.type) {
-      case 'paragraph':
+      case 'paragraph': {
+        const paragraphId = paragraphIds.has(segment.paragraph.pid)
+          ? segment.paragraph.pid
+          : undefined;
         return {
           id,
           type: 'paragraph',
+          ...(paragraphId && { paragraphId }),
           children: getStructuredContentTextRuns(
             segment.paragraph,
             `${id}:runs`,
             options.resources,
+            paragraphId,
           ),
         };
+      }
       case 'heading':
         return {
           id,
@@ -534,6 +748,30 @@ export function normalizeZhihuStructuredContent(
         };
       case 'list_node':
         return listBlock(segment, id, options.resources);
+      case 'card': {
+        const url = getSafeRichContentUrl(segment.card.url);
+        if (!url) {
+          return {
+            id,
+            type: 'unsupported',
+            sourceType: 'structuredCard',
+            fallbackText: segment.card.title,
+          };
+        }
+        const image = imageResource(
+          [segment.card.cover],
+          0,
+          0,
+          options.resources,
+        );
+        return {
+          id,
+          type: 'linkCard',
+          title: segment.card.title,
+          url,
+          ...(image && { image }),
+        };
+      }
       case 'image': {
         const source = segment.image;
         const resource = imageResource(
@@ -568,6 +806,13 @@ export function normalizeZhihuStructuredContent(
       }
       case 'hr':
         return { id, type: 'divider' };
+      case 'unsupported':
+        return {
+          id,
+          type: 'unsupported',
+          sourceType: segment.sourceType,
+          fallbackText: segment.fallbackText,
+        };
     }
     throw new Error(INVALID_CONTENT);
   });

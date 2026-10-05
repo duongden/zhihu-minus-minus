@@ -4,11 +4,13 @@
 
 2026-09-30开始。本轮先实现各项能力的最小可见版本，随后按用户要求开放真实正文的可选入口；性能门槛、长文本基准与全量默认迁移暂不展开。排版策略依据 [Tiqian 评估](./tiqian-typography-strategies.md)，架构依据 [V2 计划](./renderer-v2-plan.md)。首先使用Android系统TextView/Spannable，2026-10-01开始增加iOS UIKit/TextKit adapter；两者均未接入Tiqian排版引擎。Android阶段的已验证结果与新增iOS验证分别记录。
 
+本文按时间保留早期实验和验证记录；下文历史阶段的 RNRH 默认值与 fallback 描述不代表当前实现。现行入口、后端与设置迁移以本节说明为准。
+
 ## 入口与数据链路
 
 开发构建：“我的 → 富文本测试案例（开发）→ tiqian-super-mini 原型”，路由 `/dev/rich-content/prototype`。六组本地合成内容覆盖跨段选择、装饰线、行内附件、知识点、媒体与表格、中西混排。案例不包含真实账号或对象，不提交点赞等业务操作。
 
-真实内容入口为“设置 → 外观与阅读 → 正文排版 → tiqian-super-mini”；“功能开关 → 正文排版”也会进入同一页面。该选项在正常业务页面使用，不需要开发案例入口；经典与网页排版仍可随时切回。原型和稳定fixture的后端切换仅保留在当前页面，不写入生产偏好。
+真实内容入口为“设置 → 外观与阅读 → 正文排版 → tiqian-super-mini”；“功能开关 → 正文排版”也会进入同一页面。该选项在正常业务页面使用，不需要开发案例入口；网页排版仍可随时切回。原型和稳定fixture的后端切换仅保留在当前页面，不写入生产偏好。
 
 ```text
 HTML + segment_infos / 想法 content 分段数组
@@ -20,11 +22,11 @@ HTML + segment_infos / 想法 content 分段数组
   + React Native 独立媒体 block
 ```
 
-公开能力从 `@/features/rich-content` 导入。原生实现位于 [`modules/zhihu-rich-text`](../../../modules/zhihu-rich-text/README.md)。业务默认读取 `richContentRenderer`，也可显式传 `renderer="native-v2"` 覆盖；新安装默认仍为RNRH。未包含新模块或Android/iOS以外的平台使用完整RNRH fallback，保留保存的偏好；原型页标明可用性。开发对照只保留Native V2 / RNRH / WebView。
+公开能力从 `@/features/rich-content` 导入。原生实现位于 [`modules/zhihu-rich-text`](../../../modules/zhihu-rich-text/README.md)。业务默认读取 `richContentRenderer`，也可显式传 `renderer="native-v2"` 覆盖；当前新安装默认采用 tiqian-super-mini（`native-v2`）。未包含新模块或Android/iOS以外的平台使用完整 WebView fallback，保留保存的偏好；原型页标明可用性。RNRH 已删除，开发对照只保留 tiqian-super-mini / WebView。
 
-推荐通过 `ZhihuContent` 使用该能力，默认采用正文设置，其交互外壳已经提供完整RNRH fallback；需要固定后端时显式传 `renderer="native-v2"`。直接挂载 `ZhihuNativeContent` 必须传入 `renderFallback: () => React.ReactNode`；功能原型宿主同样提供现有RNRH adapter，复用图片预览和链接分流。模块不反向导入外壳，避免fallback循环依赖。V2源选区和知识点事件仅在native可用时运行。
+推荐通过 `ZhihuContent` 使用该能力，默认采用正文设置，其交互外壳已经提供完整 WebView fallback；需要固定后端时显式传 `renderer="native-v2"`。直接挂载 `ZhihuNativeContent` 必须传入 `renderFallback: () => React.ReactNode`；功能原型宿主同样提供 WebView adapter，复用图片预览和链接分流。模块不反向导入外壳，避免fallback循环依赖。V2源选区和知识点事件仅在native可用时运行。
 
-正文偏好持久化使用settings version 13：旧 `useWebView=true` 迁移为 `webview`，其他旧值为 `rnrh`。Native V2只能由用户选择，不在升级迁移时静默开启。
+实验初期的 settings version 13 将旧 `useWebView=true` 迁移为 `webview`，其他旧值为 `rnrh`，当时 Native V2 仅由用户选择。当前 settings version 为 16；version 15 移除 RNRH，将旧 `rnrh` 或未设置偏好迁移为 `native-v2`，保留显式 WebView 选择及旧 `useWebView=true`；version 16 另为回答阅读方式补齐默认 `detail`，不改变正文后端选择。
 
 信息流外层 `FeedExcerpt` 按用户最终决定保留原有React Native `Text`摘要，单独回退，不跟随Native正文后端。预览弹层加载及首测阶段仍可保留已有摘要placeholder，最终正文按所选后端显示。本轮未保留独立NativeRichTextExcerpt或模块maxLines/ellipsis扩展。
 
@@ -206,3 +208,13 @@ CI的 `NodeRequire.context` 错误来自干净checkout没有本地忽略的 `exp
 本轮 `npm run check` 通过：33个suite / 482项测试、285个文件的只读Biome（2项既有warning）与8个fixture分析；rich-content专项19个suite / 329项通过。阅读进度共23项测试，新增14项覆盖同高度替换、尺寸先于ready、旧来源/对象/聚焦周期/请求、保存几何及普通后端。Android重新prebuild后，`./gradlew :zhihu-rich-text:testDebugUnitTest :app:assembleDebug -PreactNativeArchitectures=arm64-v8a`通过，8项JVM测试覆盖共享并发预算、进行中去重、独立取消、排队取消、迟到结果、失败重试与回调隔离。
 
 arm64 Debug已覆盖安装到V2509A（API 36），保留应用数据，通过USB连接Metro。真机合成附件页的小图、两处行内公式、短I和独立公式在暗色中可见；切换跨段、附件、装饰案例后进程保持运行，当前进程无fatal crash记录，附件worker采样为0/2/2/2。用户试用反馈问题不大。同高度阅读恢复依赖上述合成回归，本轮没有单独在双端真机复现该竞态；未重建iOS或验证Release。
+
+## 2026-10-05：Android 引用与触摸焦点静态修正
+
+按用户要求，本轮只进行源码审查和静态检查，不启动模拟器、真机或原生应用。
+
+Android 引用线原先直接使用 `LeadingMarginSpan` 的整行 `top..bottom`；段落高度 span 把段后间距加入末行 descent，引用线因此多画了段距。现在连续引用的最后一段在末行扣除其段后间距，引用内部相邻段落的线仍连续；没有新增换行或改动选区/source map。既有引用 fixture 及跨正文/引用选区案例继续复用。
+
+点击正文时的瞬间滚动有明确的静态路径：可选择 TextView 在触摸中取得焦点，本地 RN 0.83 的 `ReactScrollView.requestChildFocus` 会立即滚动到整个 focused 子视图；一个 flow 可跨越多屏。最初向祖先传递空 focused 的修正引入了闪退：用户连接的安卓真机崩溃日志显示 `ReactAndroidHWInputDeviceHelper.onFocusChanged` 不接受 null，调用栈直接经过本地 `RichTextView.requestChildFocus`。现在撤销该 override，始终传递真实焦点；`FlowTextView.getDrawingRect` 仅在同步普通触摸内返回触点矩形，避免外层尝试显示整个 flow。长按、已有选区、拖动、键盘和无障碍请求仍使用正常矩形；延迟布局也恢复正常矩形。附件列表为空时，逐帧同步提前返回，省去祖先滚动容器和屏幕可见范围查找。
+
+详情正文的透明候选层已设置 `pointerEvents="none"` 并隐藏其无障碍子节点，阅读滚动指示器也不接收触摸；底部按钮位于正文 ScrollView 之外。静态检查没有找到能明确解释“极少数首次进入后整条底栏无法点击、重进恢复”的稳定遮罩或禁用路径，因此未凭推测重写 Pager、底栏或选择生命周期。修正后的 `:zhihu-rich-text:compileDebugKotlin --offline` 已通过；只读取了现有真机崩溃日志，未安装或启动应用。修正后的触摸、引用末端视觉、长按拖柄与父滚动组合、底栏偶发故障、iOS 和 Release 性能仍须后续平台复验。

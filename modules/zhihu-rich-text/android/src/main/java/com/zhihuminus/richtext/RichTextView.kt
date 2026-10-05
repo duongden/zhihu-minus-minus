@@ -246,6 +246,8 @@ class RichTextView(context: Context, appContext: AppContext) : ExpoView(context,
     for ((index, spec) in activeFlow.paragraphs.withIndex()) {
       val range = spec.range(activeFlow.text) ?: continue
       val kind = spec.optString("kind")
+      val marginTop = spec.number("marginTop", if (kind == "heading" && index > 0) 8.0 else 0.0).toFloat()
+      val marginBottom = spec.number("marginBottom", if (index < activeFlow.paragraphs.lastIndex) config.paragraphSpacing.toDouble() else 0.0).toFloat()
       val headingScale = when (spec.number("level", 2.0)) { 1.0 -> 1.55f; 2.0 -> 1.35f; else -> 1.15f }
       var lineHeight = config.lineHeight
       when (kind) {
@@ -260,7 +262,8 @@ class RichTextView(context: Context, appContext: AppContext) : ExpoView(context,
             .takeIf { it.isFinite() && it > 0f } ?: max(config.lineHeight, headingFontSize * 1.45f)
         }
         "quote" -> {
-          apply(QuoteMarginSpan(config.secondaryColor, px(2f), px(10f)), range)
+          val continuesQuote = activeFlow.paragraphs.getOrNull(index + 1)?.optString("kind") == "quote"
+          apply(QuoteMarginSpan(range, config.secondaryColor, px(2f), px(10f), if (continuesQuote) 0 else px(marginBottom)), range)
           apply(ForegroundColorSpan(config.secondaryColor), range)
         }
         "listItem" -> apply(LeadingMarginSpan.Standard(px(spec.number("indent", 18.0).toFloat())), range)
@@ -270,8 +273,6 @@ class RichTextView(context: Context, appContext: AppContext) : ExpoView(context,
           apply(BackgroundColorSpan((config.secondaryColor and 0x00ffffff) or 0x16000000), range)
         }
       }
-      val marginTop = spec.number("marginTop", if (kind == "heading" && index > 0) 8.0 else 0.0).toFloat()
-      val marginBottom = spec.number("marginBottom", if (index < activeFlow.paragraphs.lastIndex) config.paragraphSpacing.toDouble() else 0.0).toFloat()
       apply(ParagraphHeightSpan(range, px(lineHeight), px(marginTop), px(marginBottom)), range)
     }
     val maxAttachmentWidth = max(1f, if (contentWidthPx > 0) contentWidthPx.toFloat() else resources.displayMetrics.widthPixels.toFloat())
@@ -329,6 +330,7 @@ class RichTextView(context: Context, appContext: AppContext) : ExpoView(context,
   }
 
   private fun synchronizeAttachments() {
+    if (attachments.isEmpty()) return
     if (disposed || !isAttachedToWindow || windowVisibility != View.VISIBLE || !isShown) {
       releaseAttachments(); return
     }

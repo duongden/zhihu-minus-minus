@@ -1,8 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import React from 'react';
-import { View as NativeView, Pressable } from 'react-native';
+import { View as NativeView } from 'react-native';
 import Animated from 'react-native-reanimated';
 import {
   getContentVoteCount,
@@ -13,26 +13,22 @@ import { MoreActionsButton } from '@/components/MoreActionsButton';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
-import { ZhihuContent } from '@/features/rich-content';
 import { useCollectionStore } from '@/store/useCollectionStore';
+import type { ZhihuContentSegment } from '@/types/zhihu';
+import { seedAnswerPreviewEntry } from '@/utils/answerPreviewEntry';
+import { getAnswerReadingRouteParams } from '@/utils/answerReadingContext';
 import { BouncyButton } from './BouncyButton';
 import { LikeButton } from './LikeButton';
 import { type ShareContentType, ShareMenu } from './ShareMenu';
 
 type CreationType = 'answer' | 'article' | 'question' | 'pin' | 'video';
 
-interface CreationContentSegment {
-  type: string;
-  content?: string;
-  data_draft_title?: string;
-}
-
 interface CreationItem {
   id: string | number;
   type?: string;
   title?: string;
   titleString?: string;
-  content?: string | CreationContentSegment[];
+  content?: string | readonly ZhihuContentSegment[];
   excerpt?: string;
   url?: string;
   voteCount?: number;
@@ -68,9 +64,6 @@ interface CreationCardProps {
   type: CreationType;
   onPress?: () => void;
   excerpt?: React.ReactNode;
-  isExpanded?: boolean;
-  onToggle?: (id: string, expanded: boolean) => void;
-  isCollapsedHighlighted?: boolean;
 }
 
 interface CreationCardHandle {
@@ -88,19 +81,16 @@ export const CreationCard = React.forwardRef<
     {
       item,
       type,
+      // The whole ordinary card opens its content route or this override.
       onPress,
       excerpt,
-      isExpanded,
-      onToggle,
-      isCollapsedHighlighted,
     }: CreationCardProps,
     ref,
   ) => {
     const router = useRouter();
+    const queryClient = useQueryClient();
     const colorScheme = useColorScheme();
-    const primaryColor = useThemeColor({}, 'primary');
     const cardBackground = useThemeColor({}, 'backgroundSecondary');
-    const [localExpanded, setLocalExpanded] = React.useState(false);
     const [menuVisible, setMenuVisible] = React.useState(false);
     const footerRef = React.useRef<NativeView>(null);
 
@@ -121,7 +111,6 @@ export const CreationCard = React.forwardRef<
       if (previousIdentity.current === identity) return;
       previousIdentity.current = identity;
       setMenuVisible(false);
-      setLocalExpanded(false);
     }, [identity]);
 
     React.useImperativeHandle(ref, () => ({
@@ -129,68 +118,36 @@ export const CreationCard = React.forwardRef<
       id: item.id.toString(),
     }));
 
-    const expanded = isExpanded !== undefined ? isExpanded : localExpanded;
-    const setExpanded = (val: boolean) => {
-      if (onToggle && item?.id) {
-        onToggle(item.id.toString(), val);
-      } else {
-        setLocalExpanded(val);
-      }
-    };
-
     const handlePress = () => {
+      if (type === 'answer') {
+        seedAnswerPreviewEntry(queryClient, { ...item, type });
+      }
       if (onPress) {
         onPress();
         return;
       }
-      if (excerpt !== undefined) {
-        const cleanTitle = (value: unknown) => {
-          if (typeof value === 'string') return value;
-          if (item.titleString) return item.titleString;
-          if (item.question?.titleString) return item.question.titleString;
-          return '';
-        };
-        if (type === 'video') {
-          router.push({
-            pathname: '/video/[id]',
-            params: { id: item.id, title: cleanTitle(item.title) },
-          });
-        } else {
-          router.push({
-            pathname: `/${type}/[id]`,
-            params: {
-              id: item.id,
-              title: cleanTitle(item.title || item.question?.title),
-              questionId: item.question?.id,
-            },
-          });
-        }
-        return;
+      const cleanTitle = (value: unknown) => {
+        if (typeof value === 'string') return value;
+        if (item.titleString) return item.titleString;
+        if (item.question?.titleString) return item.question.titleString;
+        return '';
+      };
+      if (type === 'video') {
+        router.push({
+          pathname: '/video/[id]',
+          params: { id: item.id, title: cleanTitle(item.title) },
+        });
+      } else {
+        router.push({
+          pathname: `/${type}/[id]`,
+          params: {
+            id: item.id,
+            title: cleanTitle(item.title || item.question?.title),
+            questionId: item.question?.id,
+            ...(type === 'answer' ? getAnswerReadingRouteParams() : {}),
+          },
+        });
       }
-      if (type === 'answer' || type === 'article' || type === 'pin') {
-        setExpanded(!expanded);
-        return;
-      }
-    };
-
-    const getFullContent = () => {
-      if (!item) return '';
-      if (type === 'pin' && Array.isArray(item.content)) {
-        return item.content
-          .map((segment) => {
-            if (segment.type === 'text') return segment.content;
-            if (segment.type === 'link_card')
-              return `[链接: ${segment.data_draft_title || '查看详情'}]`;
-            return '';
-          })
-          .join('\n')
-          .replace(/<[^>]+>/g, '');
-      }
-      const content = item.content || item.excerpt || '';
-      if (typeof content === 'string') {
-        return content.replace(/<[^>]+>/g, '');
-      }
-      return '';
     };
 
     const getExcerpt = () => {
@@ -201,7 +158,7 @@ export const CreationCard = React.forwardRef<
         if (Array.isArray(item.content)) {
           return item.content
             .filter((segment) => segment.type === 'text')
-            .map((segment) => segment.content)
+            .map((segment) => segment.content || segment.own_text || '')
             .join('')
             .replace(/<[^>]+>/g, '')
             .substring(0, 100);
@@ -224,14 +181,6 @@ export const CreationCard = React.forwardRef<
       return item.title || item.question?.title || '未知内容';
     };
 
-    const fullText = getFullContent();
-    const isLongContent =
-      excerpt === undefined &&
-      (type === 'answer' || type === 'article' || type === 'pin') &&
-      (fullText.length > 120 ||
-        (typeof item.content === 'string' &&
-          (item.content.includes('<img') || item.content.includes('<figure'))));
-
     const displayTypeForShare: ShareContentType = type;
     const timestamp =
       item.updated_time ?? item.updated ?? item.created_time ?? item.created;
@@ -245,149 +194,30 @@ export const CreationCard = React.forwardRef<
             backgroundColor: cardBackground,
             borderRadius: 12,
             borderWidth: 1.5,
-            borderColor: isCollapsedHighlighted ? primaryColor : 'transparent',
+            borderColor: 'transparent',
           },
         ]}
         className="p-4 mb-2.5"
       >
-        <BouncyButton
-          onPress={() => {
-            if (type === 'answer' && item.question?.id) {
-              router.push(`/question/${item.question.id}`);
-            } else if (type === 'question') {
-              router.push(`/question/${item.id}`);
-            } else {
-              handlePress();
-            }
-          }}
+        <Animated.View
+          sharedTransitionTag={`title-${item.question?.id || item.id}`}
         >
-          <Animated.View
-            sharedTransitionTag={`title-${item.question?.id || item.id}`}
+          <Text
+            className="text-lg font-bold mb-1.5 leading-6 text-foreground dark:text-foreground-dark"
+            numberOfLines={2}
           >
-            <Text
-              className="text-lg font-bold mb-1.5 leading-6 text-foreground dark:text-foreground-dark"
-              numberOfLines={expanded ? undefined : 2}
-            >
-              {getTitle()}
-            </Text>
-          </Animated.View>
-        </BouncyButton>
-
-        <View className="bg-transparent mt-1">
-          {expanded &&
-          (type === 'answer' || type === 'article' || type === 'pin') ? (
-            <View className="flex-1 bg-transparent mt-1">
-              <ZhihuContent
-                objectId={item.id?.toString()}
-                type={type === 'pin' ? 'pin' : type}
-                content={
-                  typeof item.content === 'string' ? item.content : undefined
-                }
-                contentArray={
-                  type === 'pin' && Array.isArray(item.content)
-                    ? item.content
-                    : undefined
-                }
-                linkCardInfo={item.link_card_info}
-                useNative={true}
-              />
-              <BouncyButton
-                onPress={() => setExpanded(false)}
-                className="mt-3 py-2.5 flex-row items-center justify-center border-t border-gray-100 dark:border-gray-800"
-              >
-                <Text
-                  className="text-sm font-bold mr-1"
-                  style={{ color: primaryColor }}
-                >
-                  收起
-                  {type === 'answer'
-                    ? '回答'
-                    : type === 'article'
-                      ? '文章'
-                      : '想法'}
-                </Text>
-                <Ionicons name="chevron-up" size={14} color={primaryColor} />
-              </BouncyButton>
-            </View>
-          ) : type === 'answer' || type === 'article' || type === 'pin' ? (
-            isLongContent ? (
-              <Pressable
-                onPress={() => setExpanded(true)}
-                style={{ maxHeight: 150, overflow: 'hidden' }}
-                className="flex-1"
-              >
-                <Text
-                  type="secondary"
-                  className="text-[17px]"
-                  style={{ lineHeight: 27 }}
-                  numberOfLines={5}
-                >
-                  {getExcerpt()}
-                </Text>
-                <Pressable
-                  onPress={() => setExpanded(true)}
-                  className="absolute inset-x-0 bottom-0 h-24 z-[100]"
-                >
-                  <LinearGradient
-                    colors={[`${cardBackground}00`, cardBackground]}
-                    style={{
-                      position: 'absolute',
-                      left: 0,
-                      right: 0,
-                      top: 0,
-                      bottom: 0,
-                      justifyContent: 'flex-end',
-                      alignItems: 'center',
-                      paddingBottom: 10,
-                    }}
-                  >
-                    <View className="flex-row items-center justify-center bg-transparent">
-                      <Text
-                        type="primary"
-                        className="text-[13px] font-bold mr-1"
-                        style={{ color: primaryColor }}
-                      >
-                        展开全文
-                      </Text>
-                      <Ionicons
-                        name="chevron-down"
-                        size={14}
-                        color={primaryColor}
-                      />
-                    </View>
-                  </LinearGradient>
-                </Pressable>
-              </Pressable>
-            ) : (
-              <View className="flex-1 bg-transparent">
-                <ZhihuContent
-                  objectId={item.id?.toString()}
-                  type={type === 'pin' ? 'pin' : type}
-                  content={
-                    typeof item.content === 'string' ? item.content : undefined
-                  }
-                  contentArray={
-                    type === 'pin' && Array.isArray(item.content)
-                      ? item.content
-                      : undefined
-                  }
-                  linkCardInfo={item.link_card_info}
-                  useNative={true}
-                />
-              </View>
-            )
-          ) : (
-            <View className="bg-transparent">
-              <Text
-                type="secondary"
-                className="text-[17px]"
-                style={{ lineHeight: 27 }}
-                numberOfLines={3}
-              >
-                {getExcerpt()}
-              </Text>
-            </View>
-          )}
+            {getTitle()}
+          </Text>
+        </Animated.View>
+        <View className="bg-transparent mt-1" pointerEvents="none">
+          <Text
+            type="secondary"
+            className="text-[17px]"
+            style={{ lineHeight: 27 }}
+            numberOfLines={3}
+          >
+            {getExcerpt()}
+          </Text>
         </View>
 
         <NativeView

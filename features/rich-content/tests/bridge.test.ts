@@ -19,6 +19,11 @@ const validMessages: RichContentBridgeMessage[] = [
   { type: 'image_long_press', src: 'https://example.com/image.png' },
   { type: 'link', href: '/question/1' },
   { type: 'segment', pid: 'paragraph-one' },
+  {
+    type: 'segment',
+    pid: 'paragraph-one',
+    nodeId: 'paragraph-one:segment:2:17',
+  },
   { type: 'selection', info: selection },
   { type: 'selection', info: null },
 ];
@@ -79,6 +84,10 @@ test.each([
   { type: 'link', href: '\n' },
   { type: 'segment', pid: null },
   { type: 'segment', pid: '' },
+  { type: 'segment', pid: 'paragraph-one', nodeId: null },
+  { type: 'segment', pid: 'paragraph-one', nodeId: '' },
+  { type: 'segment', pid: 'paragraph-one', nodeId: '  ' },
+  { type: 'segment', pid: 'paragraph-one', nodeId: 1 },
   { type: 'selection' },
   { type: 'selection', info: [] },
   { type: 'selection', info: {} },

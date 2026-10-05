@@ -57,13 +57,8 @@ const CONTENT_RENDERER_OPTIONS: readonly {
   description: string;
 }[] = [
   {
-    value: 'rnrh',
-    label: '经典排版',
-    description: '保持现有阅读体验，适用于多数正文。',
-  },
-  {
     value: 'native-v2',
-    label: '原生排版（实验）',
+    label: 'tiqian-super-mini（默认）',
     description: 'tiqian super mini 版；更好的公式、图片、划线...的中文排版。',
   },
   {
@@ -85,6 +80,7 @@ export default function AppearanceSettings() {
     textContrast,
     surfaceStyle,
     richContentRenderer,
+    answerReadingMode,
     updateSettings,
   } = useSettingsStore();
 
@@ -201,6 +197,56 @@ export default function AppearanceSettings() {
               </BouncyButton>
             );
           })}
+        </Section>
+
+        <Section title="回答阅读方式" colorScheme={colorScheme}>
+          {(
+            [
+              {
+                value: 'detail',
+                label: '回答详情',
+                description: '点击卡片后进入回答详情，左右滑动切换回答。',
+              },
+              {
+                value: 'preview-list',
+                label: '预览卡片列表',
+                description:
+                  '点击卡片后进入回答预览列表，按正文分段展开或收起。',
+              },
+            ] as const
+          ).map((option) => (
+            <BouncyButton
+              key={option.value}
+              onPress={() =>
+                updateSettings({ answerReadingMode: option.value })
+              }
+              accessibilityRole="radio"
+              accessibilityState={{
+                checked: answerReadingMode === option.value,
+              }}
+              style={styles.rendererOptionRow}
+            >
+              <Ionicons
+                name={
+                  answerReadingMode === option.value
+                    ? 'radio-button-on'
+                    : 'radio-button-off'
+                }
+                size={22}
+                color={
+                  answerReadingMode === option.value
+                    ? tintColor
+                    : Colors[colorScheme].textSecondary
+                }
+              />
+              <RNView style={styles.rendererOptionCopy}>
+                <Text style={styles.rendererOptionLabel}>{option.label}</Text>
+                <Text type="secondary" style={styles.routeDescription}>
+                  {option.description}
+                </Text>
+              </RNView>
+            </BouncyButton>
+          ))}
         </Section>
 
         {/* 1. 字体风格 */}

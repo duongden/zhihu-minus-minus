@@ -1,0 +1,650 @@
+{
+  "source": "capture-derived",
+  "paging": {
+    "is_end": false,
+    "is_start": false,
+    "next": "https://api.zhihu.com/next-render?collection_id=synthetic-question-001&collection_type=question&context_expand=0&id=synthetic-answer-001&is_native=1&limit=5&page_id=synthetic-page-002&question_feed_cursor=synthetic-cursor-002&question_feed_session_id=synthetic-question-session-001&scenes=question_feed&session_id=synthetic-session-001&type=answer",
+    "previous": "",
+    "totals": 0
+  },
+  "data": [
+    {
+      "id": "synthetic-answer-001",
+      "type": "answer",
+      "question": {
+        "id": "synthetic-question-001",
+        "title": "合成问题"
+      },
+      "author": {
+        "id": "synthetic-author-001",
+        "fullname": "合成作者1",
+        "url_token": "synthetic-author-001",
+        "avatar": {
+          "avatar_image": {
+            "day": "https://example.com/synthetic-avatar-001.png",
+            "night": "https://example.com/synthetic-avatar-001.png"
+          }
+        },
+        "description": "合成简介"
+      },
+      "is_mine": false,
+      "reaction": {
+        "statistics": {
+          "up_vote_count": 0,
+          "comment_count": 0,
+          "favorites": 0
+        },
+        "relation": {
+          "is_author": false,
+          "faved": false,
+          "vote": "none"
+        }
+      },
+      "excerpt": "合成摘要1",
+      "structured_content": {
+        "paging": "{\"is_end\":true,\"next\":\"https://api.zhihu.com/next-content-render?offset=10001&url_token=synthetic-answer-001&content_type=answer&version_id=synthetic-version-001\",\"is_start\":true,\"previous\":\"https://api.zhihu.com/next-content-render?offset=10000&url_token=synthetic-answer-001&content_type=answer&version_id=synthetic-version-001\",\"totals\":0}",
+        "segments": [
+          {
+            "id": "synthetic-segment-001-001",
+            "paragraph": {
+              "marks": [
+                {
+                  "end_index": 44,
+                  "start_index": 0,
+                  "type": "seg_like",
+                  "seg_like": {
+                    "comment_count": 0,
+                    "count": 10,
+                    "is_like": false,
+                    "is_span": false,
+                    "my_comment_count": 0,
+                    "seg_ids": ["synthetic-reaction-001"]
+                  }
+                }
+              ],
+              "pid": "synthetic-paragraph-001-001",
+              "text": "文文文文文文文文文文文，文文文文文🌿🌿🌿文文文文文文文文文文文文文🌿🌿🌿🌿"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-001-002",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-001-002",
+              "text": "文文文文文文文文，文文文文文文文文文，文文文文文文文文文文文文文文文文文文，文文文文文文文文文，文文文文文文文文，文文文文文文文文文文文文文，文文文文，文文文文文文文文文文文文文文文文文文，文文文文文文文文文，文文文文文文！文文文文文文文文文文文“文，文文文文文文文文文文文？文文文文文文文？” 文文文文文文文文文文文文文文，文文文文文文，文文文文文文文文文文文文文文文文文文，文文文文文文文文文文文文文文文文文文文文文文。。。。"
+            },
+            "type": "paragraph"
+          }
+        ]
+      }
+    },
+    {
+      "id": "synthetic-answer-002",
+      "type": "answer",
+      "question": {
+        "id": "synthetic-question-001",
+        "title": "合成问题"
+      },
+      "author": {
+        "id": "synthetic-author-002",
+        "fullname": "合成作者2",
+        "url_token": "synthetic-author-002",
+        "avatar": {
+          "avatar_image": {
+            "day": "https://example.com/synthetic-avatar-002.png",
+            "night": "https://example.com/synthetic-avatar-002.png"
+          }
+        },
+        "description": "合成简介"
+      },
+      "is_mine": false,
+      "reaction": {
+        "statistics": {
+          "up_vote_count": 0,
+          "comment_count": 0,
+          "favorites": 0
+        },
+        "relation": {
+          "is_author": false,
+          "faved": false,
+          "vote": "none"
+        }
+      },
+      "excerpt": "合成摘要2",
+      "structured_content": {
+        "paging": "{\"is_end\":true,\"next\":\"https://api.zhihu.com/next-content-render?offset=10003&url_token=synthetic-answer-002&content_type=answer&version_id=synthetic-version-002\",\"is_start\":true,\"previous\":\"https://api.zhihu.com/next-content-render?offset=10002&url_token=synthetic-answer-002&content_type=answer&version_id=synthetic-version-002\",\"totals\":0}",
+        "segments": [
+          {
+            "id": "synthetic-segment-002-001",
+            "paragraph": {
+              "marks": [
+                {
+                  "end_index": 19,
+                  "start_index": 0,
+                  "type": "seg_like",
+                  "seg_like": {
+                    "comment_count": 0,
+                    "count": 6,
+                    "is_like": false,
+                    "is_span": false,
+                    "my_comment_count": 0,
+                    "seg_ids": ["synthetic-reaction-002"]
+                  }
+                }
+              ],
+              "pid": "synthetic-paragraph-002-001",
+              "text": "文文文文文文文文文。文文文文文文文文。"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-002-002",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-002-002",
+              "text": "文文文文文文文文文，文文文文文文文，文文文文文。"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-002-003",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-002-003",
+              "text": "文文文文文文文文文文文文文文文，文文文文文文文，文文文文文文，文文文文文文文文文文文，文文文。"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-002-004",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-002-004",
+              "text": "文文文文文文文文文文文文，文文文文文文文文文文文文文文，文文文文文，文文文文文文文，文文文文文文文文文文。"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-002-005",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-002-005",
+              "text": "文文文文文，文文文文文文文文文文，文文文文文文文；文文文文文，文文文文文文文文文文文。文文文文文文文文文，文文文文文文文文？"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-002-006",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-002-006",
+              "text": "文文文文文文，文文文文文文文文，文文文文文文文文文文文文文文。文文文文文文文文文文文文文文，文文文文文文文文文文文。"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-002-007",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-002-007",
+              "text": "文文文文文文文文文文文文文文文文文文文文文文文文，文文文文文，文文文文文文文文。"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-002-008",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-002-008",
+              "text": "文文文文，文文文文文文文文，文文文文文。文文文文文文文文文文，文文文文文文？"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-002-009",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-002-009",
+              "text": "文文文文文文文文文文文文文文文文文。文文文文，文文文文文文文文文。"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-002-010",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-002-010",
+              "text": "文文文文文文文文文文文文，文文文文文文文文文文文文文文文文文文。文文文文文文文文文，文文文文文文文文文文文，文文文文？"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-002-011",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-002-011",
+              "text": "文文文，文文文文文文文文文文文文文文文。文文文文文文文文文文文文，文文文文文文文文文。文文文文文文文文文文，文文文文。文文文文文，文文文。"
+            },
+            "type": "paragraph"
+          }
+        ]
+      }
+    },
+    {
+      "id": "synthetic-answer-003",
+      "type": "answer",
+      "question": {
+        "id": "synthetic-question-001",
+        "title": "合成问题"
+      },
+      "author": {
+        "id": "synthetic-author-003",
+        "fullname": "合成作者3",
+        "url_token": "synthetic-author-003",
+        "avatar": {
+          "avatar_image": {
+            "day": "https://example.com/synthetic-avatar-003.png",
+            "night": "https://example.com/synthetic-avatar-003.png"
+          }
+        },
+        "description": "合成简介"
+      },
+      "is_mine": false,
+      "reaction": {
+        "statistics": {
+          "up_vote_count": 0,
+          "comment_count": 0,
+          "favorites": 0
+        },
+        "relation": {
+          "is_author": false,
+          "faved": false,
+          "vote": "none"
+        }
+      },
+      "excerpt": "合成摘要3",
+      "structured_content": {
+        "paging": "{\"is_end\":true,\"next\":\"https://api.zhihu.com/next-content-render?offset=10005&url_token=synthetic-answer-003&content_type=answer&version_id=synthetic-version-003\",\"is_start\":true,\"previous\":\"https://api.zhihu.com/next-content-render?offset=10004&url_token=synthetic-answer-003&content_type=answer&version_id=synthetic-version-003\",\"totals\":0}",
+        "segments": [
+          {
+            "id": "synthetic-segment-003-001",
+            "paragraph": {
+              "marks": [
+                {
+                  "end_index": 55,
+                  "start_index": 1,
+                  "type": "seg_like",
+                  "seg_like": {
+                    "comment_count": 0,
+                    "count": 15,
+                    "is_like": false,
+                    "is_span": false,
+                    "my_comment_count": 0,
+                    "seg_ids": ["synthetic-reaction-003"]
+                  }
+                }
+              ],
+              "pid": "synthetic-paragraph-003-001",
+              "text": " 文文文文文文文，文文文文文文，文文文文文。文文文文文，文文文文文文文文文文，文文文文文文文文文文，文文文文。"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-003-002",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-003-002",
+              "text": " 文文文文文文文文“文文文文”文文文文文文文文文文文文文，文文文文文文文文文“文文文文文文”文文文文文文文文文文文文文文文。文文文文文文，文文文文文文文文文，文文，文文文文文文文文文文，文文文文文文文文文文文文文文文文，文文文文文文文文。文文文文文文，文文文文文文文文文文，文文文文文文文文文文文文文文文文文文？"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-003-003",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-003-003",
+              "text": " 文文文文文文文文文文，文文文文文文文文文文文文文文文文文文文文文，文文文文文文文文文文文文文文文文。文文文文文文文文文文文文，文文文文文文文文文文文文文文文。文文文文文文文文文文文文文文文文文文文文文文文文文文文，文文文文xx文文文文文文文。文文文文文文文文文，文文文文文文文文文文文文文文文。文文，文文文文文文文文，文文文文文文文文文，文文文文文文文。文文文文文文文文文文文文文文，文文文文。"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-003-004",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-003-004",
+              "text": " 文文文文文文文文《文文文文文文文文文（文文）》，文文文文文文文文文文文文文文文文文文文文，文文、文文文文文文文，文文文文文文文文文文文文。文文文文文文文（文）文文文文文，文文文文文文文文文、文文文文文文文文文，文文文文文文、文文文文文文文文文文文文文文文文文文文文。《文文》文文文文文文文文文文文，文文文文文文文文文、文文文文文文文，文文文文文文文文文，文文文文文文文，文文文文文文文文文。"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-003-005",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-003-005",
+              "text": " 文文文文文文文文文文文，文文文文文文文文文文文文文文文。文文文文文文文文文文文，文文文文文文文文文文文文文文文文文文文文文文文。文文文文，文文文文。文文文文，文文文文文文文，文文文文文文文文文。文文文文文文文文，文文文文文文文文。文文文文文文，文文文文文文文文。文文文文文文文文文文文文文，文文文文文文文文文文文文。"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-003-006",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-003-006",
+              "text": " 文文文文文文文文文文文文文文文文文。文文文文文，文文文文文文文文文文文文文文文文文，文文文文文文文文文文。文文文xxx文文，文文文文文文文文文文文文文文文。文文文文文，文文文文文文文文文文文文文文文文文，文文文文文文文，文文文文文文文文文。"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-003-007",
+            "paragraph": {
+              "marks": [
+                {
+                  "end_index": 118,
+                  "start_index": 0,
+                  "type": "seg_like",
+                  "seg_like": {
+                    "comment_count": 0,
+                    "count": 3,
+                    "is_like": false,
+                    "is_span": false,
+                    "my_comment_count": 0,
+                    "seg_ids": ["synthetic-reaction-004"]
+                  }
+                }
+              ],
+              "pid": "synthetic-paragraph-003-007",
+              "text": " 文文文文文文文文文文文文文文文文文文，文文文文文文文文文文文文，文“文文文文文文文文文文文文文文文文，文文文文，文文文文文文文文文文文。”文文文文文文文文文文，文文文文文文文文文文文文文文文，文文文文文文文文文文文文文文文文文文文文。"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-003-008",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-003-008",
+              "text": " 文文文文文文文文文，文文文文文文文文文，文文文文文文文文文文。"
+            },
+            "type": "paragraph"
+          }
+        ]
+      }
+    },
+    {
+      "id": "synthetic-answer-004",
+      "type": "answer",
+      "question": {
+        "id": "synthetic-question-001",
+        "title": "合成问题"
+      },
+      "author": {
+        "id": "synthetic-author-004",
+        "fullname": "合成作者4",
+        "url_token": "synthetic-author-004",
+        "avatar": {
+          "avatar_image": {
+            "day": "https://example.com/synthetic-avatar-004.png",
+            "night": "https://example.com/synthetic-avatar-004.png"
+          }
+        },
+        "description": "合成简介"
+      },
+      "is_mine": false,
+      "reaction": {
+        "statistics": {
+          "up_vote_count": 0,
+          "comment_count": 0,
+          "favorites": 0
+        },
+        "relation": {
+          "is_author": false,
+          "faved": false,
+          "vote": "none"
+        }
+      },
+      "excerpt": "合成摘要4",
+      "structured_content": {
+        "paging": "{\"is_end\":true,\"next\":\"https://api.zhihu.com/next-content-render?offset=10007&url_token=synthetic-answer-004&content_type=answer&version_id=synthetic-version-004\",\"is_start\":true,\"previous\":\"https://api.zhihu.com/next-content-render?offset=10006&url_token=synthetic-answer-004&content_type=answer&version_id=synthetic-version-004\",\"totals\":0}",
+        "segments": [
+          {
+            "id": "synthetic-segment-004-001",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-004-001",
+              "text": "文文文文文文文文文文："
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-004-002",
+            "paragraph": {
+              "marks": [
+                {
+                  "end_index": 22,
+                  "start_index": 0,
+                  "type": "bold"
+                }
+              ],
+              "pid": "synthetic-paragraph-004-002",
+              "text": "文文，文文文《文文文》文文文文文文文文文文。"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-004-003",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-004-003",
+              "text": "文文文文，《文文文》文文文文文文文文文：“文文文文文文，文文文文文文，文文文、文文文文文文文文文文文文文文文文文文文文；文文文文，文文文文文，文文文文文文文文。”"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-004-004",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-004-004",
+              "text": "文文文文文文，文文《文文文》文文文文文文文文文文文文文文，文文文文文文文文文“文文文文文文”文文，文文文文文文文文，文文文文文文文文文文，文文文文文文文文。文文《文文文》文文文文文文文文文文文文文文文文文文文文文文文，文文文文文文文文文文文，文文文文文文文文文文文文文文文文文，文文文文文文，文文文“文文文文文文”文文文文文文。"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-004-005",
+            "paragraph": {
+              "marks": [
+                {
+                  "end_index": 57,
+                  "start_index": 0,
+                  "type": "bold"
+                }
+              ],
+              "pid": "synthetic-paragraph-004-005",
+              "text": "文文文文文文文文，文文《文文文》文文文文文文文文，文文文文文文文文文文文文文文文文文文，文文文文文文文文文文文文。"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-004-006",
+            "paragraph": {
+              "marks": [
+                {
+                  "end_index": 17,
+                  "start_index": 0,
+                  "type": "bold"
+                }
+              ],
+              "pid": "synthetic-paragraph-004-006",
+              "text": "文文，文文文文文文文“文文文文”。"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-004-007",
+            "paragraph": {
+              "marks": [
+                {
+                  "end_index": 114,
+                  "start_index": 23,
+                  "type": "bold"
+                }
+              ],
+              "pid": "synthetic-paragraph-004-007",
+              "text": "文文文文文文文文文文“文文文文”文？文文文文。文文文文文文文文文文，文文文文文文文文文文文文文文文文。文文文文文，文文文文文，文文文文文文文文文文文文文文文文文文文文文文文文文文文文文文，文文文文文，文文文文文文文文文文文文文。"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-004-008",
+            "paragraph": {
+              "marks": [
+                {
+                  "end_index": 51,
+                  "start_index": 0,
+                  "type": "bold"
+                }
+              ],
+              "pid": "synthetic-paragraph-004-008",
+              "text": "文文，文文文文文文文文文文文，文文文文文文文文文文文文文文文文，文文文文文文文文文文文文文文文文文文。"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-004-009",
+            "paragraph": {
+              "marks": [
+                {
+                  "end_index": 67,
+                  "start_index": 25,
+                  "type": "bold"
+                }
+              ],
+              "pid": "synthetic-paragraph-004-009",
+              "text": "“文文文文文”文文文文文“文文文文文文文文文文”。文文文文文文文文文文文文文文文，文文文文文文，文文文文文文文文文文文文文文文文文文。"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-004-010",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-004-010",
+              "text": "文文文文文文，文文文文文文文文文，文文文文文文文文文文文。"
+            },
+            "type": "paragraph"
+          }
+        ]
+      }
+    },
+    {
+      "id": "synthetic-answer-005",
+      "type": "answer",
+      "question": {
+        "id": "synthetic-question-001",
+        "title": "合成问题"
+      },
+      "author": {
+        "id": "synthetic-author-005",
+        "fullname": "合成作者5",
+        "url_token": "synthetic-author-005",
+        "avatar": {
+          "avatar_image": {
+            "day": "https://example.com/synthetic-avatar-005.png",
+            "night": "https://example.com/synthetic-avatar-005.png"
+          }
+        },
+        "description": "合成简介"
+      },
+      "is_mine": false,
+      "reaction": {
+        "statistics": {
+          "up_vote_count": 0,
+          "comment_count": 0,
+          "favorites": 0
+        },
+        "relation": {
+          "is_author": false,
+          "faved": false,
+          "vote": "none"
+        }
+      },
+      "excerpt": "合成摘要5",
+      "structured_content": {
+        "paging": "{\"is_end\":true,\"next\":\"https://api.zhihu.com/next-content-render?offset=10009&url_token=synthetic-answer-005&content_type=answer&version_id=synthetic-version-005\",\"is_start\":true,\"previous\":\"https://api.zhihu.com/next-content-render?offset=10008&url_token=synthetic-answer-005&content_type=answer&version_id=synthetic-version-005\",\"totals\":0}",
+        "segments": [
+          {
+            "id": "synthetic-segment-005-001",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-005-001",
+              "text": "文文文文文文文文"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-005-002",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-005-002",
+              "text": "文文文文文文文文文文文文文"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-005-003",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-005-003",
+              "text": "文文文文 文文文文文文文文文文 文文文文文文文文文文文 "
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-005-004",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-005-004",
+              "text": "文文文文文文文"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-005-005",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-005-005",
+              "text": "文文文文文文文文文文 文文文文"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-005-006",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-005-006",
+              "text": "文文文文文文文文"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-005-007",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-005-007",
+              "text": "文文文"
+            },
+            "type": "paragraph"
+          },
+          {
+            "id": "synthetic-segment-005-008",
+            "paragraph": {
+              "marks": [],
+              "pid": "synthetic-paragraph-005-008",
+              "text": "文文文文文文文 文文文文文文文文文文文 文文文文文"
+            },
+            "type": "paragraph"
+          }
+        ]
+      }
+    }
+  ]
+}

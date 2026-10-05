@@ -10,6 +10,7 @@ import Colors from '@/constants/Colors';
 import {
   type RichContentRenderer,
   ZhihuContent,
+  ZhihuStructuredContent,
 } from '@/features/rich-content';
 import { getRichContentDevFixture } from '@/features/rich-content/dev/fixtures';
 import { useSettingsStore } from '@/store/useSettingsStore';
@@ -68,14 +69,9 @@ export default function RichContentFixtureDetailScreen() {
     );
   }
 
-  const usesStructuredPinContent = Boolean(fixture.contentArray);
-  const rendererLabel = usesStructuredPinContent
-    ? 'Pin 结构化内容'
-    : renderer === 'webview'
-      ? 'WebView / DOM'
-      : renderer === 'native-v2'
-        ? 'tiqian-super-mini'
-        : 'RNRH';
+  const webviewLabel = fixture.structuredContent ? 'JSON 分段' : 'WebView';
+  const rendererLabel =
+    renderer === 'webview' ? webviewLabel : 'tiqian-super-mini';
 
   return (
     <RNView style={[styles.screen, { backgroundColor }]}>
@@ -93,7 +89,9 @@ export default function RichContentFixtureDetailScreen() {
             {fixture.sourceType} · {fixture.contentPath}
           </Text>
           <Text type="secondary" style={styles.meta}>
-            {fixture.segmentInfos?.length ?? 0} 条 segment_infos
+            {fixture.structuredContent
+              ? `${fixture.structuredContent.segments.length} 条 JSON 分段`
+              : `${fixture.segmentInfos?.length ?? 0} 条 segment_infos`}
           </Text>
           <Text type="secondary" style={styles.meta}>
             {fixture.traits.join(' · ')}
@@ -111,32 +109,10 @@ export default function RichContentFixtureDetailScreen() {
               </Text>
               <RNView style={styles.rendererButtons}>
                 <BouncyButton
-                  onPress={() => selectRenderer('rnrh')}
-                  disabled={usesStructuredPinContent}
-                  style={[
-                    styles.rendererButton,
-                    renderer === 'rnrh' && !usesStructuredPinContent
-                      ? { backgroundColor: primaryColor }
-                      : { borderColor },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.rendererButtonText,
-                      renderer === 'rnrh' && !usesStructuredPinContent
-                        ? { color: onPrimary }
-                        : undefined,
-                    ]}
-                  >
-                    RNRH
-                  </Text>
-                </BouncyButton>
-                <BouncyButton
                   onPress={() => selectRenderer('webview')}
-                  disabled={usesStructuredPinContent}
                   style={[
                     styles.rendererButton,
-                    renderer === 'webview' && !usesStructuredPinContent
+                    renderer === 'webview'
                       ? { backgroundColor: primaryColor }
                       : { borderColor },
                   ]}
@@ -144,20 +120,17 @@ export default function RichContentFixtureDetailScreen() {
                   <Text
                     style={[
                       styles.rendererButtonText,
-                      renderer === 'webview' && !usesStructuredPinContent
-                        ? { color: onPrimary }
-                        : undefined,
+                      renderer === 'webview' ? { color: onPrimary } : undefined,
                     ]}
                   >
-                    WebView
+                    {webviewLabel}
                   </Text>
                 </BouncyButton>
                 <BouncyButton
                   onPress={() => selectRenderer('native-v2')}
-                  disabled={usesStructuredPinContent}
                   style={[
                     styles.rendererButton,
-                    renderer === 'native-v2' && !usesStructuredPinContent
+                    renderer === 'native-v2'
                       ? { backgroundColor: primaryColor }
                       : { borderColor },
                   ]}
@@ -165,7 +138,7 @@ export default function RichContentFixtureDetailScreen() {
                   <Text
                     style={[
                       styles.rendererButtonText,
-                      renderer === 'native-v2' && !usesStructuredPinContent
+                      renderer === 'native-v2'
                         ? { color: onPrimary }
                         : undefined,
                     ]}
@@ -224,18 +197,28 @@ export default function RichContentFixtureDetailScreen() {
           pointerEvents={interactionsEnabled ? 'auto' : 'none'}
           style={styles.content}
         >
-          <ZhihuContent
-            key={`${fixture.id}:${rendererLabel}:${mountIndex}`}
-            content={fixture.content}
-            contentArray={fixture.contentArray}
-            segmentInfos={fixture.segmentInfos}
-            linkCardInfo={fixture.linkCardInfo}
-            objectId={fixture.objectId}
-            type={fixture.rendererType}
-            renderer={renderer}
-            selectable={interactionsEnabled}
-            variant={fixture.variant}
-          />
+          {fixture.structuredContent ? (
+            <ZhihuStructuredContent
+              key={`${fixture.id}:${rendererLabel}:${mountIndex}`}
+              content={fixture.structuredContent}
+              documentId={`fixture:${fixture.id}`}
+              renderer={renderer === 'webview' ? 'blocks' : 'native-v2'}
+              selectable={interactionsEnabled}
+            />
+          ) : (
+            <ZhihuContent
+              key={`${fixture.id}:${rendererLabel}:${mountIndex}`}
+              content={fixture.content}
+              contentArray={fixture.contentArray}
+              segmentInfos={fixture.segmentInfos}
+              linkCardInfo={fixture.linkCardInfo}
+              objectId={fixture.objectId}
+              type={fixture.rendererType}
+              renderer={renderer}
+              selectable={interactionsEnabled}
+              variant={fixture.variant}
+            />
+          )}
         </RNView>
       </ScrollView>
     </RNView>

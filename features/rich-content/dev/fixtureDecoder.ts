@@ -1,5 +1,10 @@
-import type { ZhihuContentSegment, ZhihuSegmentInfo } from '@/types/zhihu';
+import type {
+  ZhihuContentSegment,
+  ZhihuSegmentInfo,
+  ZhihuStructuredContent,
+} from '@/types/zhihu';
 import type { RichContentVariant } from '../imagePolicy';
+import { parseZhihuStructuredContent } from '../structuredContent';
 import type { RichContentObjectType } from '../types';
 
 type JsonRecord = Record<string, unknown>;
@@ -20,6 +25,7 @@ export type RichContentFixtureSummary = FixtureManifestCase;
 export interface RichContentDevFixture extends RichContentFixtureSummary {
   content: string;
   contentArray?: ZhihuContentSegment[];
+  structuredContent?: ZhihuStructuredContent;
   linkCardInfo?: JsonRecord;
   objectId: string;
   rendererType: RichContentObjectType;
@@ -262,6 +268,19 @@ export function decodeRichContentDevFixture(
   if (!root) throw new Error(`fixture must be a JSON object: ${summary.file}`);
 
   const content = getPath(root, summary.contentPath);
+  if (summary.sourceType === 'structured_content') {
+    const parentPath = summary.contentPath.split('.').slice(0, -1).join('.');
+    const entity = (parentPath && asRecord(getPath(root, parentPath))) || root;
+    return {
+      ...summary,
+      content: '',
+      structuredContent: parseZhihuStructuredContent(content),
+      objectId: getObjectId(entity, summary.id),
+      rendererType: 'answer',
+      variant: 'default',
+      title: getFixtureTitle(root, entity),
+    };
+  }
   if (typeof content !== 'string') {
     throw new Error(
       `fixture contentPath must resolve to a string: ${summary.contentPath}`,

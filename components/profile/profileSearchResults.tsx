@@ -4,12 +4,95 @@ import {
   getContentVoteState,
   type ZhihuMember,
 } from '@/api/zhihu';
+import type { FeedContentSegment } from '@/api/zhihu/feed';
 import { Text } from '@/components/Themed';
 import type {
   ZhihuSearchResultItem,
   ZhihuSearchResultObject,
 } from '@/types/zhihu';
 import { normalizeUserFeedType } from '@/utils/userProfile';
+
+function record(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+/** Only complete, validated inline bodies may prewarm the detail cache. */
+export function getProfileFeedBody(
+  value: unknown,
+): Pick<FeedItem, 'content' | 'answerType' | 'contentNeedTruncated'> {
+  const source = record(value);
+  if (!source) return {};
+  let content: FeedItem['content'];
+  if (typeof source.content === 'string') content = source.content;
+  else if (Array.isArray(source.content)) {
+    const segments: FeedContentSegment[] = [];
+    for (const value of source.content) {
+      const segment = record(value);
+      if (
+        !segment ||
+        (segment.type !== 'text' &&
+          segment.type !== 'image' &&
+          segment.type !== 'link_card')
+      )
+        break;
+      const parsed: FeedContentSegment = { type: segment.type };
+      let valid = true;
+      for (const key of [
+        'content',
+        'own_text',
+        'fold_type',
+        'text_link_type',
+        'title',
+        'data_content_id',
+        'data_content_type',
+        'url',
+        'data_draft_title',
+        'data_draft_cover',
+        'thumbnail',
+      ] as const) {
+        const field = segment[key];
+        if (field !== undefined && typeof field !== 'string') {
+          valid = false;
+          break;
+        }
+        if (typeof field === 'string') parsed[key] = field;
+      }
+      if (!valid) break;
+      for (const key of ['width', 'height'] as const) {
+        const field = segment[key];
+        if (
+          field !== undefined &&
+          (typeof field !== 'number' || !Number.isFinite(field) || field < 0)
+        ) {
+          valid = false;
+          break;
+        }
+        if (typeof field === 'number') parsed[key] = field;
+      }
+      if (!valid) break;
+      segments.push(parsed);
+    }
+    // Never silently seed a partial body after an unsupported or malformed part.
+    if (segments.length === source.content.length) content = segments;
+  }
+  const answerType =
+    source.paid_info != null ||
+    (source.answer_type != null && typeof source.answer_type !== 'string')
+      ? 'PAID'
+      : typeof source.answer_type === 'string'
+        ? source.answer_type.toUpperCase()
+        : undefined;
+  return {
+    content,
+    answerType,
+    contentNeedTruncated:
+      source.content_need_truncated != null
+        ? source.content_need_truncated !== false
+        : undefined,
+  };
+}
 
 function highlightText(text: string, color: string) {
   const decoded = text
@@ -61,6 +144,7 @@ export function toProfileSearchFeedItem(
       ? highlightText(result.highlight.title, highlightColor)
       : title,
     titleString: title,
+    ...getProfileFeedBody(content),
     excerpt: result.highlight?.description
       ? highlightText(result.highlight.description, highlightColor)
       : content.excerpt || '',

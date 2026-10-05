@@ -69,6 +69,7 @@ export type {
   ZhihuVideoBlock,
   ZhihuVideoResource,
 } from './document';
+export { serializeZhihuDocumentHtml } from './documentHtml';
 export {
   getZhihuDocumentPreviewImages,
   walkZhihuDocument,
@@ -98,7 +99,9 @@ export type {
 } from './richText';
 export { parseZhihuSegmentHighlight } from './segmentHighlight';
 export {
+  getStructuredContentSegmentInfos,
   getStructuredContentTextRuns,
+  mergeStructuredContentPages,
   normalizeZhihuStructuredContent,
   parseStructuredContentPaging,
   parseZhihuStructuredContent,

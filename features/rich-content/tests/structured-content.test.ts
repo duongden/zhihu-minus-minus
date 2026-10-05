@@ -6,14 +6,17 @@ import type {
   ZhihuStructuredContentParagraphSegment,
   ZhihuStructuredContentSegment,
 } from '@/types/zhihu';
-import { compileZhihuDocument } from '../compileRichText';
+import { compileZhihuDocument, mapRichTextSelection } from '../compileRichText';
 import type {
   ZhihuBlock,
   ZhihuDocument,
   ZhihuImageResource,
 } from '../document';
+import { serializeZhihuDocumentHtml } from '../documentHtml';
 import { walkZhihuDocument } from '../documentTraversal';
+import { resolveNativeAnswerSegment } from '../nativeInteractions';
 import {
+  getStructuredContentSegmentInfos,
   getStructuredContentTextRuns,
   normalizeZhihuStructuredContent,
   parseStructuredContentPaging,
@@ -140,6 +143,25 @@ function formulaMark(): Extract<
   };
 }
 
+function reactionMark(
+  start_index: number,
+  end_index: number,
+): Extract<ZhihuStructuredContentMark, { type: 'seg_like' }> {
+  return {
+    type: 'seg_like',
+    start_index,
+    end_index,
+    seg_like: {
+      count: 3,
+      comment_count: 2,
+      my_comment_count: 1,
+      is_like: false,
+      is_span: false,
+      seg_ids: ['200', '201'],
+    },
+  };
+}
+
 test('converts all five JSON nodes directly without modifying the source or paging string', () => {
   const source = content([
     paragraph('正文'),
@@ -171,9 +193,112 @@ test('converts all five JSON nodes directly without modifying the source or pagi
     'divider',
   ]);
   expect(document.blocks[0].id).toContain('source-id');
+  expect(document.blocks[0]).toHaveProperty(
+    'paragraphId',
+    'source-business-pid',
+  );
+  expect(document.blocks[1]).not.toHaveProperty('paragraphId');
+  expect(document.blocks[2]).not.toHaveProperty('paragraphId');
   expect(JSON.stringify(source)).toBe(original);
   expect(parseZhihuStructuredContent(source).paging).toBe(PAGING);
   expect(parseStructuredContentPaging(PAGING).is_end).toBe(true);
+});
+
+test('ordered JSON lists and body cards retain safe shared semantics while optional metadata cannot reject prose', () => {
+  const safeUrl = 'https://www.zhihu.com/question/1001/answer/1002';
+  const title = '<script>literal</script> & 合成卡片';
+  const source = {
+    paging: PAGING,
+    segments: [
+      paragraph('前文'),
+      {
+        id: 'ordered-list',
+        type: 'list_node',
+        list_node: {
+          type: 'ordered',
+          items: [
+            { text: '首项', indent_level: 1, marks: [] },
+            { text: '嵌套项', indent_level: 2, marks: [] },
+            { text: '次项', indent_level: 1, marks: [] },
+          ],
+        },
+      },
+      {
+        id: 'card-safe',
+        type: 'card',
+        card: {
+          title,
+          url: safeUrl,
+          cover: IMAGE_URL,
+          extra_info: { unobserved: ['not display metadata'] },
+          id: null,
+        },
+      },
+      {
+        id: 'card-unsafe',
+        type: 'card',
+        card: { title: '保留卡片文字', url: 'javascript:alert(1)' },
+      },
+      {
+        id: 'card-missing-title',
+        type: 'card',
+        card: { url: safeUrl, cover: 'file:///untrusted/cover.png' },
+      },
+      { id: 'card-missing-payload', type: 'card' },
+      paragraph('后文', [], 'last-source'),
+    ],
+  };
+  const original = JSON.stringify(source);
+  const parsed = parseZhihuStructuredContent(source);
+  const document = normalizeZhihuStructuredContent(parsed);
+  const lists = [...walkZhihuDocument(document)].filter(
+    (node) => node.type === 'list',
+  );
+  expect(lists).toHaveLength(2);
+  expect(lists.every((node) => node.ordered)).toBe(true);
+  expect(document.blocks[2]).toMatchObject({
+    type: 'linkCard',
+    title,
+    url: safeUrl,
+    image: { mediaType: 'image', url: IMAGE_URL },
+  });
+  expect(document.blocks[3]).toMatchObject({
+    type: 'unsupported',
+    sourceType: 'structuredCard',
+    fallbackText: '保留卡片文字',
+  });
+  expect(document.blocks[4]).toMatchObject({
+    type: 'linkCard',
+    title: '链接卡片',
+    url: safeUrl,
+  });
+  expect(document.blocks[4]).not.toHaveProperty('image');
+  expect(document.blocks[5]).toMatchObject({
+    type: 'unsupported',
+    fallbackText: '链接卡片',
+  });
+  const compiled = compile(document);
+  expect(
+    compiled.parts
+      .filter((part) => part.type === 'block')
+      .map((part) => part.block.type),
+  ).toEqual(['linkCard', 'unsupported', 'linkCard', 'unsupported']);
+  const prose = compiled.parts
+    .flatMap((part) => (part.type === 'flow' ? [part.flow.text] : []))
+    .join('\n');
+  for (const text of ['前文', '1. 首项', '1. 嵌套项', '2. 次项', '后文'])
+    expect(prose).toContain(text);
+  const html = serializeZhihuDocumentHtml(document);
+  expect(html.match(/<ol>/g)).toHaveLength(2);
+  expect(html).toContain('class="zhihu-link-card"');
+  expect(html).toContain(
+    'href="https://www.zhihu.com/question/1001/answer/1002"',
+  );
+  expect(html).toContain('&lt;script&gt;literal&lt;/script&gt; &amp; 合成卡片');
+  expect(html).not.toMatch(
+    /<script>|javascript:|file:\/\/\/|extra_info|not display metadata/,
+  );
+  expect(JSON.stringify(source)).toBe(original);
 });
 
 test('retains raw markup-looking text and entities instead of HTML escaping, parsing or decoding them', () => {
@@ -304,19 +429,20 @@ test('an unsafe formula image never falls back to the otherwise safe source-page
   expect(attachment.url).toBeUndefined();
 });
 
-test('keeps source text conservative when non-BMP characters make the mark index unit ambiguous', () => {
+test('uses verified UTF-16 ranges for non-BMP text and adjacent formula placeholders', () => {
   const payload = {
     text: '😀[公式]乙',
     marks: [{ ...formulaMark(), start_index: 2, end_index: 6 }],
   };
   const runs = getStructuredContentTextRuns(payload, 'non-bmp');
-  expect(runs).toHaveLength(1);
-  expect(runs[0]).toMatchObject({ type: 'text', text: payload.text });
+  expect(runs).toHaveLength(3);
+  expect(runs[0]).toMatchObject({ type: 'text', text: '😀' });
+  expect(runs[1]).toMatchObject({ type: 'inlineFormula' });
   const document = normalizeZhihuStructuredContent(
     content([paragraph(payload.text, payload.marks)]),
   );
-  expect(flow(document).attachments).toHaveLength(0);
-  expect(flow(document).text).toBe(payload.text);
+  expect(flow(document).attachments).toHaveLength(1);
+  expect(flow(document).text).toBe('😀\uFFFC乙');
 });
 
 test.each([
@@ -512,24 +638,11 @@ test('list indentation is bounded while every source item remains visible', () =
 test.each([
   { id: 'unknown', type: 'unobserved-video' },
   {
-    id: 'bad-range',
+    id: 'missing-text',
     type: 'paragraph',
-    paragraph: {
-      pid: 'source',
-      text: '正文',
-      marks: [{ type: 'bold', start_index: 0, end_index: 9 }],
-    },
+    paragraph: { pid: 'source', marks: [] },
   },
-  {
-    id: 'unknown-mark',
-    type: 'paragraph',
-    paragraph: {
-      pid: 'source',
-      text: '正文',
-      marks: [{ type: 'future-mark', start_index: 0, end_index: 1 }],
-    },
-  },
-])('rejects unknown/invalid structure with a fixed error that does not include source content', (segment) => {
+])('rejects missing body structure with a fixed error that does not include source content', (segment) => {
   expect(() =>
     parseZhihuStructuredContent({ paging: PAGING, segments: [segment] }),
   ).toThrow('原生正文返回结构无效');
@@ -590,9 +703,19 @@ test('all five sanitized capture cases preserve 48 source segments and 99 marks 
       ).toBe(true);
       const nodes = [...walkZhihuDocument(document)];
       expect(new Set(nodes.map((node) => node.id)).size).toBe(nodes.length);
-      expect(nodes.every((node) => !Object.hasOwn(node, 'paragraphId'))).toBe(
-        true,
+      const paragraphIds = new Set(
+        parsed.segments.flatMap((segment) =>
+          segment.type === 'paragraph' ? [segment.paragraph.pid] : [],
+        ),
       );
+      expect(
+        nodes.every(
+          (node) =>
+            !('paragraphId' in node) ||
+            (node.type === 'paragraph' &&
+              paragraphIds.has(node.paragraphId ?? '')),
+        ),
+      ).toBe(true);
       for (const segment of parsed.segments) {
         segmentCounts.set(
           segment.type,
@@ -629,7 +752,11 @@ test('all five sanitized capture cases preserve 48 source segments and 99 marks 
           (attachment) => attachment.kind === 'formula',
         ).length;
         expect(
-          part.flow.sourceMap.every((range) => range.paragraphId === undefined),
+          part.flow.sourceMap.every(
+            (range) =>
+              range.paragraphId === undefined ||
+              paragraphIds.has(range.paragraphId),
+          ),
         ).toBe(true);
       }
     }
@@ -655,4 +782,203 @@ test('all five sanitized capture cases preserve 48 source segments and 99 marks 
   );
   expect(sourceFormulaCount).toBe(53);
   expect(compiledFormulaCount).toBe(sourceFormulaCount);
+});
+
+test('preserves captured UTF-16 paragraph identities and resolves complete reactions through crossed visual styles', () => {
+  const fixture: unknown = JSON.parse(
+    readFileSync(
+      resolve(__dirname, '../fixtures/cases/next-render-seg-like-001.json'),
+      'utf8',
+    ),
+  );
+  if (
+    !fixture ||
+    typeof fixture !== 'object' ||
+    !('data' in fixture) ||
+    !Array.isArray(fixture.data)
+  )
+    throw new Error('Invalid captured answer fixture');
+  let reactionCount = 0;
+  for (const answer of fixture.data) {
+    if (
+      !answer ||
+      typeof answer !== 'object' ||
+      !('structured_content' in answer)
+    )
+      throw new Error('Invalid captured answer');
+    const parsed = parseZhihuStructuredContent(answer.structured_content);
+    const document = normalizeZhihuStructuredContent(parsed);
+    const infos = getStructuredContentSegmentInfos(parsed);
+    reactionCount += infos.reduce(
+      (count, info) => count + info.marks.length,
+      0,
+    );
+    for (const segment of parsed.segments) {
+      if (segment.type !== 'paragraph') continue;
+      expect(document.blocks).toContainEqual(
+        expect.objectContaining({ paragraphId: segment.paragraph.pid }),
+      );
+      for (const mark of segment.paragraph.marks) {
+        if (mark.type !== 'seg_like') continue;
+        const info = infos.find((entry) => entry.pid === segment.paragraph.pid);
+        expect(info?.text).toBe(segment.paragraph.text);
+        expect(info?.marks).toContainEqual({
+          start_index: mark.start_index,
+          end_index: mark.end_index,
+          seg_info: {
+            like_count: mark.seg_like.count,
+            comment_count: mark.seg_like.comment_count,
+            my_comment_count: mark.seg_like.my_comment_count,
+            is_like: mark.seg_like.is_like,
+            is_span: mark.seg_like.is_span,
+            seg_ids: mark.seg_like.seg_ids,
+          },
+        });
+      }
+    }
+  }
+  expect(reactionCount).toBe(4);
+  const firstAnswer = fixture.data[0] as { structured_content: unknown };
+  const captured = normalizeZhihuStructuredContent(
+    parseZhihuStructuredContent(firstAnswer.structured_content),
+  );
+  expect(mapRichTextSelection(flow(captured), 0, 44)).toMatchObject({
+    start: { paragraphId: 'synthetic-paragraph-001-001', offset: 0 },
+    end: { paragraphId: 'synthetic-paragraph-001-001', offset: 44 },
+  });
+
+  const text = '甲😀乙丙丁末';
+  const source = content([
+    paragraph(text, [
+      reactionMark(0, 6),
+      { type: 'bold', start_index: 1, end_index: 4 },
+      {
+        type: 'link',
+        start_index: 3,
+        end_index: 7,
+        link: {
+          href: 'https://example.invalid/linked-source',
+          icon_name: '',
+          link_type: 'text',
+        },
+      },
+    ]),
+  ]);
+  const document = normalizeZhihuStructuredContent(source);
+  const nodes = [...walkZhihuDocument(document)];
+  const segments = nodes.filter((node) => node.type === 'segment');
+  expect(segments).toHaveLength(1);
+  const segment = segments[0];
+  expect(segment.range).toEqual({ start: 0, end: 6 });
+  expect(nodes.some((node) => node.type === 'strong')).toBe(true);
+  expect(nodes.some((node) => node.type === 'link')).toBe(true);
+  expect(flow(document).text).toBe(text);
+  expect(
+    resolveNativeAnswerSegment(
+      {
+        nodeId: segment.id,
+        paragraphId: segment.paragraphId,
+        start: 0,
+        end: 6,
+        text: text.slice(0, 6),
+        segment,
+      },
+      {
+        objectId: '42',
+        type: 'answer',
+        document,
+        segmentInfos: getStructuredContentSegmentInfos(source),
+      },
+    ),
+  ).toMatchObject({
+    pid: 'source-business-pid',
+    interaction: { like_count: 3, comment_count: 2, seg_ids: ['200', '201'] },
+  });
+});
+
+test('keeps prose through bad annotations and textual unknown blocks without enabling ambiguous reactions', () => {
+  const parsed = parseZhihuStructuredContent({
+    paging: PAGING,
+    segments: [
+      {
+        id: 'source',
+        type: 'paragraph',
+        paragraph: {
+          pid: 'source-pid',
+          text: '甲😀乙',
+          marks: [
+            null,
+            { type: 'future-mark', start_index: 0, end_index: 4 },
+            { type: 'bold', start_index: 1, end_index: 2 },
+            { type: 'bold', start_index: 0, end_index: 9 },
+            { type: 'link', start_index: 0, end_index: 4 },
+            { ...reactionMark(0, 4), seg_like: { count: 'invalid' } },
+            { type: 'bold', start_index: 0, end_index: 4 },
+          ],
+        },
+      },
+      {
+        id: 'future-block',
+        type: 'future-node',
+        'future-node': { text: '额外原文' },
+      },
+    ],
+  });
+  const document = normalizeZhihuStructuredContent(parsed);
+  expect(flow(document).text).toBe('甲😀乙');
+  expect(parsed.segments[0]).toHaveProperty('paragraph.marks', [
+    { type: 'bold', start_index: 0, end_index: 4 },
+  ]);
+  expect(document.blocks[1]).toMatchObject({
+    type: 'unsupported',
+    sourceType: 'future-node',
+    fallbackText: '额外原文',
+  });
+
+  const span = reactionMark(0, 3);
+  span.seg_like.is_span = true;
+  const ambiguous = [
+    content([paragraph('甲乙丙', [span])]),
+    content([paragraph('甲乙丙', [reactionMark(0, 2), reactionMark(1, 3)])]),
+    content([
+      paragraph('甲乙丙', [reactionMark(0, 3)], 'duplicate-one'),
+      paragraph('丁戊己', [reactionMark(0, 3)], 'duplicate-two'),
+    ]),
+    content([paragraph('甲[公式]乙', [formulaMark(), reactionMark(0, 1)])]),
+  ];
+  for (const source of ambiguous)
+    expect(getStructuredContentSegmentInfos(source)).toEqual([]);
+  const spanDocument = normalizeZhihuStructuredContent(ambiguous[0]);
+  const spanRun = [...walkZhihuDocument(spanDocument)].find(
+    (node) => node.type === 'segment',
+  );
+  expect(spanRun?.segInfo).toMatchObject({ is_span: true });
+  expect(
+    [...walkZhihuDocument(normalizeZhihuStructuredContent(ambiguous[1]))].some(
+      (node) => node.type === 'segment',
+    ),
+  ).toBe(false);
+  expect(
+    normalizeZhihuStructuredContent(ambiguous[2]).blocks.every(
+      (block) => !('paragraphId' in block),
+    ),
+  ).toBe(true);
+  const formulaDocument = normalizeZhihuStructuredContent(ambiguous[3]);
+  expect(
+    [...walkZhihuDocument(formulaDocument)].some(
+      (node) => node.type === 'segment',
+    ),
+  ).toBe(false);
+  const formulaFlow = flow(formulaDocument);
+  expect(formulaFlow.text).toBe('甲\uFFFC乙');
+  expect(formulaFlow.attachments).toEqual([
+    expect.objectContaining({
+      kind: 'formula',
+      start: 1,
+      end: 2,
+      latex: 'E = mc^2',
+      copyText: 'E = mc^2',
+      url: FORMULA_URL,
+    }),
+  ]);
 });

@@ -1,7 +1,10 @@
 import { argbFromHex, Hct } from '@material/material-color-utilities';
 import { act, render } from '@testing-library/react-native';
 import { Text } from 'react-native';
-import { useRuntimeThemeColors } from '../components/Themed';
+import {
+  Text as ThemedText,
+  useRuntimeThemeColors,
+} from '../components/Themed';
 import Colors from '../constants/Colors';
 import { colors } from '../constants/designTokens';
 import {
@@ -99,7 +102,57 @@ function PaletteProbe() {
 
 beforeEach(() => {
   mockColorScheme = 'light';
-  useSettingsStore.setState(preferences());
+  useSettingsStore.setState({
+    ...preferences(),
+    fontSizeScale: 1,
+    lineHeightScale: 1.5,
+  });
+});
+
+test('text keeps proportional leading when font and line height preferences change', async () => {
+  const host = await render(
+    <>
+      <ThemedText testID="body">{'第一行\n第二行'}</ThemedText>
+      <ThemedText
+        testID="custom"
+        style={[
+          { fontSize: 13, lineHeight: 20 },
+          { fontSize: 18, lineHeight: 28 },
+        ]}
+      >
+        自定义排版
+      </ThemedText>
+    </>,
+  );
+  expect(host.getByTestId('body')).toHaveStyle({
+    fontSize: 15,
+    lineHeight: 22.5,
+  });
+  expect(host.getByTestId('custom')).toHaveStyle({
+    fontSize: 18,
+    lineHeight: 28,
+  });
+
+  await act(() => useSettingsStore.setState({ fontSizeScale: 1.5 }));
+  expect(host.getByTestId('body')).toHaveStyle({
+    fontSize: 22.5,
+    lineHeight: 33.75,
+  });
+  expect(host.getByTestId('custom')).toHaveStyle({
+    fontSize: 27,
+    lineHeight: 42,
+  });
+
+  await act(() =>
+    useSettingsStore.setState({ fontSizeScale: 0.8, lineHeightScale: 2 }),
+  );
+  expect(host.getByTestId('body')).toHaveStyle({
+    fontSize: 12,
+    lineHeight: 24,
+  });
+  expect(host.getByTestId('custom').props.style.lineHeight).toBeCloseTo(
+    (28 * 0.8 * 2) / 1.5,
+  );
 });
 
 describe.each(['light', 'dark'] as const)('%s runtime palette', (scheme) => {

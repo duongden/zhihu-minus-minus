@@ -202,6 +202,8 @@ export function getZhihuAppEndpointHeaders(
     return { 'x-api-version': '3.0.89', 'x-page-id': '172' };
   }
   if (
+    pathname === '/next-render' ||
+    pathname === '/next-content-render' ||
     /^\/questions\/[^/]+(?:\/related-objects)?$/.test(pathname) ||
     /^\/moments\/[^/]+\/origin$/.test(pathname)
   ) {

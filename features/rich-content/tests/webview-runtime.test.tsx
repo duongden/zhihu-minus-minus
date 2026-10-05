@@ -1,17 +1,30 @@
 import vm from 'node:vm';
-import { render } from '@testing-library/react-native';
+import { act, render } from '@testing-library/react-native';
 import { isTag } from 'domhandler';
 import { parseDocument } from 'htmlparser2';
 import type { WebViewProps } from 'react-native-webview';
-import ZhihuDOMContent from '../components/ZhihuDOMContent';
+import ZhihuDOMContent, {
+  type ZhihuDOMContentProps,
+} from '../components/ZhihuDOMContent';
 
 let mockWebViewProps: WebViewProps;
-jest.mock('react-native-webview', () => ({
-  WebView: (props: WebViewProps) => {
-    mockWebViewProps = props;
-    return null;
-  },
-}));
+const mockInjectJavaScript = jest.fn<void, [string]>();
+jest.mock('react-native-webview', () => {
+  const { forwardRef, useImperativeHandle } =
+    jest.requireActual<typeof import('react')>('react');
+  return {
+    WebView: forwardRef<
+      { injectJavaScript: (script: string) => void },
+      WebViewProps
+    >((props, ref) => {
+      mockWebViewProps = props;
+      useImperativeHandle(ref, () => ({
+        injectJavaScript: mockInjectJavaScript,
+      }));
+      return null;
+    }),
+  };
+});
 jest.mock('../../../components/Themed', () => ({
   useRuntimeThemeColors: () => ({
     ...require('../../../constants/designTokens').colors.light,
@@ -24,22 +37,26 @@ jest.mock('../../../store/useSettingsStore', () => ({
   useSettingsStore: () => ({ fontSizeScale: 1, lineHeightScale: 1.5 }),
 }));
 
-async function renderPage() {
+beforeEach(() => {
+  mockInjectJavaScript.mockClear();
+});
+
+async function renderPage(overrides: Partial<ZhihuDOMContentProps> = {}) {
   const onLinkPress = jest.fn();
   const onImagePress = jest.fn();
-  await render(
-    <ZhihuDOMContent
-      htmlContent='<p data-pid="one">正文</p>'
-      linkCardInfoStr='{"title":"</script><script>throw 1</script>"}'
-      colorScheme="light"
-      onLinkPress={onLinkPress}
-      onImagePress={onImagePress}
-      onSegmentPress={jest.fn()}
-    />,
-  );
+  const props: ZhihuDOMContentProps = {
+    htmlContent: '<p data-pid="one">正文</p>',
+    linkCardInfoStr: '{"title":"</script><script>throw 1</script>"}',
+    colorScheme: 'light',
+    onLinkPress,
+    onImagePress,
+    onSegmentPress: jest.fn(),
+    ...overrides,
+  };
+  const view = await render(<ZhihuDOMContent {...props} />);
   const source = mockWebViewProps.source;
   if (!source || !('html' in source)) throw new Error('Expected inline HTML');
-  return { html: source.html, onLinkPress, onImagePress };
+  return { html: source.html, onLinkPress, onImagePress, view, props };
 }
 
 function inlineScript(html: string): string {
@@ -52,6 +69,12 @@ function inlineScript(html: string): string {
   return script.children
     .map((node) => ('data' in node ? node.data : ''))
     .join('');
+}
+
+function bridgeMessage(html: string, message: Record<string, unknown>) {
+  const identity = /const documentIdentity = (\d+);/.exec(inlineScript(html));
+  if (!identity) throw new Error('Expected document identity');
+  return JSON.stringify({ documentIdentity: Number(identity[1]), ...message });
 }
 
 test.each([
@@ -71,6 +94,7 @@ test.each([
     innerHTML: '',
     children: [],
     scrollHeight: 240,
+    getBoundingClientRect: () => ({ height: container.scrollHeight }),
     querySelectorAll: () => [],
     addEventListener: jest.fn(),
   };
@@ -78,15 +102,17 @@ test.each([
     fonts: { ready: fontsReady },
     getElementById: () => container,
     addEventListener: jest.fn(),
-    body: { scrollHeight: 240, offsetHeight: 240 },
-    documentElement: { scrollHeight: 240, offsetHeight: 240 },
+    body: { scrollHeight: 800, offsetHeight: 800 },
+    documentElement: { scrollHeight: 800, offsetHeight: 800, style: {} },
+  };
+  const window = {
+    ReactNativeWebView: { postMessage },
+    addEventListener: jest.fn(),
+    onload: undefined as (() => void) | undefined,
   };
   vm.runInNewContext(inlineScript(html), {
     document,
-    window: {
-      ReactNativeWebView: { postMessage },
-      addEventListener: jest.fn(),
-    },
+    window,
     renderMathInElement,
     setTimeout: (callback: () => void) => timers.push(callback),
   });
@@ -96,13 +122,226 @@ test.each([
     expect.any(Function),
   );
   for (const timer of timers) timer();
-  expect(postMessage).toHaveBeenCalledWith('{"type":"height","height":240}');
-  document.body.scrollHeight = 300;
+  expect(postMessage).toHaveBeenCalledWith(
+    bridgeMessage(html, { type: 'height', height: 240 }),
+  );
+  expect(postMessage).toHaveBeenCalledTimes(1);
+  container.scrollHeight = 300;
   resolveFonts();
   await fontsReady;
   expect(postMessage).toHaveBeenLastCalledWith(
-    '{"type":"height","height":300}',
+    bridgeMessage(html, { type: 'height', height: 300 }),
   );
+  container.scrollHeight = 120;
+  window.onload?.();
+  expect(postMessage).toHaveBeenLastCalledWith(
+    bridgeMessage(html, { type: 'height', height: 120 }),
+  );
+});
+
+test('keeps the document stable on height updates and rejects messages from replaced content', async () => {
+  const onReady = jest.fn();
+  const { html, view, props, onLinkPress, onImagePress } = await renderPage({
+    onReady,
+  });
+  const firstSource = mockWebViewProps.source;
+  const oldCallback = mockWebViewProps.onMessage;
+  type MessageEvent = Parameters<NonNullable<WebViewProps['onMessage']>>[0];
+  const event = (data: string) => ({ nativeEvent: { data } }) as MessageEvent;
+  await act(() => {
+    mockWebViewProps.onMessage?.(
+      event(bridgeMessage(html, { type: 'height', height: 240 })),
+    );
+  });
+  expect(mockWebViewProps.source).toBe(firstSource);
+  expect(onReady).toHaveBeenCalledTimes(1);
+
+  await view.rerender(<ZhihuDOMContent {...props} htmlContent="新正文" />);
+  const replacement = mockWebViewProps.source;
+  if (!replacement || !('html' in replacement))
+    throw new Error('Expected replacement document');
+  await act(() => {
+    for (const message of [
+      { type: 'height', height: 600 },
+      { type: 'link', href: 'https://example.com/stale' },
+      { type: 'image', src: 'https://example.com/stale.png' },
+    ]) {
+      const staleEvent = event(bridgeMessage(html, message));
+      oldCallback?.(staleEvent);
+      mockWebViewProps.onMessage?.(staleEvent);
+    }
+  });
+  expect(onReady).toHaveBeenCalledTimes(1);
+  expect(onLinkPress).not.toHaveBeenCalled();
+  expect(onImagePress).not.toHaveBeenCalled();
+  await act(() => {
+    mockWebViewProps.onMessage?.(
+      event(bridgeMessage(replacement.html, { type: 'height', height: 120 })),
+    );
+  });
+  expect(onReady).toHaveBeenCalledTimes(2);
+  expect(mockWebViewProps.source).toBe(replacement);
+});
+
+test('preserves mixed pin content safely in a single document with outer scrolling', async () => {
+  const { html } = await renderPage({
+    contentArray: [
+      { type: 'text', own_text: '<p>第一段</p><script>throw 1</script>' },
+      {
+        type: 'image',
+        url: 'https://example.com/image.png',
+        width: 640,
+        height: 480,
+      },
+      {
+        type: 'link_card',
+        url: 'https://example.com/card',
+        data_draft_title: '卡片<img src=x onerror="throw 1">',
+        data_draft_cover: 'javascript:throw 1',
+      },
+    ],
+  });
+  const container = {
+    innerHTML: '',
+    querySelectorAll: () => [],
+    addEventListener: jest.fn(),
+  };
+  vm.runInNewContext(inlineScript(html), {
+    document: {
+      getElementById: () => container,
+      addEventListener: jest.fn(),
+    },
+    window: { addEventListener: jest.fn() },
+    setTimeout: jest.fn(),
+  });
+  const content = parseDocument(container.innerHTML);
+  const elements = content.children.filter(isTag);
+  expect(elements.map((element) => element.name)).toEqual(['div', 'img', 'a']);
+  expect(elements[1].attribs).toMatchObject({
+    src: 'https://example.com/image.png',
+    'data-rawwidth': '640',
+    'data-rawheight': '480',
+  });
+  expect(elements[2].attribs['data-draft-cover']).toBeUndefined();
+  expect(elements[2].children).toHaveLength(1);
+  expect(container.innerHTML).not.toContain('<script');
+  expect(mockWebViewProps.scrollEnabled).toBe(false);
+  expect(mockWebViewProps.showsVerticalScrollIndicator).toBe(false);
+  expect(mockWebViewProps.showsHorizontalScrollIndicator).toBe(false);
+});
+
+test('starts with selection disabled and reapplies it after the document loads', async () => {
+  const { html } = await renderPage({ selectable: false });
+  const removeAllRanges = jest.fn();
+  const container = {
+    innerHTML: '',
+    querySelectorAll: () => [],
+    addEventListener: jest.fn(),
+  };
+  const document: {
+    documentElement?: { style: Record<string, string> };
+    getElementById: () => typeof container;
+    addEventListener: typeof jest.fn;
+  } = {
+    getElementById: () => container,
+    addEventListener: jest.fn(),
+  };
+  const window = {
+    getSelection: () => ({ removeAllRanges }),
+    addEventListener: jest.fn(),
+  };
+  const context = { document, window, setTimeout: jest.fn() };
+  vm.runInNewContext(
+    mockWebViewProps.injectedJavaScriptBeforeContentLoaded ?? '',
+    context,
+  );
+  expect(removeAllRanges).toHaveBeenCalledTimes(1);
+  document.documentElement = { style: {} };
+  vm.runInNewContext(inlineScript(html), context);
+  expect(document.documentElement.style).toEqual({
+    userSelect: 'none',
+    webkitUserSelect: 'none',
+  });
+  vm.runInNewContext(mockWebViewProps.injectedJavaScript ?? '', context);
+  expect(document.documentElement.style.userSelect).toBe('none');
+  expect(removeAllRanges).toHaveBeenCalledTimes(2);
+
+  // A platform can skip its before-load injection; the document still starts disabled.
+  document.documentElement.style = {};
+  vm.runInNewContext(inlineScript(html), {
+    ...context,
+    window: { addEventListener: jest.fn() },
+  });
+  expect(document.documentElement.style.userSelect).toBe('none');
+});
+
+test('toggles selection without reloading and rejects delayed events and scripts across disable/enable', async () => {
+  const onTextSelected = jest.fn();
+  const { html, view, props } = await renderPage({ onTextSelected });
+  const source = mockWebViewProps.source;
+  const originalCallback = mockWebViewProps.onMessage;
+  const enabledScript = mockWebViewProps.injectedJavaScript ?? '';
+  type MessageEvent = Parameters<NonNullable<WebViewProps['onMessage']>>[0];
+  const info = {
+    text: '正文',
+    startParagraphId: 'one',
+    endParagraphId: 'one',
+    startOffset: 0,
+    endOffset: 2,
+  };
+  const event = (selectionRevision: number) =>
+    ({
+      nativeEvent: {
+        data: bridgeMessage(html, {
+          type: 'selection',
+          info,
+          selectionRevision,
+        }),
+      },
+    }) as MessageEvent;
+  await act(() => originalCallback?.(event(0)));
+  expect(onTextSelected).toHaveBeenLastCalledWith(info);
+  const removeAllRanges = jest.fn();
+  const document = { documentElement: { style: {} as Record<string, string> } };
+  const window: {
+    getSelection: () => { removeAllRanges: typeof removeAllRanges };
+    __zhihuTextSelectable?: boolean;
+  } = { getSelection: () => ({ removeAllRanges }) };
+  const context = { document, window };
+  vm.runInNewContext(enabledScript, context);
+  mockInjectJavaScript.mockClear();
+
+  await view.rerender(<ZhihuDOMContent {...props} selectable={false} />);
+  expect(mockWebViewProps.source).toBe(source);
+  expect(onTextSelected).toHaveBeenLastCalledWith(null);
+  expect(mockInjectJavaScript).toHaveBeenCalledTimes(1);
+  const disabledScript = mockInjectJavaScript.mock.calls[0][0];
+  vm.runInNewContext(disabledScript, context);
+  expect(document.documentElement.style.userSelect).toBe('none');
+  expect(removeAllRanges).toHaveBeenCalledTimes(1);
+  await act(() => {
+    originalCallback?.(event(0));
+    mockWebViewProps.onMessage?.(event(1));
+  });
+  expect(onTextSelected).toHaveBeenCalledTimes(2);
+
+  await view.rerender(<ZhihuDOMContent {...props} selectable />);
+  expect(mockWebViewProps.source).toBe(source);
+  expect(mockInjectJavaScript).toHaveBeenCalledTimes(2);
+  vm.runInNewContext(mockInjectJavaScript.mock.calls[1][0], context);
+  expect(document.documentElement.style.userSelect).toBe('text');
+  vm.runInNewContext(disabledScript, context);
+  vm.runInNewContext(enabledScript, context);
+  expect(window.__zhihuTextSelectable).toBe(true);
+  expect(document.documentElement.style.userSelect).toBe('text');
+  await act(() => {
+    originalCallback?.(event(0));
+    mockWebViewProps.onMessage?.(event(1));
+  });
+  expect(onTextSelected).toHaveBeenCalledTimes(2);
+  await act(() => mockWebViewProps.onMessage?.(event(2)));
+  expect(onTextSelected).toHaveBeenCalledTimes(3);
+  expect(onTextSelected).toHaveBeenLastCalledWith(info);
 });
 
 test('builds untrusted footnote labels and definitions as text nodes', async () => {
@@ -200,10 +439,15 @@ test('maps element selection boundaries through a DOM range and clears selection
   vm.runInNewContext(inlineScript(html), {
     document,
     window: {
+      __zhihuSelectionDocumentIdentity: JSON.parse(bridgeMessage(html, {}))
+        .documentIdentity,
+      __zhihuTextSelectable: true,
+      __zhihuSelectionRevision: 0,
       ReactNativeWebView: { postMessage },
       addEventListener: jest.fn(),
       getSelection: () => ({
         isCollapsed: false,
+        rangeCount: 1,
         toString: () => '乙丙',
         getRangeAt: () => ({
           startContainer: paragraph,
@@ -223,6 +467,8 @@ test('maps element selection boundaries through a DOM range and clears selection
     { target: textNode, offset: 2 },
   ]);
   expect(JSON.parse(postMessage.mock.calls.at(-1)?.[0] as string)).toEqual({
+    documentIdentity: JSON.parse(bridgeMessage(html, {})).documentIdentity,
+    selectionRevision: 0,
     type: 'selection',
     info: {
       text: '乙丙',
@@ -236,7 +482,11 @@ test('maps element selection boundaries through a DOM range and clears selection
   listeners.get('selectionchange')?.();
   timers.pop()?.();
   expect(postMessage).toHaveBeenLastCalledWith(
-    '{"type":"selection","info":null}',
+    bridgeMessage(html, {
+      type: 'selection',
+      info: null,
+      selectionRevision: 0,
+    }),
   );
 });
 

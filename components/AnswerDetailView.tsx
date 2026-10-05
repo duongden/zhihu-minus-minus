@@ -1,6 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { BlurView } from 'expo-blur';
 import { useRouter } from 'expo-router';
 import React, { useRef } from 'react';
 import {
@@ -8,7 +7,6 @@ import {
   Alert,
   type ScrollView as NativeScrollView,
   type View as NativeView,
-  StyleSheet,
   useWindowDimensions,
 } from 'react-native';
 import Reanimated, {
@@ -23,6 +21,8 @@ import { type AnswerDetail, deleteAnswer, getAnswer } from '@/api/zhihu';
 import { getAllContentCollectionStatus } from '@/api/zhihu/collection';
 import { followMember, unfollowMember } from '@/api/zhihu/member';
 import { BouncyButton } from '@/components/BouncyButton';
+import { ContentActionBar } from '@/components/ContentActionBar';
+import { ContentActionButton } from '@/components/ContentActionButton';
 import { useDetailNavigationHeight } from '@/components/DetailNavigationHeader';
 import { DownvoteButton } from '@/components/DownvoteButton';
 import { FollowButton } from '@/components/FollowButton';
@@ -488,7 +488,7 @@ export const AnswerDetailView = ({
               <Text
                 style={{
                   fontSize: 21,
-                  lineHeight: 29 * fontSizeScale,
+                  lineHeight: 29,
                   fontWeight: '700',
                 }}
               >
@@ -509,7 +509,7 @@ export const AnswerDetailView = ({
                 <Text
                   style={{
                     fontSize: 15,
-                    lineHeight: 22 * fontSizeScale,
+                    lineHeight: 22,
                     fontWeight: '600',
                   }}
                   numberOfLines={1}
@@ -519,7 +519,7 @@ export const AnswerDetailView = ({
                 {answer?.author?.headline ? (
                   <Text
                     type="secondary"
-                    style={{ fontSize: 12, lineHeight: 18 * fontSizeScale }}
+                    style={{ fontSize: 12, lineHeight: 18 }}
                     numberOfLines={1}
                   >
                     {answer.author.headline}
@@ -624,79 +624,52 @@ export const AnswerDetailView = ({
       />
 
       {/* Footer Actions */}
-      <View
-        className="absolute left-5 right-5 z-[1000]"
-        style={[
-          colorScheme === 'light' && {
-            shadowColor: Colors.light.shadow,
-            shadowOffset: { width: 0, height: 10 },
-            shadowOpacity: 0.1,
-            shadowRadius: 20,
-            elevation: 10,
-          },
-          { bottom: insets.bottom },
-        ]}
-      >
-        <BlurView
-          intensity={130}
-          tint={colorScheme === 'dark' ? 'dark' : 'light'}
-          className="rounded-[32px] overflow-hidden h-16"
-          style={{
-            backgroundColor: Colors[colorScheme].contentOverlayStrong,
-            borderWidth: StyleSheet.hairlineWidth,
-            borderColor: Colors[colorScheme].contentBorder,
-          }}
-        >
-          <View className="flex-row items-center px-5 h-full bg-transparent">
-            <View className="flex-row items-center bg-transparent">
-              <LikeButton
-                id={answer?.id ?? ''}
-                count={answer?.voteup_count ?? 0}
-                voted={
-                  answer?.relationship?.voting ??
-                  (answer?.reaction?.relation?.vote === 'UP' ? 1 : 0)
-                }
-                variant="minimal"
-              />
-              <View className="w-2.5 bg-transparent" />
-              <DownvoteButton
-                id={answer?.id ?? ''}
-                voted={answer?.relationship?.voting}
-                variant="minimal"
-              />
-            </View>
-            <View className="flex-1 flex-row justify-end items-center bg-transparent">
-              <BouncyButton
-                accessibilityRole="button"
-                accessibilityLabel="评论"
-                disabled={!answer}
-                className="items-center justify-center ml-3 p-2 flex-row bg-transparent"
-                style={{ borderRadius: 99 }}
-                onPress={() => router.push(`/comments/${id}?type=answer`)}
-              >
-                <ThemedIcon
-                  name="chatbubble-outline"
-                  size={24}
-                  colorType="secondary"
-                />
-                {(answer?.comment_count ?? 0) > 0 && (
-                  <Text
-                    type="secondary"
-                    className="ml-1 text-[13px] font-medium"
-                  >
-                    {answer?.comment_count}
-                  </Text>
-                )}
-              </BouncyButton>
-              <MoreActionsButton
-                disabled={!answer}
-                style={{ marginLeft: 12 }}
-                onPress={() => setMenuVisible(true)}
-              />
-            </View>
+      <ContentActionBar bottom={insets.bottom}>
+        <View className="flex-row items-center px-5 h-full bg-transparent">
+          <View className="flex-row items-center bg-transparent">
+            <LikeButton
+              id={answer?.id ?? ''}
+              count={answer?.voteup_count ?? 0}
+              voted={
+                answer?.relationship?.voting ??
+                (answer?.reaction?.relation?.vote === 'UP' ? 1 : 0)
+              }
+              variant="minimal"
+            />
+            <View className="w-2.5 bg-transparent" />
+            <DownvoteButton
+              id={answer?.id ?? ''}
+              voted={answer?.relationship?.voting}
+              variant="minimal"
+            />
           </View>
-        </BlurView>
-      </View>
+          <View className="flex-1 flex-row justify-end items-center bg-transparent">
+            <ContentActionButton
+              accessibilityRole="button"
+              accessibilityLabel="评论"
+              disabled={!answer}
+              className="items-center justify-center ml-3 p-2 flex-row bg-transparent"
+              onPress={() => router.push(`/comments/${id}?type=answer`)}
+            >
+              <ThemedIcon
+                name="chatbubble-outline"
+                size={24}
+                colorType="secondary"
+              />
+              {(answer?.comment_count ?? 0) > 0 && (
+                <Text type="secondary" className="ml-1 text-[13px] font-medium">
+                  {answer?.comment_count}
+                </Text>
+              )}
+            </ContentActionButton>
+            <MoreActionsButton
+              disabled={!answer}
+              style={{ marginLeft: 12 }}
+              onPress={() => setMenuVisible(true)}
+            />
+          </View>
+        </View>
+      </ContentActionBar>
 
       <ShareMenu
         visible={isFocused && menuVisible}

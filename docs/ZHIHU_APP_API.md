@@ -9,14 +9,16 @@
 | 推荐流 | `GET /topstory/recommend` | `action`、`after_id`、`end_offset`、`page_number`、`session_token`、`start_type`、`refresh_scene`、`device`、`is_feed_first_request` 等 | `3.1.8` / `44` |
 | 问题详情 | `GET /questions/{id}` | `include` | `3.0.93` / `172` |
 | 问题回答流 | `GET /questions/{id}/feeds` | `include`、`order`、`show_detail`、`limit`、`offset`、`cursor`、`session_id` | `3.0.89` / `172` |
-| 原生回答渲染流 | `GET /next-render` | `id`、`type`、`scenes`、`collection_id`、`collection_type`、`question_feed_session_id`、`question_feed_cursor`、`context_expand`、`is_native` | `3.0.93` / `172`，仅记录 |
+| 单回答 v2（已停用） | `GET /answers/v2/{id}` | 曾用于预览首卡；用户反馈 `40362` 服务端限制，首卡改用列表普通正文 | 捕获 `3.0.93` / `42`，未确认成功返回 |
+| 原生回答渲染流 | `GET /next-render` | `id`、`type`、`scenes`、`collection_id`、`collection_type`、`question_feed_session_id`、`question_feed_cursor`、`context_expand`、`is_native` | `3.0.93` / `172`，预览模式 |
+| 单回答正文续页 | `GET /next-content-render` | 服务端续页 URL 中的 `offset`、`url_token`、`content_type`、`version_id` | `3.0.93` / `172`，响应按运行时校验 |
 | 相关内容 | `GET /questions/{id}/related-objects` | `is_search` | `3.0.93` / `172` |
 | 动态流 | `GET /moments_v3` | `action`、`feed_type`、`moment_start_offset`、`offset`、`page_num`、`session_id` 等 | `3.0.93` / `43` |
 | 聚合动态来源 | `GET /moments/{id}/origin` | `limit` | `3.0.93` / `172` |
 
 已接入接口的参数类型、URL 构造器和稳定请求头定义集中在 `api/zhihu/appApi.ts`。初始请求只填入可安全推导的默认值；翻页时直接使用服务端下发的 URL，保留 `session_token`、cursor、offset 和频控状态。
 
-`/next-render` 的请求头分类、参数类型、`answer | login_prompt` 返回体和 `structured_content` 分段正文详见 [知乎 next-render 请求与返回体结构](./ZHIHU_NEXT_RENDER.md)。其中正文的 `paging` 是 JSON 字符串，续取路径为 `/next-content-render`，与外层回答流分页不同；本接口尚未接入生产请求。开发案例提供独立的结构化 JSON 渲染对照。
+`/next-render` 的请求头分类、参数类型、`answer | login_prompt` 返回体和 `structured_content` 分段正文详见 [知乎 next-render 请求与返回体结构](./ZHIHU_NEXT_RENDER.md)。其中正文的 `paging` 是 JSON 字符串，续取路径为 `/next-content-render`，与外层回答流分页不同。预览卡片列表已按此结构接入请求，开发案例继续提供独立 JSON 渲染对照。初始请求仅使用当前回答、已知问题 ID 和固定场景参数，未知会话/游标留空；此最小参数组合尚未进行线上验证。
 
 当前请求策略中，游客推荐流会优先尝试 App API；若当前安装尚未取得接口所需的完整设备凭据，则回退到原有浏览器游客接口。问题详情与回答流按会话分流：登录时使用 Web API 取得完整详情，游客时使用 App API 的公开题目/回答卡片；游客不会尝试调用需要登录的 Web 回答详情接口。动态关注流使用 `/moments_v3?feed_type=timeline`；失败时保持空态。
 

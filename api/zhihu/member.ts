@@ -5,7 +5,7 @@ import type {
   ZhihuPaging,
 } from '@/types/zhihu';
 import { getRecentActivityTargetId } from '@/utils/userProfile';
-import apiClient from '../client';
+import apiClient, { type ApiRequestOptions } from '../client';
 
 export const MEMBER_INCLUDE =
   'url_token,answer_count,articles_count,question_count,pins_count,follower_count,following_count,headline,cover_url,description,voteup_count,thanked_count,favorited_count,is_following,mutual_followees_count';
@@ -252,11 +252,12 @@ export const getMemberRelations = async (
     sort_by?: string;
     ws_qiangzhisafe?: number;
   },
+  options: ApiRequestOptions = {},
 ): Promise<ZhihuListResponse<ZhihuMemberRelation>> => {
   const endpoint = `/members/${id}/${type}`;
   const res = await apiClient.get<ZhihuListResponse<ZhihuMemberRelation>>(
     endpoint,
-    { params },
+    { ...options, params },
   );
   return res.data;
 };

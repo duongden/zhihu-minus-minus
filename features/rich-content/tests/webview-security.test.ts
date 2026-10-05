@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { isTag, type Node } from 'domhandler';
-import { parseDocument } from 'htmlparser2';
+import { DomUtils, parseDocument } from 'htmlparser2';
+import type { ZhihuDocument } from '../document';
+import { serializeZhihuDocumentHtml } from '../documentHtml';
 import {
   getSafeRichContentUrl,
   sanitizeRichContentHtml,
@@ -92,4 +94,244 @@ test('unwraps unknown HTML containers and prevents foreign namespace mutation or
     '<custom><p style="color:red;background-color:url(https://example.com);font-size:18px" onclick="throw 1">文字</p></custom><svg><foreignObject><p onclick="throw 1">隐藏内容</p></foreignObject></svg><math><mtext><img src=x onerror="throw 1"></mtext></math>',
   );
   expect(sanitized).toBe('<p style="color:red;font-size:18px">文字</p>');
+});
+
+test('semantic documents retain text, paragraph identity and media protocols without exposing executable HTML or reaction metadata', () => {
+  const paragraphId = '真实段落"><script>throw 1</script>';
+  const segmentNodeId = 'segment"><script>throw 1</script>';
+  const text = '文字 < & > "\'\n第二行🌿 $a$ \\(字面量\\) \\[仍是文字\\]';
+  const latex = 'x < y \\text{& "值"}';
+  const document: ZhihuDocument = {
+    id: 'synthetic-document',
+    blocks: [
+      {
+        id: 'node-paragraph',
+        type: 'paragraph',
+        paragraphId,
+        children: [
+          { id: 'text', type: 'text', text },
+          {
+            id: segmentNodeId,
+            type: 'segment',
+            paragraphId,
+            range: { start: text.length, end: text.length + 2 },
+            segInfo: {
+              seg_ids: ['private-reaction-metadata"><script>throw 1</script>'],
+              like_count: 1,
+              comment_count: 0,
+              my_comment_count: 0,
+              is_like: true,
+            },
+            children: [
+              {
+                id: 'strong',
+                type: 'strong',
+                children: [{ id: 'strong-text', type: 'text', text: '粗体' }],
+              },
+            ],
+          },
+          {
+            id: 'segment-link',
+            type: 'segment',
+            paragraphId,
+            range: { start: text.length + 2, end: text.length + 6 },
+            children: [
+              {
+                id: 'link',
+                type: 'link',
+                url: '/question/1?text=%3Cscript%3E&value=1',
+                children: [{ id: 'link-text', type: 'text', text: '安全链接' }],
+              },
+            ],
+          },
+          {
+            id: 'unsafe-link',
+            type: 'link',
+            url: 'javascript:throw 1',
+            children: [
+              { id: 'unsafe-link-text', type: 'text', text: '保留链接文字' },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'formula-paragraph',
+        type: 'paragraph',
+        paragraphId: 'mixed-formula-pid',
+        children: [
+          {
+            id: 'mixed-segment',
+            type: 'segment',
+            paragraphId: 'mixed-formula-pid',
+            range: { start: 0, end: 1 },
+            children: [
+              { id: 'formula', type: 'inlineFormula', formula: { latex } },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'first-duplicate',
+        type: 'paragraph',
+        paragraphId: 'duplicate-pid',
+        children: [{ id: 'duplicate-one', type: 'text', text: '重复一' }],
+      },
+      {
+        id: 'second-duplicate',
+        type: 'paragraph',
+        paragraphId: 'duplicate-pid',
+        children: [{ id: 'duplicate-two', type: 'text', text: '重复二' }],
+      },
+      {
+        id: 'unsupported-paragraph',
+        type: 'paragraph',
+        paragraphId: 'mixed-unsupported-pid',
+        children: [
+          {
+            id: 'unsupported-inline',
+            type: 'unsupported',
+            sourceType: 'unknown',
+            fallbackText: '保留行内文字',
+          },
+        ],
+      },
+      {
+        id: 'heading',
+        type: 'heading',
+        level: 2,
+        paragraphId: 'heading-pid',
+        children: [{ id: 'heading-text', type: 'text', text: '标题<&' }],
+      },
+      {
+        id: 'list',
+        type: 'list',
+        ordered: true,
+        start: 3,
+        items: [
+          {
+            id: 'list-item',
+            blocks: [
+              {
+                id: 'list-paragraph',
+                type: 'paragraph',
+                paragraphId: 'list-pid',
+                children: [{ id: 'list-text', type: 'text', text: '列表文字' }],
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'small-image',
+        type: 'image',
+        layout: 'small',
+        resource: {
+          mediaType: 'image',
+          url: '//example.com/image.png',
+          width: 320,
+          height: 240,
+        },
+        alt: '图片"><script>throw 1</script>',
+        caption: [{ id: 'caption', type: 'text', text: '图注 < &\n新行' }],
+      },
+      {
+        id: 'normal-image',
+        type: 'image',
+        layout: 'normal',
+        resource: {
+          mediaType: 'image',
+          url: 'https://example.com/full.png',
+          width: Number.NaN,
+          height: Number.POSITIVE_INFINITY,
+        },
+      },
+      {
+        id: 'unsafe-image',
+        type: 'image',
+        resource: { mediaType: 'image', url: 'javascript:throw 1' },
+        alt: '保留图片替代文字 < &',
+      },
+      {
+        id: 'image-formula',
+        type: 'blockFormula',
+        formula: {
+          image: { mediaType: 'image', url: 'https://example.com/formula.png' },
+        },
+      },
+      { id: 'divider', type: 'divider' },
+      {
+        id: 'unsupported',
+        type: 'unsupported',
+        sourceType: '<script>throw 1</script>',
+        fallbackText: '未知结构 <script>保留文字</script> &\n下一行',
+      },
+    ],
+  };
+  const html = serializeZhihuDocumentHtml(document);
+  const sanitized = sanitizeRichContentHtml(html);
+  const nodes = elements(parseDocument(sanitized).children).filter(isTag);
+  const paragraph = nodes.find(
+    (node) => node.attribs['data-pid'] === paragraphId,
+  );
+  expect(paragraph?.name).toBe('p');
+  expect(paragraph && DomUtils.textContent(paragraph)).toBe(
+    `${text}粗体安全链接保留链接文字`,
+  );
+  expect(paragraph?.attribs.style).toBe('white-space:pre-wrap');
+  expect(
+    nodes
+      .filter((node) => node.attribs.class === 'zhihu-literal-text')
+      .map((node) => DomUtils.textContent(node)),
+  ).toEqual([text]);
+  expect(
+    nodes.filter((node) => node.name === 'p' && node.attribs['data-pid']),
+  ).toHaveLength(1);
+  expect(
+    nodes
+      .filter((node) => node.attribs['data-segment-node-id'])
+      .map((node) => node.attribs),
+  ).toEqual([
+    {
+      class: 'segment-interactable segment-liked',
+      'data-pid': paragraphId,
+      'data-segment-node-id': segmentNodeId,
+    },
+    {
+      class: 'segment-interactable',
+      'data-pid': paragraphId,
+      'data-segment-node-id': 'segment-link',
+    },
+  ]);
+  expect(nodes.find((node) => node.name === 'strong')?.children).toHaveLength(
+    1,
+  );
+  expect(nodes.find((node) => node.name === 'a')?.attribs.href).toBe(
+    'https://www.zhihu.com/question/1?text=%3Cscript%3E&value=1',
+  );
+  expect(nodes.filter((node) => node.name === 'a')).toHaveLength(1);
+  expect(nodes.find((node) => node.name === 'h2')?.children).toHaveLength(1);
+  expect(nodes.find((node) => node.name === 'ol')?.attribs.start).toBe('3');
+  expect(nodes.find((node) => node.name === 'li')).toBeDefined();
+  const images = nodes.filter((node) => node.name === 'img');
+  expect(images.map((image) => image.attribs)).toEqual([
+    { eeimg: '1', alt: latex },
+    {
+      src: 'https://example.com/image.png',
+      alt: '图片"><script>throw 1</script>',
+      'data-rawwidth': '320',
+      'data-rawheight': '240',
+      style: 'width:320px;max-width:100%',
+    },
+    { src: 'https://example.com/full.png', alt: '', style: 'width:100%' },
+    { eeimg: '2', src: 'https://example.com/formula.png', alt: '' },
+  ]);
+  const plainText = DomUtils.textContent(parseDocument(sanitized));
+  expect(plainText).toContain('图注 < &\n新行');
+  expect(plainText).toContain('保留图片替代文字 < &');
+  expect(plainText).toContain('未知结构 <script>保留文字</script> &\n下一行');
+  expect(nodes.some((node) => node.name === 'hr')).toBe(true);
+  expect(nodes.some((node) => node.name === 'script')).toBe(false);
+  expect(html).not.toContain('private-reaction-metadata');
+  expect(html).not.toMatch(/javascript:|NaN|Infinity/);
+  expect(JSON.parse(serializeInlineScriptValue(sanitized))).toBe(sanitized);
 });

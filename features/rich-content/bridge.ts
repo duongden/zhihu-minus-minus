@@ -12,7 +12,7 @@ export type RichContentBridgeMessage =
   | { type: 'image'; src: string }
   | { type: 'image_long_press'; src: string }
   | { type: 'link'; href: string }
-  | { type: 'segment'; pid: string }
+  | { type: 'segment'; pid: string; nodeId?: string }
   | { type: 'selection'; info: TextSelectionInfo | null };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -58,6 +58,7 @@ function parseTextSelectionInfo(value: unknown): TextSelectionInfo | null {
 /** Decode untrusted WebView data without exposing its contents in diagnostics. */
 export function parseRichContentBridgeMessage(
   raw: string,
+  documentIdentity?: number,
 ): RichContentBridgeMessage | null {
   let value: unknown;
   try {
@@ -67,6 +68,11 @@ export function parseRichContentBridgeMessage(
   }
 
   if (!isRecord(value)) return null;
+  if (
+    documentIdentity !== undefined &&
+    value.documentIdentity !== documentIdentity
+  )
+    return null;
 
   switch (value.type) {
     case 'height':
@@ -85,8 +91,13 @@ export function parseRichContentBridgeMessage(
         ? { type: 'link', href: value.href }
         : null;
     case 'segment':
-      return isNonEmptyString(value.pid)
-        ? { type: 'segment', pid: value.pid }
+      return isNonEmptyString(value.pid) &&
+        (value.nodeId === undefined || isNonEmptyString(value.nodeId))
+        ? {
+            type: 'segment',
+            pid: value.pid,
+            ...(value.nodeId !== undefined && { nodeId: value.nodeId }),
+          }
         : null;
     case 'selection': {
       if (value.info === null) return { type: 'selection', info: null };

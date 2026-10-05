@@ -127,9 +127,9 @@ npm run analyze:rich-content:inbox
 
 上述检查只使用合成内容；真实接口、系统选图和键盘行为需在目标平台另行验证，不将真实账号、正文或登录 URL 写入测试与截图。
 
-富文本后续路线按 [Issue #40](https://github.com/huamurui/zhihu-minus-minus/issues/40) 更新为原生 attributed text / Text Flow Island，实施进度与未完成项见 [Renderer V2 计划](../features/rich-content/docs/renderer-v2-plan.md)，Release指标见 [基准计划](../features/rich-content/docs/benchmark-plan.md)。“设置 → 外观与阅读 → 正文排版”提供经典排版、tiqian-super-mini、网页排版三选项；“功能开关 → 正文排版”也会进入同一页面。业务 `ZhihuContent` 默认读取持久偏好，也可显式传 `renderer` 覆盖。从“我的 → 富文本测试案例（开发）”进入功能原型或稳定fixture，可对照这三个后端；案例内切换仅保留于该页面，不写生产偏好。生产构建隐藏开发入口并重定向 `/dev/*`，但真实正文仍可通过设置选择tiqian-super-mini。开发包另有 `zhihu--:///dev/native-validation` 合成验证页，检查 AES、原子文件、恢复、流式哈希、离线公式及原生长文布局；结果文件只含时间戳和布尔值，不能导出真实账号或密钥。
+富文本后续路线按 [Issue #40](https://github.com/huamurui/zhihu-minus-minus/issues/40) 更新为原生 attributed text / Text Flow Island，实施进度与未完成项见 [Renderer V2 计划](../features/rich-content/docs/renderer-v2-plan.md)，Release指标见 [基准计划](../features/rich-content/docs/benchmark-plan.md)。“设置 → 外观与阅读 → 正文排版”提供 tiqian-super-mini（默认）与网页排版两个选项；“功能开关 → 正文排版”也会进入同一页面。业务 `ZhihuContent` 默认读取持久偏好，也可显式传 `renderer` 覆盖。从“我的 → 富文本测试案例（开发）”进入功能原型或稳定fixture，可对照这两个后端；案例内切换仅保留于该页面，不写生产偏好。生产构建隐藏开发入口并重定向 `/dev/*`，但真实正文仍可通过设置选择tiqian-super-mini。开发包另有 `zhihu--:///dev/native-validation` 合成验证页，检查 AES、原子文件、恢复、流式哈希、离线公式及原生长文布局；结果文件只含时间戳和布尔值，不能导出真实账号或密钥。
 
-新增的 [tiqian-super-mini 功能原型](../features/rich-content/docs/renderer-v2-experiment-03-native-flow.md) 经过 HTML → `ZhihuDocument` → Rich Text IR → 本地 `modules/zhihu-rich-text`，初步支持同一流跨段选择、source map、装饰和行内附件。入口为上述案例列表的“tiqian-super-mini 原型”，也可在开发构建打开 `zhihu--:///dev/rich-content/prototype`。Android使用TextView/Spannable，iOS新增UIKit/TextKit adapter，两端共享Document、IR与JS交互宿主。未包含该模块或不支持的平台回退到RNRH。新增或变更模块后，对目标平台运行 `npx expo prebuild --platform android --no-install` 或 `npx expo prebuild --platform ios --no-install`，并重新编译/安装development build；Fast Refresh不能添加原生模块，Expo Go不支持此能力。iOS SVG解码依赖由本地podspec声明，prebuild后需安装Pods。
+新增的 [tiqian-super-mini 功能原型](../features/rich-content/docs/renderer-v2-experiment-03-native-flow.md) 经过 HTML → `ZhihuDocument` → Rich Text IR → 本地 `modules/zhihu-rich-text`，初步支持同一流跨段选择、source map、装饰和行内附件。入口为上述案例列表的“tiqian-super-mini 原型”，也可在开发构建打开 `zhihu--:///dev/rich-content/prototype`。Android使用TextView/Spannable，iOS新增UIKit/TextKit adapter，两端共享Document、IR与JS交互宿主。未包含该模块或不支持的平台回退到 WebView。新增或变更模块后，对目标平台运行 `npx expo prebuild --platform android --no-install` 或 `npx expo prebuild --platform ios --no-install`，并重新编译/安装development build；Fast Refresh不能添加原生模块，Expo Go不支持此能力。iOS SVG解码依赖由本地podspec声明，prebuild后需安装Pods。
 
 iOS最低版本继续为15.1。[expo-router补丁](../patches/expo-router+55.0.18.patch)为原有 `UIAction.subtitle` 赋值增加iOS16可用性守卫，避免当前SDK在默认target下编译失败；15.x仅省略此action副标题。补丁由现有postinstall的patch-package应用，无需改生成Pods工程或提高全局最低系统版本。
 
@@ -141,11 +141,11 @@ xcrun simctl openurl booted 'zhihu--:///dev/rich-content/prototype?caseId=attach
 
 `caseId`限页面内的selection、decorations、attachments、segments、media、typography六个合成案例；忽略无效值，初次打开默认selection，其他query不注入正文。开发URL解析只保留合法且不超过64字符的caseId，生产构建继续隐藏和重定向开发页面。CLI可用于启动和截图，不能据此宣称系统选区拖柄、附件长按或父滚动手势已人工验收。
 
-公共推荐入口为 `ZhihuContent`，默认采用用户正文偏好，需要固定后端时可传 `renderer="native-v2"`；该外壳已封装完整RNRH fallback。直接使用 `ZhihuNativeContent` 必须提供 `renderFallback` callback，由宿主返回完整正文与图片/链接交互；HTML 宿主使用 RNRH，结构化宿主使用 JSON 分段组件。V2选区和知识点事件仅在native模块可用时生效。
+公共推荐入口为 `ZhihuContent`，默认采用用户正文偏好，需要固定后端时可传 `renderer="native-v2"`；该外壳已封装完整 WebView fallback。直接使用 `ZhihuNativeContent` 必须提供 `renderFallback` callback，由宿主返回完整正文与图片/链接交互；HTML 宿主使用 WebView，结构化宿主使用 JSON 分段组件。V2选区和知识点事件仅在native模块可用时生效。
 
 `structured_content` 的渲染对照位于“我的 → 富文本测试案例 → structured_content 渲染对照”。独立 `ZhihuStructuredContent` 直接按 JSON 分段展开收起，可比较 React Native 分段节点和 tiqian 原生文本流。后者直接向 `ZhihuNativeContent.document` 传递 `ZhihuDocument`；未提供该属性时，原 HTML normalization 路径保持不变，结构化模式在缺少原生模块时回退分段节点。五个主要案例来自附件中的真实回答，保持全部分段、marks 与分页状态，身份、ID、业务链接和不透明上下文已脱敏；公开正文与公式图片地址保留并在运行时加载，图片不下载进仓库。原附件缺少真实续页，另有合成案例演示追加；测试页不请求正文或互动接口、不更改持久阅读设置。样本来自 `features/rich-content/fixtures/inbox/structured-content/`，原始请求与字段结构见 [next-render 记录](./ZHIHU_NEXT_RENDER.md)。
 
-正文后端偏好保存为 `richContentRenderer`，默认 `rnrh`。settings持久化版本递增到13，并从旧 `useWebView` 迁移：原值为true时保留网页排版，否则使用经典排版，不静默替用户开启tiqian-super-mini。原生模块缺失或平台不是Android/iOS时，只对本次渲染回退RNRH，保留用户选择供可用客户端继续使用。
+正文后端偏好保存为 `richContentRenderer`，默认 `native-v2`（tiqian-super-mini）。settings version 15 将旧 `rnrh` 或未设置的偏好迁移到默认后端，保留明确选择的 `webview` 及旧 `useWebView=true`。缺少原生模块或平台不是Android/iOS时，本次渲染回退 WebView，保留偏好；RNRH 依赖和入口已删除。
 
 2026-09-30按用户决定正式移除Enriched：组件、专属normalizer与测试、依赖、native patch和开发入口均已删除，研发集中到本地tiqian-super-mini。[Enriched 实验记录](../features/rich-content/docs/renderer-v2-experiment-01-enriched-html.md)仅保留研究与历史构建依据。原生依赖移除后需用锁文件安装依赖，重新prebuild、编译和真机检查，以免旧生成工程继续链接已移除的库。2026-10-01增加iOS原生adapter、Expo Apple模块注册和共享JS入口；初期平台结果见实验03，后续双端Release构建、合成页面与系统交互的覆盖范围见 [本轮审查记录](./CODE_REVIEW_2026-10-01.md)，完整平台验收仍需逐项推进。Tiqian保留为[历史集成草案](../features/rich-content/docs/renderer-v2-experiment-02-tiqian.md)，未接入本轮Android原型。
 
@@ -199,3 +199,15 @@ xcrun simctl openurl booted 'zhihu--:///dev/rich-content/prototype?caseId=attach
 - 类型检查、相关测试、富文本分析和改动文件的 Biome 检查通过；
 - 路由、缓存、持久化或原生配置变更附带迁移和对应验证；
 - 最终说明中列出已运行的命令、未运行的真机/平台验证和剩余风险。
+
+## 回答阅读方式与预览列表
+
+回答入口 `/answer/[id]` 按 `answerReadingMode` 选择详情或预览卡片列表，默认 `detail`；settings version 16 给旧设置补齐该值。`readingMode=detail` 用于主动切换到详情。问题页、收藏夹与点赞页先显示普通摘要卡片，不在列表中加载完整正文。长按 FeedCard 的临时预览菜单保持原有行为。
+
+问题来源的预览列表将同一问题的标题、描述及问题操作集中在列表头；其他来源可能跨问题，每张卡片保留各自的问题标题。卡片显示回答作者、正文和回答操作，使用右下角紧凑的展开/收起按钮。正常渲染没有详情跳转按钮，请求失败时仍提供详情入口。展开长正文并滚过 300px、所有可见卡片操作栏均离开视口时显示悬浮回答操作栏；滚动结束强制重测，回收卡片或换会话后拒绝旧测量。预览与问题页共用 `useDetailHeaderState`、`DetailNavigationHeader` 和渐显计算：初始透明，标题离开顶部时渐显标题与背景，按实测标题及字号更新阈值。回答 Pager 保留独立的身份、位置与焦点管理。
+
+回答、文章、想法与预览浮栏共用 `ContentActionBar` 的胶囊浮面、模糊背景和主题色，保留各页原有底距与高度；评论、展开/收起等按钮复用 `ContentActionButton` 的胶囊点击反馈，更多操作继续用 `MoreActionsButton`。全局 `BouncyButton` 的默认圆角保持原有规则，普通卡片与正文交互不受操作栏样式影响。
+
+回答路由显式传递 `answerScene`；问题 ID 只描述回答所属问题，不推断来源。推荐及其本地缓存卡片使用 `recommend`；其他无明确来源的卡片（搜索、收藏、历史、站内链接等）默认 `unknown`；问题回答页使用 `question_feed`；成员回答列表使用 `profile_answer`，其所属用户由接口来源确认；主页其他页签、主页搜索和最近创作则核对真实作者匹配当前用户后使用该场景，同时保留 `memberId` 与 `memberSort`。用户点赞或活动中的其他作者回答按 `unknown` 处理。传统详情通过 `useAnswerPagerSource` 选择分页来源：推荐入口保留原有同题 ID 分页，问题来源也使用同题分页，用户来源通过成员回答接口跨问题分页，未知来源只显示所选回答。来源缓存和 Pager 身份包含账号会话、场景、目标及排序，换来源或账号后拒绝旧回调/旧响应。跨题翻页时使用当前回答的标题、问题 ID 和跳转；可复用的用户列表 HTML 正文通过已有卡片缓存预热，付费或截断正文不作为完整详情。
+
+预览首卡优先使用点击列表已有的 `content`；FeedCard、问题回答卡片与 CreationCard 只在点击时写入按会话隔离的临时首卡缓存，不将付费或截断列表正文标为完整详情。缺正文时复用普通详情缓存，仍缺失才沿用原 `getAnswer`。首卡展开走普通 `ZhihuContent`，保留实际 `segment_infos` 与 `link_card_info`；折叠只渲染前 3 个块/分段，停用正文触摸与选字，展开后开放完整交互。`/answers/v2` 因用户反馈服务端 `40362` 已停用，原因和验证边界记于 next-render 文档。首卡固定为首项，后续流按回答 ID 去重；首卡与 `/next-render` 分别重试，后续流等待或失败不阻塞首卡阅读，首卡重试保留后续列表，下拉刷新等待两者完成。后续接口使用结构化 JSON 正文，初始 `/next-render` 请求固定 `id=所选回答ID`、`type=answer`、`context_expand=1` 和 `is_native=1`，按上述来源选择 `scenes`。只有 `question_feed` 附带问题容器、会话和游标参数，其他三个场景不附带这些字段。回答列表分页与单回答正文 `/next-content-render` 分页分开：展开时获取第一续页，随后只在可见的展开卡片末尾进入视口下方半屏范围时自动续取。测量按帧合并、滚动检查节流，全列表只有一个自动续页请求在途；远离末尾、收起、换来源或账号后停止继续请求。正常正文不显示加载更多按钮，请求失败保留重试且不自动重试循环。两者保留服务端完整续页 URL，先检查 `is_end`，限制地址来源与路径，拒绝重复续页。查询按当前账号会话隔离；正文从实际 paragraph.pid 和 seg_like 派生互动信息，不混用旧 HTML 业务 ID 或补造范围。首卡段落互动手动刷新普通回答；后续卡片互动成功后手动刷新该回答已加载的正文续页，再刷新外层流来源；失效查询不会自动抓取 disabled 的正文缓存。旧来源/账号回调不能作用于复用的卡片。生产预览通过 `ZhihuContent.document` 共用详情的渲染后端及交互；选择 WebView/缺模块时才安全转换为 HTML，默认原生路径不生成 HTML。未知附加标记保留原文；真实正文结构缺失或加载失败显示重试。未取得的初始会话与游标参数暂为空，续页沿用服务器值；用户提供的成功响应证明该次空值请求成功，仍未主动调用真实 API。

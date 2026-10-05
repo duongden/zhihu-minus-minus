@@ -8,7 +8,9 @@ import {
 } from '../api/zhihu';
 import type { ZhihuMember } from '../api/zhihu/member';
 import UserSearchScreen from '../app/user/[id]/search';
+import { getProfileFeedBody } from '../components/profile/profileSearchResults';
 import type { ZhihuSearchResponse } from '../types/zhihu';
+import type { AnswerReadingContext } from '../utils/answerReadingContext';
 
 const member: ZhihuMember = {
   id: 'synthetic-member-hash',
@@ -19,6 +21,7 @@ const member: ZhihuMember = {
 };
 let mockRoute = { id: member.url_token };
 let mockListProps: FlashListProps<FeedItem>;
+const mockFeedContexts = new Map<string, AnswerReadingContext | undefined>();
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
 let mockCanGoBack = true;
@@ -66,10 +69,18 @@ jest.mock('../components/BouncyButton', () => ({
   BouncyButton: jest.requireActual('react-native').Pressable,
 }));
 jest.mock('../components/FeedCard', () => ({
-  FeedCard: ({ item }: { item: FeedItem }) =>
-    jest
+  FeedCard: ({
+    item,
+    answerContext,
+  }: {
+    item: FeedItem;
+    answerContext?: AnswerReadingContext;
+  }) => {
+    mockFeedContexts.set(item.id, answerContext);
+    return jest
       .requireActual('react')
-      .createElement(jest.requireActual('react-native').Text, null, item.title),
+      .createElement(jest.requireActual('react-native').Text, null, item.title);
+  },
 }));
 jest.mock('@shopify/flash-list', () => ({
   FlashList: (props: FlashListProps<FeedItem>) => {
@@ -122,6 +133,7 @@ let client: QueryClient;
 beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
+  mockFeedContexts.clear();
   mockCanGoBack = true;
   mockRoute = { id: member.url_token };
   client = new QueryClient({
@@ -157,7 +169,12 @@ async function flush(duration = 1) {
 }
 
 test('entry focuses search; only trimmed, nonempty terms search the member hash', async () => {
-  jest.mocked(searchContent).mockResolvedValue(page('第一条创作'));
+  const result = page('第一条创作');
+  Object.assign(result.data[0].object, {
+    content: '<p>合成完整正文</p>',
+    author: { ...member, type: 'people' },
+  });
+  jest.mocked(searchContent).mockResolvedValue(result);
   const host = await render(screen());
   const input = host.getByLabelText('搜索此用户的创作');
   expect(input.props.autoFocus).toBe(true);
@@ -174,6 +191,29 @@ test('entry focuses search; only trimmed, nonempty terms search the member hash'
     signal: expect.objectContaining({ aborted: false }),
   });
   expect(host.getByText('第一条创作')).toBeTruthy();
+  expect(mockListProps.data?.[0].content).toBe('<p>合成完整正文</p>');
+  expect(mockFeedContexts.get('第一条创作')).toEqual({
+    scene: 'profile_answer',
+    memberId: mockRoute.id,
+    memberSort: 'created',
+  });
+  expect(
+    getProfileFeedBody({ content: '<p>摘要正文</p>', paid_info: {} }),
+  ).toMatchObject({ answerType: 'PAID' });
+  expect(
+    getProfileFeedBody({
+      content: '<p>截断正文</p>',
+      content_need_truncated: 'true',
+    }),
+  ).toMatchObject({ contentNeedTruncated: true });
+  expect(
+    getProfileFeedBody({
+      content: [
+        { type: 'text', content: '可复用' },
+        { type: 'image', url: 7 },
+      ],
+    }).content,
+  ).toBeUndefined();
 
   await fireEvent.changeText(input, '另一词');
   expect(host.queryByText('第一条创作')).toBeNull();
@@ -201,6 +241,7 @@ test('pagination retries explicitly after failure and refresh resets to the init
   await flush();
   expect(searchContent).toHaveBeenCalledTimes(2);
   expect(host.getByText('第一页')).toBeTruthy();
+  expect(mockFeedContexts.get('第一页')).toEqual({ scene: 'unknown' });
   expect(host.getByText('更多结果加载失败')).toBeTruthy();
   await act(() => mockListProps.onEndReached?.());
   expect(searchContent).toHaveBeenCalledTimes(2);

@@ -53,9 +53,11 @@ internal class MonoSpan : MetricAffectingSpan() {
 }
 
 internal class QuoteMarginSpan(
+  private val range: TextRange,
   private val color: Int,
   private val stripeWidth: Int,
-  private val gapWidth: Int
+  private val gapWidth: Int,
+  private val trailingSpacing: Int
 ) : LeadingMarginSpan {
   override fun getLeadingMargin(first: Boolean) = stripeWidth + gapWidth
 
@@ -68,7 +70,10 @@ internal class QuoteMarginSpan(
     paint.color = color
     paint.style = Paint.Style.FILL
     val other = x + dir * stripeWidth
-    canvas.drawRect(minOf(x, other).toFloat(), top.toFloat(), max(x, other).toFloat(), bottom.toFloat(), paint)
+    // ParagraphHeightSpan adds the inter-paragraph gap to the last line's
+    // descent. Only the final paragraph in a quote ends before that gap.
+    val stripeBottom = if (end >= range.end) max(top, bottom - trailingSpacing) else bottom
+    canvas.drawRect(minOf(x, other).toFloat(), top.toFloat(), max(x, other).toFloat(), stripeBottom.toFloat(), paint)
     paint.color = previousColor
     paint.style = previousStyle
   }

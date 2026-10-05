@@ -27,7 +27,7 @@ export interface RichContentMetrics {
 }
 
 /**
- * Shared typography for RNRH, WebView and Native V2. Keep numeric tuning here
+ * Shared typography for WebView and tiqian-super-mini. Keep numeric tuning here
  * so the backends do not drift when appearance settings change.
  */
 export function createRichContentMetrics(

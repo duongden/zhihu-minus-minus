@@ -17,6 +17,8 @@ interface PagerProps {
 
 interface AnswerProps {
   id: string;
+  questionId?: string;
+  initialTitle?: string;
   isFocused: boolean;
   isPreloading: boolean;
   onScroll?: (offset: number) => void;
@@ -29,6 +31,8 @@ interface AnswerProps {
 }
 
 interface HeaderProps {
+  title?: string;
+  onTitlePress?: () => void;
   collapsed: boolean;
   author?: { name: string };
   progress: { value: number };
@@ -46,8 +50,20 @@ let mockParams: {
   id: string;
   questionId: string;
   sortBy: string;
+  readingMode?: string;
+  title?: string;
+  answerScene?: string;
+  memberId?: string;
+  memberSort?: string;
 };
-let mockPages: { data: { id: string }[] }[] | undefined;
+let mockReadingMode: 'detail' | 'preview-list' = 'detail';
+const mockPreviewProps = jest.fn();
+let mockPages:
+  | { data: { id: string; question?: { id: string } }[] }[]
+  | undefined;
+const mockAnswerQuestions = new Map<string, { id: string; title: string }>();
+const mockUnavailableAnswers = new Set<string>();
+const mockPagerSource = jest.fn();
 let mockPagerProps: PagerProps;
 let mockPagerMounts: number;
 let mockHeaderProps: HeaderProps;
@@ -75,23 +91,44 @@ const originalCancelIdleCallback = Object.getOwnPropertyDescriptor(
 
 jest.mock('@tanstack/react-query', () => ({
   useQuery: ({ queryKey }: { queryKey: readonly unknown[] }) => ({
-    data: {
-      id: String(queryKey[1]),
-      question: { id: mockParams.questionId, title: '问题' },
-      author: { name: `作者 ${queryKey[1]}` },
-    },
-    isLoading: false,
+    data: mockUnavailableAnswers.has(String(queryKey[1]))
+      ? undefined
+      : {
+          id: String(queryKey[1]),
+          question: mockAnswerQuestions.get(String(queryKey[1])) || {
+            id: mockParams.questionId,
+            title: '问题',
+          },
+          author: { name: `作者 ${queryKey[1]}` },
+        },
+    isLoading: mockUnavailableAnswers.has(String(queryKey[1])),
   }),
   useQueryClient: () => mockQueryClient,
 }));
 jest.mock('../hooks/useActiveScreen', () => ({ useActiveScreen: () => true }));
-jest.mock('../hooks/useZhihuInfiniteQuery', () => ({
-  useZhihuInfiniteQuery: () => ({
-    data: mockPages ? { pages: mockPages } : undefined,
-    fetchNextPage: mockFetchNextPage,
-    hasNextPage: false,
-    isFetchingNextPage: false,
-  }),
+jest.mock('../hooks/useAnswerPagerSource', () => ({
+  useAnswerPagerSource: (options: {
+    initialId: string;
+    questionId?: string | number;
+    sortBy: string;
+    context: { scene: string; memberId?: string; memberSort?: string };
+  }) => {
+    mockPagerSource(options);
+    const { initialId, questionId, sortBy, context } = options;
+    const pages =
+      context.scene === 'unknown' ? [{ data: [{ id: initialId }] }] : mockPages;
+    return {
+      data: pages ? { pages } : undefined,
+      fetchNextPage: mockFetchNextPage,
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      pagerKey: JSON.stringify([
+        context.scene,
+        context.scene === 'profile_answer' ? context.memberId : questionId,
+        context.scene === 'profile_answer' ? context.memberSort : sortBy,
+      ]),
+    };
+  },
 }));
 jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
@@ -133,6 +170,22 @@ jest.mock('../components/AnswerDetailView', () => {
     },
   };
 });
+jest.mock('../components/AnswerPreviewList', () => ({
+  AnswerPreviewList: (props: {
+    answerId: string;
+    questionId?: string;
+    title?: string;
+  }) => {
+    mockPreviewProps(props);
+    return jest
+      .requireActual<typeof import('react')>('react')
+      .createElement(
+        jest.requireActual<typeof import('react-native')>('react-native').Text,
+        { testID: 'answer-preview-list' },
+        props.answerId,
+      );
+  },
+}));
 jest.mock('../components/DetailNavigationHeader', () => ({
   DetailNavigationHeader: (props: HeaderProps) => {
     mockHeaderProps = props;
@@ -165,14 +218,26 @@ jest.mock('../components/BouncyButton', () => ({
     jest.requireActual<typeof import('react-native')>('react-native').Pressable,
 }));
 jest.mock('../store/useSettingsStore', () => ({
-  useSettingsStore: Object.assign(() => false, {
-    getState: () => ({
-      primaryColor: null,
-      readingBackground: 'default',
-      textContrast: 'standard',
-      surfaceStyle: 'layered',
-    }),
-  }),
+  useSettingsStore: Object.assign(
+    (
+      selector: (state: {
+        enableBrowseHistory: boolean;
+        answerReadingMode: string;
+      }) => unknown,
+    ) =>
+      selector({
+        enableBrowseHistory: false,
+        answerReadingMode: mockReadingMode,
+      }),
+    {
+      getState: () => ({
+        primaryColor: null,
+        readingBackground: 'default',
+        textContrast: 'standard',
+        surfaceStyle: 'layered',
+      }),
+    },
+  ),
 }));
 jest.mock('../features/rich-content', () => ({
   getNeighborAnswerIds: () => [],
@@ -302,8 +367,14 @@ function renderedAnswerIds(): string[] {
 }
 
 beforeEach(() => {
+  mockReadingMode = 'detail';
   jest.clearAllMocks();
-  mockParams = { id: '42', questionId: '7', sortBy: 'default' };
+  mockParams = {
+    id: '42',
+    questionId: '7',
+    sortBy: 'default',
+    answerScene: 'question_feed',
+  };
   mockPages = undefined;
   mockPagerMounts = 0;
   mockHeaderProps = { collapsed: false, progress: { value: 0 } };
@@ -313,6 +384,8 @@ beforeEach(() => {
     type: 'question',
     data: null,
   };
+  mockAnswerQuestions.clear();
+  mockUnavailableAnswers.clear();
   mockAnswerProps.clear();
   mockAnswerMounts.clear();
   mockHeaderThresholds.clear();
@@ -365,11 +438,19 @@ describe('answer pager list transitions', () => {
     expect(mockAnswerProps.get('101')?.isPreloading).toBe(false);
   });
 
-  it('keeps the feed-seeded answer mounted when the question answer list arrives', async () => {
+  it('keeps the recommended answer mounted and allows swiping when its question answer list arrives', async () => {
+    mockParams = { ...mockParams, answerScene: 'recommend' };
     const page = await render(React.createElement(AnswerDetailScreen));
     const initialPager = mockPagerProps;
     expect(mockAnswerProps.get('42')?.isFocused).toBe(true);
     expect(mockPagerMounts).toBe(1);
+    expect(mockPagerSource).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        questionId: '7',
+        sortBy: 'default',
+        context: { scene: 'recommend' },
+      }),
+    );
 
     setList(['11', '42', '99']);
     await page.rerender(React.createElement(AnswerDetailScreen));
@@ -377,6 +458,7 @@ describe('answer pager list transitions', () => {
     expect(mockAnswerMounts.get('42')).toBe(1);
     expect(mockAnswerProps.get('42')?.isFocused).toBe(true);
     expect(mockAnswerProps.get('11')?.isFocused).toBe(false);
+    expect(renderedAnswerIds()).toEqual(['11', '42', '99']);
     expect(mockSetPage).toHaveBeenLastCalledWith(1);
 
     await selectPage(0, initialPager);
@@ -569,7 +651,12 @@ describe('answer pager list transitions', () => {
 
     // Returning before native emits a selection for the new identity must
     // not revive the prior question/sort's selected answer.
-    mockParams = { id: '42', questionId: '7', sortBy: 'default' };
+    mockParams = {
+      id: '42',
+      questionId: '7',
+      sortBy: 'default',
+      answerScene: 'question_feed',
+    };
     await page.rerender(React.createElement(AnswerDetailScreen));
     expect(mockPagerMounts).toBe(3);
     expect(mockAnswerProps.get('42')?.isFocused).toBe(true);
@@ -954,4 +1041,103 @@ describe('answer header state across pager navigation', () => {
     await page.rerender(React.createElement(AnswerDetailScreen));
     expect(mockHeaderProps.collapsed).toBe(false);
   });
+});
+
+test('routes preview mode to the list and honors its explicit detail escape', async () => {
+  mockReadingMode = 'preview-list';
+  mockParams = { ...mockParams, sortBy: 'created' };
+  const host = await render(React.createElement(AnswerDetailScreen));
+  expect(host.getByTestId('answer-preview-list')).toHaveTextContent(
+    mockParams.id,
+  );
+  expect(mockPreviewProps).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      answerId: mockParams.id,
+      questionId: mockParams.questionId,
+      sortBy: 'created',
+      answerContext: { scene: 'question_feed' },
+    }),
+  );
+  expect(mockPagerMounts).toBe(0);
+  mockParams = { ...mockParams, readingMode: 'detail' };
+  await host.rerender(React.createElement(AnswerDetailScreen));
+  expect(host.queryByTestId('answer-preview-list')).toBeNull();
+  expect(mockPagerMounts).toBe(1);
+});
+
+test('keeps profile navigation across questions and passes its source to both reading modes', async () => {
+  mockParams = {
+    id: '42',
+    questionId: '7',
+    title: '入口问题',
+    sortBy: 'default',
+    answerScene: 'profile_answer',
+    memberId: 'member-a',
+    memberSort: 'voteups',
+  };
+  mockAnswerQuestions.set('42', { id: '7', title: '问题一' });
+  mockAnswerQuestions.set('11', { id: '8', title: '问题二' });
+  mockPages = [
+    {
+      data: [
+        { id: '42', question: { id: '7' } },
+        { id: '11', question: { id: '8' } },
+      ],
+    },
+  ];
+  const host = await render(React.createElement(AnswerDetailScreen));
+  expect(mockPagerSource).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      context: {
+        scene: 'profile_answer',
+        memberId: 'member-a',
+        memberSort: 'voteups',
+      },
+    }),
+  );
+  expect(mockAnswerProps.get('11')?.questionId).toBe('8');
+  expect(mockAnswerProps.get('11')?.initialTitle).toBeUndefined();
+  await selectPage(1);
+  expect(mockHeaderProps.title).toBe('问题二');
+  await act(() => mockHeaderProps.onTitlePress?.());
+  expect(mockRouter.push).toHaveBeenLastCalledWith('/question/8');
+  expect(mockSetParams).toHaveBeenLastCalledWith({
+    id: '11',
+    questionId: '8',
+    title: undefined,
+  });
+  const mounts = mockPagerMounts;
+  mockParams = { ...mockParams, id: '11', questionId: '8', title: undefined };
+  await host.rerender(React.createElement(AnswerDetailScreen));
+  expect(mockPagerMounts).toBe(mounts);
+  expect(mockAnswerProps.get('11')?.isFocused).toBe(true);
+  mockUnavailableAnswers.add('11');
+  await host.rerender(React.createElement(AnswerDetailScreen));
+  expect(mockHeaderProps.title).toBe('加载中...');
+  expect(mockHeaderProps.author).toBeUndefined();
+  await act(() => mockHeaderProps.onTitlePress?.());
+  expect(mockRouter.push).toHaveBeenLastCalledWith('/question/8');
+  mockReadingMode = 'preview-list';
+  await host.rerender(React.createElement(AnswerDetailScreen));
+  expect(mockPreviewProps).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      answerId: '11',
+      answerContext: {
+        scene: 'profile_answer',
+        memberId: 'member-a',
+        memberSort: 'voteups',
+      },
+    }),
+  );
+  await host.unmount();
+
+  mockReadingMode = 'detail';
+  mockParams = { id: '42', questionId: '7', sortBy: 'default' };
+  await render(React.createElement(AnswerDetailScreen));
+  expect(renderedAnswerIds()).toEqual(['42']);
+  expect(mockPagerSource).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      context: { scene: 'unknown' },
+    }),
+  );
 });

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  ActivityIndicator,
   Image,
   Pressable,
   Text,
@@ -7,6 +8,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { ContentActionButton } from '@/components/ContentActionButton';
 import { useRuntimeThemeColors } from '@/components/Themed';
 import type { ZhihuStructuredContent as ZhihuStructuredContentData } from '@/types/zhihu';
 import type {
@@ -15,18 +17,38 @@ import type {
   ZhihuImageResource,
   ZhihuInlineRun,
 } from '../document';
-import { normalizeZhihuStructuredContent } from '../structuredContent';
+import { getZhihuDocumentPreviewImages } from '../documentTraversal';
+import {
+  getStructuredContentSegmentInfos,
+  normalizeZhihuStructuredContent,
+} from '../structuredContent';
+import { ZhihuContent } from './ZhihuContent';
 import { ZhihuNativeContent } from './ZhihuNativeContent';
 
 export interface ZhihuStructuredContentProps {
   content: ZhihuStructuredContentData;
   documentId: string;
-  renderer: 'blocks' | 'native-v2';
+  renderer: 'shared' | 'blocks' | 'native-v2';
+  /** Real answer ID for the common body host; documentId scopes expansion. */
+  objectId?: string;
+  onRefresh?: () => void;
   /** Preview actual source segments; expanding never mutates their text or marks. */
   previewSegmentCount?: number;
   resources?: Readonly<Record<string, ZhihuImageResource>>;
   onLinkPress?: (url: string) => void;
+  onImagePress?: (url: string, gallery: readonly string[]) => void;
   selectable?: boolean;
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
+  loadMoreError?: string;
+  onLoadMore?: () => void;
+  /** Automatic production paging keeps retry controls and hides normal paging. */
+  showLoadMoreControl?: boolean;
+  expandLabel?: string;
+  collapseLabel?: string;
+  showFallbackNotice?: boolean;
 }
 
 interface InlineFormulaProps {
@@ -65,16 +87,29 @@ function InlineFormula({
   );
 }
 
-/** Isolated JSON renderer for development cases; it has no business mutations. */
+/** Source segments control paging; the common body host controls reading. */
 export const ZhihuStructuredContent = React.memo(
   function ZhihuStructuredContent({
     content,
     documentId,
     renderer,
+    objectId,
+    onRefresh,
     previewSegmentCount = 3,
     resources,
     onLinkPress,
+    onImagePress,
     selectable = true,
+    expanded,
+    onExpandedChange,
+    hasMore = false,
+    isLoadingMore = false,
+    loadMoreError,
+    onLoadMore,
+    showLoadMoreControl = true,
+    expandLabel = '展开全部分段',
+    collapseLabel = '收起分段',
+    showFallbackNotice = true,
   }: ZhihuStructuredContentProps) {
     const colors = useRuntimeThemeColors();
     const dimensions = useWindowDimensions();
@@ -82,32 +117,52 @@ export const ZhihuStructuredContent = React.memo(
     const [expandedDocument, setExpandedDocument] = useState<string | null>(
       null,
     );
-    const isExpanded = expandedDocument === documentId;
+    const isExpanded = expanded ?? expandedDocument === documentId;
     const previewCount = Number.isSafeInteger(previewSegmentCount)
       ? Math.max(1, previewSegmentCount)
       : 3;
-    const visibleContent = useMemo(
-      () => ({
-        ...content,
-        segments: isExpanded
-          ? content.segments
-          : content.segments.slice(0, previewCount),
-      }),
-      [content, isExpanded, previewCount],
-    );
-    const document = useMemo(
+    const completeDocument = useMemo(
       () =>
-        normalizeZhihuStructuredContent(visibleContent, {
+        normalizeZhihuStructuredContent(content, {
           documentId,
           resources,
         }),
-      [visibleContent, documentId, resources],
+      [content, documentId, resources],
+    );
+    const document = useMemo(
+      () =>
+        isExpanded
+          ? completeDocument
+          : {
+              ...completeDocument,
+              blocks: completeDocument.blocks.slice(0, previewCount),
+            },
+      [completeDocument, isExpanded, previewCount],
+    );
+    const completeSegmentInfos = useMemo(
+      () => getStructuredContentSegmentInfos(content),
+      [content],
+    );
+    const segmentInfos = useMemo(() => {
+      const visiblePids = new Set(
+        document.blocks.flatMap((block) =>
+          block.type === 'paragraph' && block.paragraphId
+            ? [block.paragraphId]
+            : [],
+        ),
+      );
+      return completeSegmentInfos.filter((info) => visiblePids.has(info.pid));
+    }, [completeSegmentInfos, document]);
+    const previewImages = useMemo(
+      () => getZhihuDocumentPreviewImages(document).map((image) => image.url),
+      [document],
     );
     const textStyle: TextStyle = {
       color: colors.text,
       fontSize: 17,
       lineHeight: 25.5,
     };
+    const Control = renderer === 'shared' ? ContentActionButton : Pressable;
 
     function inline(runs: readonly ZhihuInlineRun[]): React.ReactNode {
       return runs.map((run) => {
@@ -213,17 +268,26 @@ export const ZhihuStructuredContent = React.memo(
                 : width;
             return (
               <View key={block.id} style={{ marginBottom: 12 }}>
-                <Image
-                  source={{
-                    uri: block.resource.offlineUri ?? block.resource.url,
-                  }}
-                  accessibilityLabel={block.alt || '正文图片'}
-                  resizeMode="contain"
-                  style={{
-                    width: imageWidth,
-                    height: rawHeight * (imageWidth / rawWidth),
-                  }}
-                />
+                <Pressable
+                  disabled={!onImagePress}
+                  accessibilityRole={onImagePress ? 'button' : undefined}
+                  accessibilityLabel={onImagePress ? '查看正文图片' : undefined}
+                  onPress={() =>
+                    onImagePress?.(block.resource.url, previewImages)
+                  }
+                >
+                  <Image
+                    source={{
+                      uri: block.resource.offlineUri ?? block.resource.url,
+                    }}
+                    accessibilityLabel={block.alt || '正文图片'}
+                    resizeMode="contain"
+                    style={{
+                      width: imageWidth,
+                      height: rawHeight * (imageWidth / rawWidth),
+                    }}
+                  />
+                </Pressable>
                 {block.caption?.length ? (
                   <Text
                     selectable={selectable}
@@ -245,6 +309,36 @@ export const ZhihuStructuredContent = React.memo(
                   backgroundColor: colors.border,
                 }}
               />
+            );
+          case 'linkCard':
+            return (
+              <Pressable
+                key={block.id}
+                accessibilityRole="link"
+                accessibilityLabel={block.title}
+                disabled={!onLinkPress}
+                onPress={() => onLinkPress?.(block.url)}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: 12,
+                  marginBottom: 12,
+                  borderRadius: 12,
+                  backgroundColor: colors.backgroundSecondary,
+                }}
+              >
+                {block.image ? (
+                  <Image
+                    source={{ uri: block.image.offlineUri ?? block.image.url }}
+                    style={{ width: 48, height: 48, borderRadius: 6 }}
+                    resizeMode="cover"
+                  />
+                ) : null}
+                <Text style={[textStyle, { color: colors.link, flex: 1 }]}>
+                  {block.title}
+                </Text>
+              </Pressable>
             );
           case 'blockFormula':
             return (
@@ -286,9 +380,11 @@ export const ZhihuStructuredContent = React.memo(
     );
     const renderFallback = () => (
       <View>
-        <Text style={{ color: colors.textSecondary, marginBottom: 12 }}>
-          当前客户端未包含原生文本模块，使用 JSON 分段展示
-        </Text>
+        {showFallbackNotice ? (
+          <Text style={{ color: colors.textSecondary, marginBottom: 12 }}>
+            当前客户端未包含原生文本模块，使用 JSON 分段展示
+          </Text>
+        ) : null}
         {renderBlocks()}
       </View>
     );
@@ -300,7 +396,16 @@ export const ZhihuStructuredContent = React.memo(
           if (Number.isFinite(nextWidth) && nextWidth > 0) setWidth(nextWidth);
         }}
       >
-        {renderer === 'native-v2' ? (
+        {renderer === 'shared' ? (
+          <ZhihuContent
+            document={document}
+            objectId={objectId ?? documentId}
+            type="answer"
+            segmentInfos={segmentInfos}
+            onRefresh={onRefresh}
+            selectable={selectable}
+          />
+        ) : renderer === 'native-v2' ? (
           <View testID="structured-content-native">
             <ZhihuNativeContent
               content=""
@@ -309,30 +414,81 @@ export const ZhihuStructuredContent = React.memo(
               type="answer"
               selectable={selectable}
               onLinkPress={onLinkPress}
+              onImagePress={onImagePress}
               renderFallback={renderFallback}
             />
           </View>
         ) : (
           renderBlocks()
         )}
-        {content.segments.length > previewCount ? (
-          <Pressable
+        {(isExpanded || (renderer === 'shared' && loadMoreError)) &&
+        (loadMoreError || isLoadingMore || (hasMore && showLoadMoreControl)) ? (
+          <View style={{ marginTop: 12 }}>
+            {loadMoreError ? (
+              <Text style={{ color: colors.textSecondary, marginBottom: 8 }}>
+                {loadMoreError}
+              </Text>
+            ) : null}
+            {onLoadMore && (showLoadMoreControl || loadMoreError) ? (
+              <Control
+                accessibilityRole="button"
+                accessibilityState={{ busy: isLoadingMore }}
+                disabled={isLoadingMore}
+                onPress={onLoadMore}
+                style={{ padding: 10, alignItems: 'center' }}
+              >
+                {isLoadingMore ? (
+                  <ActivityIndicator color={colors.link} />
+                ) : (
+                  <Text style={{ color: colors.link }}>
+                    {loadMoreError ? '重新加载正文' : '加载更多正文'}
+                  </Text>
+                )}
+              </Control>
+            ) : isLoadingMore ? (
+              <ActivityIndicator color={colors.link} />
+            ) : null}
+          </View>
+        ) : null}
+        {content.segments.length > previewCount || hasMore || isExpanded ? (
+          <Control
             testID="structured-content-toggle"
             accessibilityRole="button"
             accessibilityState={{ expanded: isExpanded }}
-            onPress={() => setExpandedDocument(isExpanded ? null : documentId)}
-            style={{
-              backgroundColor: colors.primary,
-              borderRadius: 8,
-              padding: 10,
-              alignItems: 'center',
-              marginTop: 8,
+            hitSlop={renderer === 'shared' ? 8 : undefined}
+            onPress={() => {
+              if (expanded === undefined)
+                setExpandedDocument(isExpanded ? null : documentId);
+              onExpandedChange?.(!isExpanded);
             }}
+            style={
+              renderer === 'shared'
+                ? {
+                    alignSelf: 'flex-end',
+                    backgroundColor: 'transparent',
+                    paddingVertical: 6,
+                    paddingHorizontal: 2,
+                    marginTop: 4,
+                  }
+                : {
+                    backgroundColor: colors.primary,
+                    borderRadius: 8,
+                    padding: 10,
+                    alignItems: 'center',
+                    marginTop: 8,
+                  }
+            }
           >
-            <Text style={{ color: colors.onPrimary }}>
-              {isExpanded ? '收起分段' : '展开全部分段'}
+            <Text
+              style={
+                renderer === 'shared'
+                  ? { color: colors.link, fontSize: 13 }
+                  : { color: colors.onPrimary }
+              }
+            >
+              {isExpanded ? collapseLabel : expandLabel}
             </Text>
-          </Pressable>
+          </Control>
         ) : null}
       </View>
     );
