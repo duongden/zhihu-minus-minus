@@ -26,6 +26,12 @@ export interface ApkUpdate {
   checksumAsset?: GithubReleaseAsset;
 }
 
+export interface ApkDownloadOptions {
+  signal?: AbortSignal;
+  onProgress?: (fraction: number) => void;
+  onPhase?: (phase: 'downloading' | 'verifying') => void;
+}
+
 function updateDirectory(): string {
   const base = FileSystem.cacheDirectory ?? FileSystem.documentDirectory;
   if (!base?.startsWith('file://')) throw new UpdateFailure('storage');
@@ -36,6 +42,17 @@ async function removeFile(uri: string): Promise<void> {
   await FileSystem.deleteAsync(uri, { idempotent: true }).catch(() => {
     console.warn('清理更新临时文件失败');
   });
+}
+
+/** Discard an updater-owned verified APK that has not reached the installer. */
+export async function discardVerifiedApk(uri: string): Promise<void> {
+  const directory = updateDirectory();
+  if (
+    !uri.startsWith(directory) ||
+    !/^zhihu-update-[\w.-]+\.apk$/.test(uri.slice(directory.length))
+  )
+    throw new UpdateFailure('storage');
+  await removeFile(uri);
 }
 
 /** Only files owned by this updater are eligible for interrupted-task cleanup. */
@@ -94,10 +111,7 @@ async function withAbort<T>(
 
 export async function downloadVerifiedApk(
   update: ApkUpdate,
-  options: {
-    signal?: AbortSignal;
-    onProgress?: (fraction: number) => void;
-  } = {},
+  options: ApkDownloadOptions = {},
 ): Promise<string> {
   assertUpdateActive(options.signal);
   const { asset, tag, checksumAsset } = update;
@@ -158,6 +172,7 @@ export async function downloadVerifiedApk(
     assertUpdateActive(controller.signal);
     await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
     assertUpdateActive(controller.signal);
+    options.onPhase?.('downloading');
     options.onProgress?.(0);
     activePartials.add(partialUri);
     task = FileSystem.createDownloadResumable(
@@ -195,6 +210,8 @@ export async function downloadVerifiedApk(
     );
     if (downloaded?.status !== 200 || downloaded.uri !== partialUri)
       throw new UpdateFailure('request');
+    options.onPhase?.('verifying');
+    assertUpdateActive(controller.signal);
     const inspection = await withAbort(
       inspectApk(partialUri),
       controller.signal,
@@ -222,17 +239,17 @@ export async function downloadVerifiedApk(
   }
 }
 
-export async function downloadAndInstallVerifiedApk(
-  update: ApkUpdate,
+/** The URI must come from downloadVerifiedApk, after its integrity checks. */
+export async function installVerifiedApk(
+  uri: string,
   options: {
     signal?: AbortSignal;
-    onProgress?: (fraction: number) => void;
+    retainOnFailure?: boolean;
+    alreadyHandedOff?: boolean;
   } = {},
 ): Promise<void> {
-  let uri: string | undefined;
   let handedOff = false;
   try {
-    uri = await downloadVerifiedApk(update, options);
     assertUpdateActive(options.signal);
     const contentUriOperation = FileSystem.getContentUriAsync(uri);
     const contentUri = options.signal
@@ -261,6 +278,19 @@ export async function downloadAndInstallVerifiedApk(
     if (error instanceof UpdateFailure) throw error;
     throw new UpdateFailure('storage');
   } finally {
-    if (uri && !handedOff) await removeFile(uri);
+    if (
+      !handedOff &&
+      !options.alreadyHandedOff &&
+      (!options.retainOnFailure || options.signal?.aborted)
+    )
+      await removeFile(uri);
   }
+}
+
+export async function downloadAndInstallVerifiedApk(
+  update: ApkUpdate,
+  options: ApkDownloadOptions = {},
+): Promise<void> {
+  const uri = await downloadVerifiedApk(update, options);
+  await installVerifiedApk(uri, options);
 }

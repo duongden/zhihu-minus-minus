@@ -4,6 +4,8 @@ import {
   render,
   renderHook,
 } from '@testing-library/react-native';
+import { useState } from 'react';
+import { Pressable, Text, View } from 'react-native';
 import {
   getGithubReleaseHistory,
   getLatestGithubRelease,
@@ -17,7 +19,8 @@ import {
 import { showToast } from '../utils/toast';
 import {
   cleanupUpdatePartials,
-  downloadAndInstallVerifiedApk,
+  downloadVerifiedApk,
+  installVerifiedApk,
 } from '../utils/updateDownload';
 import { UpdateFailure } from '../utils/updateSecurity';
 
@@ -39,12 +42,27 @@ jest.mock('../api/githubReleases', () => ({
 }));
 jest.mock('../utils/updateDownload', () => ({
   cleanupUpdatePartials: jest.fn(async () => undefined),
-  downloadAndInstallVerifiedApk: jest.fn(),
+  downloadVerifiedApk: jest.fn(),
+  installVerifiedApk: jest.fn(async () => undefined),
+  discardVerifiedApk: jest.fn(async () => undefined),
 }));
 jest.mock('../utils/toast', () => ({ showToast: jest.fn() }));
 jest.mock('../components/Themed', () => ({
   Text: require('react-native').Text,
-  useRuntimeThemeColors: () => ({ primary: '#007aff', onPrimary: '#ffffff' }),
+  useRuntimeThemeColors: () => ({
+    primary: '#007aff',
+    onPrimary: '#ffffff',
+    text: '#222222',
+    toastSurface: '#ffffff',
+    link: '#007aff',
+    border: '#dddddd',
+  }),
+}));
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 24, left: 0, right: 0 }),
+}));
+jest.mock('../components/BouncyButton', () => ({
+  BouncyButton: require('react-native').Pressable,
 }));
 jest.mock('../components/MarkdownText', () => ({ MarkdownText: () => null }));
 jest.mock('../components/overlays/AppDialog', () => {
@@ -61,7 +79,7 @@ jest.mock('../components/overlays/AppDialog', () => {
     }) => {
       mockDialogActions = actions ?? [];
       return (
-        <View>
+        <View testID="update-prompt">
           <Text>{title}</Text>
           {children}
           {actions?.map((action) => (
@@ -100,6 +118,9 @@ beforeEach(() => {
   require('react-native').Platform.OS = 'android';
   jest.mocked(getLatestGithubRelease).mockResolvedValue(release);
   jest.mocked(cleanupUpdatePartials).mockResolvedValue(undefined);
+  jest
+    .mocked(downloadVerifiedApk)
+    .mockImplementation(() => new Promise(() => undefined));
 });
 afterEach(() => {
   require('react-native').Platform.OS = previousOS;
@@ -158,7 +179,7 @@ test.each([
   'unmount',
 ] as const)('aborts a running update on %s without showing an error toast', async (operation) => {
   let rejectDownload: ((error: Error) => void) | undefined;
-  jest.mocked(downloadAndInstallVerifiedApk).mockImplementation(
+  jest.mocked(downloadVerifiedApk).mockImplementation(
     () =>
       new Promise((_, reject) => {
         rejectDownload = reject;
@@ -167,8 +188,7 @@ test.each([
   const screen = await render(<UpdateChecker />);
   await act(() => jest.advanceTimersByTimeAsync(2000));
   await fireEvent.press(screen.getByText('直接更新'));
-  const signal = jest.mocked(downloadAndInstallVerifiedApk).mock.calls[0]?.[1]
-    ?.signal;
+  const signal = jest.mocked(downloadVerifiedApk).mock.calls[0]?.[1]?.signal;
   expect(signal?.aborted).toBe(false);
   if (operation === 'cancel') await fireEvent.press(screen.getByText('取消'));
   else await screen.unmount();
@@ -180,6 +200,67 @@ test.each([
   expect(showToast).not.toHaveBeenCalled();
 });
 
+test('keeps surrounding routes interactive during download and waits for an explicit install press', async () => {
+  let finish: ((uri: string) => void) | undefined;
+  jest.mocked(downloadVerifiedApk).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  function Root() {
+    const [page, setPage] = useState('首页');
+    return (
+      <View>
+        <Text>{page}</Text>
+        <Pressable onPress={() => setPage('回答正文')}>
+          <Text>继续阅读</Text>
+        </Pressable>
+        <UpdateChecker />
+      </View>
+    );
+  }
+  const screen = await render(<Root />);
+  await act(() => jest.advanceTimersByTimeAsync(2000));
+  await fireEvent.press(screen.getByText('直接更新'));
+  expect(screen.queryByTestId('update-prompt')).toBeNull();
+  expect(
+    screen.getByTestId('update-download-overlay').props.pointerEvents,
+  ).toBe('box-none');
+  await fireEvent.press(screen.getByText('继续阅读'));
+  expect(screen.getByText('回答正文')).toBeTruthy();
+  const options = jest.mocked(downloadVerifiedApk).mock.calls[0]?.[1];
+  await act(() => options?.onProgress?.(0.5));
+  expect(screen.getByText(/50.0%/)).toBeTruthy();
+  await act(() => options?.onPhase?.('verifying'));
+  expect(screen.getByText('正在校验更新')).toBeTruthy();
+  await act(() => options?.onProgress?.(1));
+  expect(screen.getByText('正在校验更新')).toBeTruthy();
+  await act(() => finish?.('file:///verified.apk'));
+  expect(screen.getByText('安装')).toBeTruthy();
+  expect(installVerifiedApk).not.toHaveBeenCalled();
+  await fireEvent.press(screen.getByText('安装'));
+  expect(installVerifiedApk).toHaveBeenCalledTimes(1);
+  // Returning from the system installer does not establish installation success.
+  expect(screen.getByText('安装')).toBeTruthy();
+});
+
+test('shows download failures and retry in the bar without reopening a modal', async () => {
+  jest
+    .mocked(downloadVerifiedApk)
+    .mockRejectedValueOnce(new UpdateFailure('request'));
+  const screen = await render(<UpdateChecker />);
+  await act(() => jest.advanceTimersByTimeAsync(2000));
+  await fireEvent.press(screen.getByText('直接更新'));
+  expect(screen.queryByTestId('update-prompt')).toBeNull();
+  expect(screen.getByText(new UpdateFailure('request').message)).toBeTruthy();
+  await fireEvent.press(screen.getByText('重试'));
+  expect(downloadVerifiedApk).toHaveBeenCalledTimes(2);
+  expect(screen.getByText('取消')).toBeTruthy();
+  expect(showToast).not.toHaveBeenCalled();
+  await screen.unmount();
+});
+
 test('waits for stale partial cleanup before creating a new download task', async () => {
   let finishCleanup: (() => void) | undefined;
   jest.mocked(cleanupUpdatePartials).mockImplementation(
@@ -188,21 +269,21 @@ test('waits for stale partial cleanup before creating a new download task', asyn
         finishCleanup = resolve;
       }),
   );
-  jest.mocked(downloadAndInstallVerifiedApk).mockResolvedValue(undefined);
+  jest.mocked(downloadVerifiedApk).mockResolvedValue('file:///verified.apk');
   const screen = await render(<UpdateChecker />);
   await act(() => jest.advanceTimersByTimeAsync(2000));
   await fireEvent.press(screen.getByText('直接更新'));
-  expect(downloadAndInstallVerifiedApk).not.toHaveBeenCalled();
+  expect(downloadVerifiedApk).not.toHaveBeenCalled();
   await act(async () => {
     finishCleanup?.();
     await Promise.resolve();
   });
-  expect(downloadAndInstallVerifiedApk).toHaveBeenCalledTimes(1);
+  expect(downloadVerifiedApk).toHaveBeenCalledTimes(1);
 });
 
 test('double tapping update starts only one download', async () => {
   jest
-    .mocked(downloadAndInstallVerifiedApk)
+    .mocked(downloadVerifiedApk)
     .mockImplementation(() => new Promise(() => undefined));
   const screen = await render(<UpdateChecker />);
   await act(() => jest.advanceTimersByTimeAsync(2000));
@@ -214,7 +295,7 @@ test('double tapping update starts only one download', async () => {
     start?.();
     start?.();
   });
-  expect(downloadAndInstallVerifiedApk).toHaveBeenCalledTimes(1);
+  expect(downloadVerifiedApk).toHaveBeenCalledTimes(1);
   await screen.unmount();
 });
 
@@ -238,6 +319,6 @@ test.each([
     finishCleanup?.();
     await Promise.resolve();
   });
-  expect(downloadAndInstallVerifiedApk).not.toHaveBeenCalled();
+  expect(downloadVerifiedApk).not.toHaveBeenCalled();
   expect(showToast).not.toHaveBeenCalled();
 });
