@@ -34,6 +34,7 @@ import type { ZhihuPin, ZhihuPinPoll } from '@/types/zhihu';
 import { formatDateTime } from '@/utils/date';
 import { getZhihuErrorStatus } from '@/utils/zhihuError';
 
+/** Render a pin with scroll padding and reading notices above its floating action bar. */
 export default function PinDetailScreen() {
   const colorScheme = useColorScheme();
   const { id } = useLocalSearchParams();

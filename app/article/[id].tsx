@@ -49,6 +49,7 @@ import { getZhihuErrorStatus } from '@/utils/zhihuError';
 
 const ARTICLE_ACTION_BAR_OFFSET = 10;
 
+/** Render article or Daily content, reserving space for the standard article action bar. */
 export default function ArticleDetail() {
   const colorScheme = useColorScheme();
   const primaryColor = useThemeColor({}, 'primary');

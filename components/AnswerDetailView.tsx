@@ -71,6 +71,7 @@ interface AnswerDetailViewProps {
   isPreloading?: boolean;
 }
 
+/** Render an answer and position its reading overlays above the shared floating actions. */
 export const AnswerDetailView = ({
   id,
   initialTitle,
