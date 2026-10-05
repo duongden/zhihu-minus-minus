@@ -14,7 +14,6 @@ import { ActivityIndicator, Alert } from 'react-native';
 import { RefreshControl } from 'react-native-gesture-handler';
 import Reanimated, {
   SharedTransition,
-  useDerivedValue,
   useSharedValue,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,6 +33,7 @@ import {
   type ZhihuQuestionDetail,
 } from '@/api/zhihu/question';
 import { BouncyButton } from '@/components/BouncyButton';
+import { ContentActionButton } from '@/components/ContentActionButton';
 import {
   DetailNavigationHeader,
   useDetailNavigationHeight,
@@ -48,13 +48,13 @@ import { StableAvatar } from '@/components/StableAvatar';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import { RICH_CONTENT_STALE_TIME, ZhihuContent } from '@/features/rich-content';
+import { useDetailHeaderState } from '@/hooks/useDetailHeaderState';
 import { useGestureScrollView } from '@/hooks/useGestureScrollView';
 import { useOptimisticToggle } from '@/hooks/useOptimisticToggle';
 import { useScrollHeaderAnim } from '@/hooks/useScrollAnimation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useCollectionStore } from '@/store/useCollectionStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
-import { calculateDetailHeaderAppearance } from '@/utils/detailHeaderAppearance';
 import { refreshInfiniteQuery } from '@/utils/query';
 import { getZhihuErrorMessage } from '@/utils/zhihuError';
 
@@ -183,7 +183,7 @@ const QuestionAnswerCard = React.memo(function QuestionAnswerCard({
           type="answers"
           variant="ghost"
         />
-        <BouncyButton
+        <ContentActionButton
           accessibilityRole="button"
           accessibilityLabel={`${item.comment_count} 条回答评论`}
           className="flex-row items-center py-1.5 px-3 rounded-full"
@@ -206,7 +206,7 @@ const QuestionAnswerCard = React.memo(function QuestionAnswerCard({
           <Text type="secondary" className="ml-1 text-xs font-semibold">
             {item.comment_count}
           </Text>
-        </BouncyButton>
+        </ContentActionButton>
         <MoreActionsButton
           accessibilityLabel="回答更多操作"
           style={{ marginLeft: 'auto' }}
@@ -234,11 +234,12 @@ export default function QuestionDetail() {
   const navigationHeight = insets.top + useDetailNavigationHeight();
   const queryClient = useQueryClient();
   const scrollY = useSharedValue(0);
-  const titleCollapseOffset = useSharedValue(100);
-  const headerProgress = useDerivedValue(() =>
-    calculateDetailHeaderAppearance(scrollY.value, titleCollapseOffset.value),
-  );
-  const [headerCollapsed, setHeaderCollapsed] = useState(false);
+  const {
+    headerProgress,
+    collapsed: headerCollapsed,
+    onScrollOffset,
+    onHeaderLayout,
+  } = useDetailHeaderState(id, { scrollY, initialCollapseOffset: 100 });
   const { renderScrollComponent } = useGestureScrollView();
 
   const [sortBy, setSortBy] = useState<AnswerSort>('default');
@@ -344,14 +345,9 @@ export default function QuestionDetail() {
     return `https://www.zhihu.com/question/${id}/answer/${aid}`;
   };
 
-  const handleScrollEffects = useCallback(
-    (currentY: number) =>
-      setHeaderCollapsed(currentY >= titleCollapseOffset.value),
-    [titleCollapseOffset],
-  );
   const { handleScroll } = useScrollHeaderAnim(
     400,
-    handleScrollEffects,
+    onScrollOffset,
     100,
     scrollY,
   );
@@ -419,11 +415,7 @@ export default function QuestionDetail() {
             sharedTransitionStyle={slowTransition}
             onLayout={({ nativeEvent }) => {
               const { y, height } = nativeEvent.layout;
-              titleCollapseOffset.value = Math.max(
-                1,
-                y + height - navigationHeight,
-              );
-              setHeaderCollapsed(scrollY.value >= titleCollapseOffset.value);
+              onHeaderLayout(Math.max(1, y + height - navigationHeight));
             }}
           >
             <Text
@@ -564,7 +556,7 @@ export default function QuestionDetail() {
                   }
                   onPress={() => followMutation.mutate()}
                 />
-                <BouncyButton
+                <ContentActionButton
                   accessibilityRole="button"
                   accessibilityLabel={`${question?.comment_count || 0} 条问题评论`}
                   className="flex-row items-center justify-center gap-1.5"
@@ -591,9 +583,9 @@ export default function QuestionDetail() {
                   >
                     {question?.comment_count || 0} 评论
                   </Text>
-                </BouncyButton>
+                </ContentActionButton>
                 <View className="flex-1" />
-                <BouncyButton
+                <ContentActionButton
                   accessibilityRole="button"
                   onPress={() => router.push(`/question/write/${id}`)}
                   style={{
@@ -614,7 +606,7 @@ export default function QuestionDetail() {
                   >
                     写回答
                   </Text>
-                </BouncyButton>
+                </ContentActionButton>
               </View>
             </>
           )}
@@ -668,8 +660,7 @@ export default function QuestionDetail() {
       id,
       initialTitle,
       navigationHeight,
-      scrollY,
-      titleCollapseOffset,
+      onHeaderLayout,
       sortBy,
       followMutation.mutate,
       followMutation.isPending,

@@ -173,6 +173,11 @@ jest.mock('../components/Themed', () => {
     Text: native.Text,
     View: native.View,
     useThemeColor: () => '#1364cc',
+    useRuntimeThemeColors: () => ({
+      shadow: '#000000',
+      contentOverlayStrong: '#ffffff',
+      contentBorder: '#cccccc',
+    }),
     ThemedIcon: () => null,
   };
 });

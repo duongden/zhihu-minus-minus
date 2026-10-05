@@ -9,7 +9,13 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { ActivityIndicator, RefreshControl } from 'react-native';
+import {
+  ActivityIndicator,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  View as NativeView,
+  RefreshControl,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { recordReadHistory } from '@/api/zhihu/history';
 import {
@@ -19,10 +25,17 @@ import {
   type ZhihuPreviewLoginPrompt,
 } from '@/api/zhihu/nextRender';
 import {
+  AnswerPreviewFloatingBar,
+  FLOATING_BAR_HEIGHT,
+} from '@/components/AnswerPreviewFloatingBar';
+import { AnswerPreviewQuestionHeader } from '@/components/AnswerPreviewQuestionHeader';
+import { ContentActionButton } from '@/components/ContentActionButton';
+import {
   DetailNavigationHeader,
   useDetailNavigationHeight,
 } from '@/components/DetailNavigationHeader';
 import { LikeButton } from '@/components/LikeButton';
+import { MoreActionsButton } from '@/components/MoreActionsButton';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { ShareMenu } from '@/components/ShareMenu';
 import { StableAvatar } from '@/components/StableAvatar';
@@ -31,7 +44,9 @@ import {
   mergeStructuredContentPages,
   ZhihuStructuredContent,
 } from '@/features/rich-content';
+import { useAnswerPreviewFloatingBar } from '@/hooks/useAnswerPreviewFloatingBar';
 import { useAnswerPreviewQuery } from '@/hooks/useAnswerPreviewQuery';
+import { useDetailHeaderState } from '@/hooks/useDetailHeaderState';
 import { getAuthSessionVersion } from '@/store/useAuthStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import type { ZhihuStructuredContent as StructuredContent } from '@/types/zhihu';
@@ -42,6 +57,7 @@ import { BouncyButton } from './BouncyButton';
 type PreviewItem = ZhihuPreviewAnswer | ZhihuPreviewLoginPrompt;
 const initialContentIds = new WeakMap<StructuredContent, number>();
 let initialContentSequence = 0;
+const EMPTY_EXPANDED_IDS: ReadonlySet<string> = new Set();
 
 /** Cache identity is local; neither prose nor opaque continuation URLs become keys. */
 function initialContentId(content: StructuredContent): number {
@@ -57,9 +73,14 @@ interface AnswerPreviewCardProps {
   sessionVersion: number;
   expanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
-  onDetail: () => void;
   onMore: () => void;
   onRefresh: () => void;
+  showQuestion: boolean;
+  onFooterRef: (
+    id: string,
+    view: Pick<NativeView, 'measureInWindow'> | null,
+  ) => void;
+  onFooterLayout: () => void;
 }
 
 const AnswerPreviewCard = React.memo(function AnswerPreviewCard({
@@ -67,9 +88,11 @@ const AnswerPreviewCard = React.memo(function AnswerPreviewCard({
   sessionVersion,
   expanded,
   onExpandedChange,
-  onDetail,
   onMore,
   onRefresh,
+  showQuestion,
+  onFooterRef,
+  onFooterLayout,
 }: AnswerPreviewCardProps) {
   const router = useRouter();
   const colors = useRuntimeThemeColors();
@@ -117,19 +140,26 @@ const AnswerPreviewCard = React.memo(function AnswerPreviewCard({
           void body.fetchNextPage({ cancelRefetch: false });
       }
     : undefined;
+  const footerRef = useCallback(
+    (view: NativeView | null) => onFooterRef(item.id, view),
+    [item.id, onFooterRef],
+  );
 
   return (
     <View
       style={{
         backgroundColor: colors.backgroundSecondary,
         borderRadius: 16,
-        padding: 16,
-        marginBottom: 12,
+        padding: 12,
+        marginBottom: 8,
       }}
     >
-      <Text className="text-lg font-bold mb-3">{item.question.title}</Text>
+      {showQuestion ? (
+        <Text className="text-lg font-bold mb-3">{item.question.title}</Text>
+      ) : null}
       <BouncyButton
         className="flex-row items-center mb-3"
+        style={{ borderRadius: 12 }}
         onPress={() => {
           const memberId = item.author.url_token || item.author.id;
           if (memberId)
@@ -174,22 +204,22 @@ const AnswerPreviewCard = React.memo(function AnswerPreviewCard({
         collapseLabel="收起回答"
         showFallbackNotice={false}
       />
-      {!expanded && loadError ? (
-        <Text type="secondary" className="mt-3">
-          {loadError}
-        </Text>
-      ) : null}
-      <View className="flex-row items-center justify-between mt-3 bg-transparent">
+      <NativeView
+        ref={footerRef}
+        collapsable={false}
+        onLayout={onFooterLayout}
+        className="flex-row items-center justify-between mt-3 bg-transparent"
+      >
         <LikeButton
           id={item.id}
           count={item.voteup_count}
           voted={item.relationship.voting}
           variant="minimal"
         />
-        <BouncyButton
+        <ContentActionButton
           accessibilityRole="button"
           accessibilityLabel="查看评论"
-          className="flex-row items-center px-2 py-2"
+          className="flex-row items-center px-2 py-2 rounded-full"
           onPress={() => router.push(`/comments/${item.id}?type=answer`)}
         >
           <Ionicons
@@ -200,27 +230,9 @@ const AnswerPreviewCard = React.memo(function AnswerPreviewCard({
           <Text type="secondary" className="ml-1 text-xs">
             {item.comment_count}
           </Text>
-        </BouncyButton>
-        <BouncyButton
-          accessibilityRole="button"
-          onPress={onDetail}
-          className="px-2 py-2"
-        >
-          <Text style={{ color: colors.link }}>进入详情</Text>
-        </BouncyButton>
-        <BouncyButton
-          accessibilityRole="button"
-          accessibilityLabel="更多操作"
-          onPress={onMore}
-          className="px-2 py-2"
-        >
-          <Ionicons
-            name="ellipsis-horizontal"
-            size={20}
-            color={colors.textSecondary}
-          />
-        </BouncyButton>
-      </View>
+        </ContentActionButton>
+        <MoreActionsButton accessibilityLabel="更多操作" onPress={onMore} />
+      </NativeView>
     </View>
   );
 });
@@ -247,6 +259,8 @@ export function AnswerPreviewList({
   const query = useAnswerPreviewQuery({ answerId, questionId });
   const listRef = useRef<FlashListRef<PreviewItem>>(null);
   const scope = `${query.sessionVersion}:${answerId}:${questionId ?? ''}`;
+  const currentScope = useRef(scope);
+  currentScope.current = scope;
   const enableBrowseHistory = useSettingsStore(
     (state) => state.enableBrowseHistory,
   );
@@ -271,6 +285,36 @@ export function AnswerPreviewList({
     scope,
     ids: new Set<string>(),
   });
+  const expandedIds =
+    expandedState.scope === scope ? expandedState.ids : EMPTY_EXPANDED_IDS;
+  const floatingBar = useAnswerPreviewFloatingBar({
+    scope,
+    items: query.items,
+    expandedIds,
+    navigationHeight: insets.top + navigationHeight,
+  });
+  const headerState = useDetailHeaderState(scope);
+  const handleScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      headerState.onScrollOffset(event.nativeEvent.contentOffset.y);
+      floatingBar.onScroll(event);
+    },
+    [headerState.onScrollOffset, floatingBar.onScroll],
+  );
+  const handleScrollEnd = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      headerState.onScrollOffset(event.nativeEvent.contentOffset.y);
+      floatingBar.onScrollEnd(event);
+    },
+    [headerState.onScrollOffset, floatingBar.onScrollEnd],
+  );
+  const handleTitleLayout = useCallback(
+    (bottom: number) => {
+      // Title coordinates are local to the list header, following its 4px inset.
+      headerState.onHeaderLayout(Math.max(1, 4 + bottom));
+    },
+    [headerState.onHeaderLayout],
+  );
   const [menuState, setMenuState] = useState<{
     scope: string;
     item: ZhihuPreviewAnswer;
@@ -297,16 +341,48 @@ export function AnswerPreviewList({
   const refreshBody = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: query.queryKey });
   }, [queryClient, query.queryKey]);
-  const screenTitle =
-    title ||
-    query.items.find((item) => item.type === 'answer')?.question.title ||
-    '回答预览';
+  const changeExpanded = useCallback(
+    (id: string, expanded: boolean) => {
+      if (currentScope.current !== scope) return;
+      if (expanded) recordAnswer(id);
+      setExpandedState((current) => {
+        const ids = new Set(current.scope === scope ? current.ids : []);
+        if (expanded) ids.add(id);
+        else ids.delete(id);
+        return { scope, ids };
+      });
+      if (!expanded) {
+        const index = query.items.findIndex(
+          (item) => item.type === 'answer' && item.id === id,
+        );
+        if (index >= 0)
+          listRef.current?.scrollToIndex({
+            index,
+            animated: true,
+            // FlashList 2 adds this offset to the target scroll position.
+            viewOffset: -(insets.top + navigationHeight),
+          });
+      }
+    },
+    [recordAnswer, scope, query.items, insets.top, navigationHeight],
+  );
+  const selectedQuestion =
+    query.items.find(
+      (item): item is ZhihuPreviewAnswer =>
+        item.type === 'answer' && item.id === answerId,
+    )?.question ??
+    query.items.find(
+      (item): item is ZhihuPreviewAnswer => item.type === 'answer',
+    )?.question;
+  const contextQuestionId = questionId || selectedQuestion?.id;
+  const screenTitle = title || selectedQuestion?.title || '回答预览';
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
       <DetailNavigationHeader
         title={screenTitle}
-        collapsed
+        collapsed={headerState.collapsed}
+        progress={headerState.headerProgress}
         onBack={() => router.back()}
         onTitlePress={() =>
           listRef.current?.scrollToOffset({ offset: 0, animated: true })
@@ -335,18 +411,31 @@ export function AnswerPreviewList({
           key={scope}
           ref={listRef}
           data={query.items}
-          initialScrollIndex={Math.max(0, anchorIndex)}
+          onLoad={() => {
+            if (currentScope.current === scope && anchorIndex > 0)
+              void listRef.current?.scrollToIndex({
+                index: anchorIndex,
+                animated: false,
+                viewOffset: -(insets.top + navigationHeight),
+              });
+          }}
+          onViewableItemsChanged={floatingBar.onViewableItemsChanged}
+          viewabilityConfig={floatingBar.viewabilityConfig}
+          onScroll={handleScroll}
+          onScrollEndDrag={handleScrollEnd}
+          onMomentumScrollEnd={handleScrollEnd}
+          scrollEventThrottle={16}
           keyExtractor={(item) => `${item.type}:${item.id}`}
           getItemType={(item) => item.type}
           contentContainerStyle={{
-            paddingHorizontal: 12,
-            paddingTop: insets.top + navigationHeight + 12,
-            paddingBottom: insets.bottom + 20,
+            paddingHorizontal: 6,
+            paddingTop: insets.top + navigationHeight + 4,
+            paddingBottom: insets.bottom + FLOATING_BAR_HEIGHT + 20,
           }}
           renderItem={({ item }) =>
             item.type === 'login_prompt' ? (
               <View
-                className="items-center p-5 rounded-2xl mb-3"
+                className="items-center p-3 rounded-2xl mb-2"
                 style={{ backgroundColor: colors.backgroundSecondary }}
               >
                 <Text type="secondary" className="mb-3 text-center">
@@ -360,26 +449,17 @@ export function AnswerPreviewList({
               <AnswerPreviewCard
                 item={item}
                 sessionVersion={query.sessionVersion}
-                expanded={
-                  expandedState.scope === scope &&
-                  expandedState.ids.has(item.id)
-                }
-                onExpandedChange={(expanded) => {
-                  if (expanded) recordAnswer(item.id);
-                  setExpandedState((current) => {
-                    const ids = new Set(
-                      current.scope === scope ? current.ids : [],
-                    );
-                    if (expanded) ids.add(item.id);
-                    else ids.delete(item.id);
-                    return { scope, ids };
-                  });
-                }}
-                onDetail={() =>
-                  openDetail(item.id, item.question.id, item.question.title)
+                expanded={expandedIds.has(item.id)}
+                onExpandedChange={(expanded) =>
+                  changeExpanded(item.id, expanded)
                 }
                 onMore={() => setMenuState({ scope, item })}
                 onRefresh={refreshBody}
+                showQuestion={
+                  !contextQuestionId || item.question.id !== contextQuestionId
+                }
+                onFooterRef={floatingBar.registerFooter}
+                onFooterLayout={floatingBar.onFooterLayout}
               />
             )
           }
@@ -404,13 +484,13 @@ export function AnswerPreviewList({
             />
           }
           ListHeaderComponent={
-            anchorIndex < 0 ? (
-              <BouncyButton
-                onPress={() => openDetail(answerId, questionId, title)}
-                className="items-center py-3 mb-3"
-              >
-                <Text style={{ color: colors.link }}>进入所选回答详情</Text>
-              </BouncyButton>
+            contextQuestionId ? (
+              <AnswerPreviewQuestionHeader
+                key={contextQuestionId}
+                id={contextQuestionId}
+                title={screenTitle}
+                onTitleLayout={handleTitleLayout}
+              />
             ) : null
           }
           ListEmptyComponent={
@@ -442,6 +522,13 @@ export function AnswerPreviewList({
           }
         />
       )}
+      <AnswerPreviewFloatingBar
+        answer={floatingBar.activeAnswer}
+        visible={floatingBar.visible}
+        bottomInset={insets.bottom}
+        onCollapse={(id) => changeExpanded(id, false)}
+        onMore={(item) => setMenuState({ scope, item })}
+      />
       <ShareMenu
         visible={Boolean(activeMenu)}
         onClose={() => setMenuState(null)}

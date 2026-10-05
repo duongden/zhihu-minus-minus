@@ -77,6 +77,11 @@ jest.mock('../components/Themed', () => {
     View: native.View,
     ThemedIcon: () => null,
     useThemeColor: () => '#1364cc',
+    useRuntimeThemeColors: () => ({
+      shadow: '#000000',
+      contentOverlayStrong: '#ffffff',
+      contentBorder: '#cccccc',
+    }),
   };
 });
 jest.mock('../components/BouncyButton', () => ({

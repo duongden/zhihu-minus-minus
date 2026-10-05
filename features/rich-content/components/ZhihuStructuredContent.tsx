@@ -8,6 +8,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
+import { ContentActionButton } from '@/components/ContentActionButton';
 import { useRuntimeThemeColors } from '@/components/Themed';
 import type { ZhihuStructuredContent as ZhihuStructuredContentData } from '@/types/zhihu';
 import type {
@@ -158,6 +159,7 @@ export const ZhihuStructuredContent = React.memo(
       fontSize: 17,
       lineHeight: 25.5,
     };
+    const Control = renderer === 'shared' ? ContentActionButton : Pressable;
 
     function inline(runs: readonly ZhihuInlineRun[]): React.ReactNode {
       return runs.map((run) => {
@@ -386,29 +388,6 @@ export const ZhihuStructuredContent = React.memo(
         ) : (
           renderBlocks()
         )}
-        {content.segments.length > previewCount || hasMore || isExpanded ? (
-          <Pressable
-            testID="structured-content-toggle"
-            accessibilityRole="button"
-            accessibilityState={{ expanded: isExpanded }}
-            onPress={() => {
-              if (expanded === undefined)
-                setExpandedDocument(isExpanded ? null : documentId);
-              onExpandedChange?.(!isExpanded);
-            }}
-            style={{
-              backgroundColor: colors.primary,
-              borderRadius: 8,
-              padding: 10,
-              alignItems: 'center',
-              marginTop: 8,
-            }}
-          >
-            <Text style={{ color: colors.onPrimary }}>
-              {isExpanded ? collapseLabel : expandLabel}
-            </Text>
-          </Pressable>
-        ) : null}
         {isExpanded && (hasMore || loadMoreError) ? (
           <View style={{ marginTop: 12 }}>
             {loadMoreError ? (
@@ -417,7 +396,7 @@ export const ZhihuStructuredContent = React.memo(
               </Text>
             ) : null}
             {onLoadMore ? (
-              <Pressable
+              <Control
                 accessibilityRole="button"
                 accessibilityState={{ busy: isLoadingMore }}
                 disabled={isLoadingMore}
@@ -431,9 +410,54 @@ export const ZhihuStructuredContent = React.memo(
                     {loadMoreError ? '重新加载正文' : '加载更多正文'}
                   </Text>
                 )}
-              </Pressable>
+              </Control>
             ) : null}
           </View>
+        ) : null}
+        {renderer === 'shared' && !isExpanded && loadMoreError ? (
+          <Text style={{ color: colors.textSecondary, marginTop: 12 }}>
+            {loadMoreError}
+          </Text>
+        ) : null}
+        {content.segments.length > previewCount || hasMore || isExpanded ? (
+          <Control
+            testID="structured-content-toggle"
+            accessibilityRole="button"
+            accessibilityState={{ expanded: isExpanded }}
+            hitSlop={renderer === 'shared' ? 8 : undefined}
+            onPress={() => {
+              if (expanded === undefined)
+                setExpandedDocument(isExpanded ? null : documentId);
+              onExpandedChange?.(!isExpanded);
+            }}
+            style={
+              renderer === 'shared'
+                ? {
+                    alignSelf: 'flex-end',
+                    backgroundColor: 'transparent',
+                    paddingVertical: 6,
+                    paddingHorizontal: 2,
+                    marginTop: 4,
+                  }
+                : {
+                    backgroundColor: colors.primary,
+                    borderRadius: 8,
+                    padding: 10,
+                    alignItems: 'center',
+                    marginTop: 8,
+                  }
+            }
+          >
+            <Text
+              style={
+                renderer === 'shared'
+                  ? { color: colors.link, fontSize: 13 }
+                  : { color: colors.onPrimary }
+              }
+            >
+              {isExpanded ? collapseLabel : expandLabel}
+            </Text>
+          </Control>
         ) : null}
       </View>
     );

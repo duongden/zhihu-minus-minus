@@ -204,4 +204,8 @@ xcrun simctl openurl booted 'zhihu--:///dev/rich-content/prototype?caseId=attach
 
 回答入口 `/answer/[id]` 按 `answerReadingMode` 选择详情或预览卡片列表，默认 `detail`；settings version 16 给旧设置补齐该值。`readingMode=detail` 用于主动切换到详情。问题页、收藏夹与点赞页先显示普通摘要卡片，不在列表中加载完整正文。长按 FeedCard 的临时预览菜单保持原有行为。
 
+预览列表将同一问题的标题、描述及问题操作集中在列表头；卡片只显示回答作者、正文和回答操作，使用右下角紧凑的展开/收起按钮。正常渲染没有详情跳转按钮，请求失败时仍提供详情入口。展开长正文并滚过 300px、所有可见卡片操作栏均离开视口时显示悬浮回答操作栏；滚动结束强制重测，回收卡片或换会话后拒绝旧测量。预览与问题页共用 `useDetailHeaderState`、`DetailNavigationHeader` 和渐显计算：初始透明，标题离开顶部时渐显标题与背景，按实测标题及字号更新阈值。回答 Pager 保留独立的身份、位置与焦点管理。
+
+回答、文章、想法与预览浮栏共用 `ContentActionBar` 的胶囊浮面、模糊背景和主题色，保留各页原有底距与高度；评论、展开/收起等按钮复用 `ContentActionButton` 的胶囊点击反馈，更多操作继续用 `MoreActionsButton`。全局 `BouncyButton` 的默认圆角保持原有规则，普通卡片与正文交互不受操作栏样式影响。
+
 预览列表使用 `/next-render` 的结构化 JSON 正文，将回答列表分页与单回答正文 `/next-content-render` 分页分开。两者保留服务端完整续页 URL，先检查 `is_end`，限制地址来源与路径，拒绝重复续页。查询按当前账号会话隔离；正文从实际 paragraph.pid 和 seg_like 派生互动信息，不混用旧 HTML 业务 ID 或补造范围。生产预览通过 `ZhihuContent.document` 共用详情的渲染后端及交互；选择 WebView/缺模块时才安全转换为 HTML，默认原生路径不生成 HTML。未知附加标记保留原文；真实正文结构缺失或加载失败显示重试。未取得的初始会话与游标参数暂为空，续页沿用服务器值；用户提供的成功响应证明该次空值请求成功，仍未主动调用真实 API。

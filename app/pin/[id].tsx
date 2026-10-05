@@ -1,15 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
-import { BlurView } from 'expo-blur';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import React, { useCallback, useEffect } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet } from 'react-native';
+import { ActivityIndicator, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { recordReadHistory } from '@/api/zhihu/history';
 import { followMember, unfollowMember } from '@/api/zhihu/member';
 import { getPin } from '@/api/zhihu/pin';
 import { getContentVoteCount, getContentVoteState } from '@/api/zhihu/voters';
 import { BouncyButton } from '@/components/BouncyButton';
+import { ContentActionBar } from '@/components/ContentActionBar';
+import { ContentActionButton } from '@/components/ContentActionButton';
 import { FollowButton } from '@/components/FollowButton';
 import { LikeButton } from '@/components/LikeButton';
 import { MoreActionsButton } from '@/components/MoreActionsButton';
@@ -261,66 +262,40 @@ export default function PinDetailScreen() {
       />
 
       {/* 底部交互栏 */}
-      <View
-        className="absolute left-5 right-5 z-[1000]"
-        style={[
-          colorScheme === 'light' && {
-            shadowColor: Colors.light.shadow,
-            shadowOffset: { width: 0, height: 10 },
-            shadowOpacity: 0.1,
-            shadowRadius: 20,
-            elevation: 10,
-          },
-          { bottom: insets.bottom > 0 ? insets.bottom : 15 },
-        ]}
-      >
-        <BlurView
-          intensity={130}
-          tint={colorScheme === 'dark' ? 'dark' : 'light'}
-          className="rounded-[32px] overflow-hidden h-16"
-          style={{
-            backgroundColor: Colors[colorScheme].contentOverlayStrong,
-            borderWidth: StyleSheet.hairlineWidth,
-            borderColor: Colors[colorScheme].contentBorder,
-          }}
-        >
-          <View className="flex-row items-center px-5 h-full bg-transparent">
-            <View className="flex-row items-center bg-transparent">
-              <LikeButton
-                id={pin?.id}
-                count={pinVoteCount}
-                voted={pinVoteState}
-                type="pins"
-                variant="minimal"
-              />
-            </View>
-            <View className="flex-1 flex-row justify-end items-center bg-transparent">
-              <BouncyButton
-                className="items-center justify-center ml-3 p-2 flex-row rounded-full bg-transparent"
-                onPress={() => router.push(`/comments/${id}?type=pin`)}
-              >
-                <ThemedIcon
-                  name="chatbubble-outline"
-                  size={24}
-                  colorType="secondary"
-                />
-                {pin?.comment_count > 0 && (
-                  <Text
-                    type="secondary"
-                    className="ml-1 text-[13px] font-medium"
-                  >
-                    {pin?.comment_count}
-                  </Text>
-                )}
-              </BouncyButton>
-              <MoreActionsButton
-                style={{ marginLeft: 12 }}
-                onPress={() => setOpenMenuIdentity(contentIdentity)}
-              />
-            </View>
+      <ContentActionBar bottom={insets.bottom > 0 ? insets.bottom : 15}>
+        <View className="flex-row items-center px-5 h-full bg-transparent">
+          <View className="flex-row items-center bg-transparent">
+            <LikeButton
+              id={pin?.id}
+              count={pinVoteCount}
+              voted={pinVoteState}
+              type="pins"
+              variant="minimal"
+            />
           </View>
-        </BlurView>
-      </View>
+          <View className="flex-1 flex-row justify-end items-center bg-transparent">
+            <ContentActionButton
+              className="items-center justify-center ml-3 p-2 flex-row rounded-full bg-transparent"
+              onPress={() => router.push(`/comments/${id}?type=pin`)}
+            >
+              <ThemedIcon
+                name="chatbubble-outline"
+                size={24}
+                colorType="secondary"
+              />
+              {pin?.comment_count > 0 && (
+                <Text type="secondary" className="ml-1 text-[13px] font-medium">
+                  {pin?.comment_count}
+                </Text>
+              )}
+            </ContentActionButton>
+            <MoreActionsButton
+              style={{ marginLeft: 12 }}
+              onPress={() => setOpenMenuIdentity(contentIdentity)}
+            />
+          </View>
+        </View>
+      </ContentActionBar>
 
       <VoterListModal
         visible={votersVisible}

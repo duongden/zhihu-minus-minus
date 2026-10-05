@@ -22,6 +22,11 @@ const mockNativeViews = new Map<string, RichTextNativeViewProps>();
 const mockNativeInputs: ZhihuNativeContentProps[] = [];
 const mockSharedInputs: ZhihuContentProps[] = [];
 
+jest.mock('../../../components/BouncyButton', () => ({
+  BouncyButton:
+    jest.requireActual<typeof import('react-native')>('react-native').Pressable,
+}));
+
 jest.mock('../components/ZhihuContent', () => {
   const react = jest.requireActual<typeof import('react')>('react');
   const native =
