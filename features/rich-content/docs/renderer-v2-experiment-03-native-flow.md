@@ -213,6 +213,6 @@ arm64 Debug已覆盖安装到V2509A（API 36），保留应用数据，通过USB
 
 Android 引用线原先直接使用 `LeadingMarginSpan` 的整行 `top..bottom`；段落高度 span 把段后间距加入末行 descent，引用线因此多画了段距。现在连续引用的最后一段在末行扣除其段后间距，引用内部相邻段落的线仍连续；没有新增换行或改动选区/source map。既有引用 fixture 及跨正文/引用选区案例继续复用。
 
-点击正文时的瞬间滚动有明确的静态路径：可选择 TextView 在触摸中取得焦点，本地 RN 0.83 的 `ReactScrollView.requestChildFocus` 会立即滚动到整个 focused 子视图；一个 flow 可跨越多屏。原生容器现在仅在普通触摸取得焦点时保留 child 焦点记录、向祖先传递空 focused，避免要求外层滚动容器显示整个 flow。长按、已有选区、键盘和无障碍焦点仍走原路径；未扩大拦截 caret/选区的显示请求。附件列表为空时，逐帧同步提前返回，省去祖先滚动容器和屏幕可见范围查找。
+点击正文时的瞬间滚动有明确的静态路径：可选择 TextView 在触摸中取得焦点，本地 RN 0.83 的 `ReactScrollView.requestChildFocus` 会立即滚动到整个 focused 子视图；一个 flow 可跨越多屏。最初向祖先传递空 focused 的修正引入了闪退：用户连接的安卓真机崩溃日志显示 `ReactAndroidHWInputDeviceHelper.onFocusChanged` 不接受 null，调用栈直接经过本地 `RichTextView.requestChildFocus`。现在撤销该 override，始终传递真实焦点；`FlowTextView.getDrawingRect` 仅在同步普通触摸内返回触点矩形，避免外层尝试显示整个 flow。长按、已有选区、拖动、键盘和无障碍请求仍使用正常矩形；延迟布局也恢复正常矩形。附件列表为空时，逐帧同步提前返回，省去祖先滚动容器和屏幕可见范围查找。
 
-详情正文的透明候选层已设置 `pointerEvents="none"` 并隐藏其无障碍子节点，阅读滚动指示器也不接收触摸；底部按钮位于正文 ScrollView 之外。静态检查没有找到能明确解释“极少数首次进入后整条底栏无法点击、重进恢复”的稳定遮罩或禁用路径，因此未凭推测重写 Pager、底栏或选择生命周期。焦点修正的 Android 编译、引用末端视觉、长按拖柄与父滚动组合、底栏偶发故障、iOS 和 Release 性能仍须后续平台复验；本轮静态检查不能作为这些行为已经修复或验收的证据。
+详情正文的透明候选层已设置 `pointerEvents="none"` 并隐藏其无障碍子节点，阅读滚动指示器也不接收触摸；底部按钮位于正文 ScrollView 之外。静态检查没有找到能明确解释“极少数首次进入后整条底栏无法点击、重进恢复”的稳定遮罩或禁用路径，因此未凭推测重写 Pager、底栏或选择生命周期。修正后的 `:zhihu-rich-text:compileDebugKotlin --offline` 已通过；只读取了现有真机崩溃日志，未安装或启动应用。修正后的触摸、引用末端视觉、长按拖柄与父滚动组合、底栏偶发故障、iOS 和 Release 性能仍须后续平台复验。

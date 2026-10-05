@@ -7,6 +7,7 @@ import android.graphics.Canvas
 import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
+import android.graphics.Rect
 import android.view.MotionEvent
 import android.view.ViewConfiguration
 import android.widget.TextView
@@ -33,8 +34,10 @@ internal class FlowTextView(context: Context) : TextView(context) {
   private var longPressed = false
   private var hadSelection = false
   private var handlingTouchEvent = false
-  val suppressTouchFocusScroll: Boolean
-    get() = handlingTouchEvent && !longPressed && !hadSelection
+  private var touchX = 0f
+  private var touchY = 0f
+  private val suppressTouchFocusScroll: Boolean
+    get() = handlingTouchEvent && !moved && !longPressed && !hadSelection
 
   init {
     setPadding(0, 0, 0, 0)
@@ -50,6 +53,8 @@ internal class FlowTextView(context: Context) : TextView(context) {
   }
 
   override fun onTouchEvent(event: MotionEvent): Boolean {
+    touchX = event.x
+    touchY = event.y
     when (event.actionMasked) {
       MotionEvent.ACTION_DOWN -> {
         downX = event.x
@@ -78,6 +83,18 @@ internal class FlowTextView(context: Context) : TextView(context) {
       }
     }
     return handled
+  }
+
+  override fun getDrawingRect(outRect: Rect) {
+    super.getDrawingRect(outRect)
+    if (!suppressTouchFocusScroll || width <= 0 || height <= 0 || !touchX.isFinite() || !touchY.isFinite()) return
+    // ReactScrollView reveals this rectangle when TextView takes focus. During
+    // an ordinary touch, reveal only the touched pixel, not the entire flow.
+    // Focus still propagates unchanged; selection, keyboard and accessibility
+    // requests outside this synchronous touch keep the normal drawing bounds.
+    val x = outRect.left + touchX.toInt().coerceIn(0, width - 1)
+    val y = outRect.top + touchY.toInt().coerceIn(0, height - 1)
+    outRect.set(x, y, x + 1, y + 1)
   }
 
   override fun performLongClick(): Boolean {
