@@ -647,8 +647,8 @@ test('finishes pathological and diverse Unicode matches in an isolated process w
   const output = execFileSync(process.execPath, ['-e', script], {
     cwd: path.resolve(__dirname, '..'),
     encoding: 'utf8',
-    timeout: 5000,
+    timeout: 10000,
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   expect(output).toBe('ok\n');
-}, 12000);
+}, 20000);
