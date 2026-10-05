@@ -4,6 +4,7 @@ import { BouncyButton } from '@/components/BouncyButton';
 import { Section } from '@/components/SettingItem';
 import { Text, useThemeColor } from '@/components/Themed';
 import {
+  FEED_REGEX_LIMITS,
   normalizeFeedRegexPatterns,
   parseFeedRegexInput,
 } from '@/utils/feedRegex';
@@ -54,9 +55,18 @@ export function FeedRegexSettings({
           分隔符。任意一条匹配即屏蔽。
         </Text>
         <Text type="secondary" style={styles.helper}>
+          使用 RE2 语法，不支持前后查找或反向引用。最多{' '}
+          {FEED_REGEX_LIMITS.patterns} 条，每条最多{' '}
+          {FEED_REGEX_LIMITS.patternLength} 个字符。
+        </Text>
+        <Text type="secondary" style={styles.helper}>
           仅匹配推荐流返回的完整正文纯文本，不含标题或 HTML
           标签，摘要、截断正文不参与。按 Unicode 字符匹配，“.”
           包含换行，换行计入长度。
+        </Text>
+        <Text type="secondary" style={styles.helper}>
+          正文长度超过 {FEED_REGEX_LIMITS.textLength.toLocaleString('en-US')}{' '}
+          时跳过，一个汉字通常计 1，常见 emoji 计 2。
         </Text>
         <Text type="secondary" style={styles.helper}>
           {'例如 ^.{0,50}$ 屏蔽正文不超过 50 个字符的内容。清空后保存可停用。'}
@@ -84,7 +94,7 @@ export function FeedRegexSettings({
         {hasErrors ? (
           <Text accessibilityRole="alert" type="danger" style={styles.helper}>
             第 {parsed.invalidLines.join('、')}{' '}
-            行：正则表达式语法无效，请检查后再保存。
+            行：规则语法无效、不受支持或超出限制，请检查后再保存。
           </Text>
         ) : (
           <Text type="secondary" style={styles.helper}>

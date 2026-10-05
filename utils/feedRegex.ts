@@ -1,42 +1,69 @@
 import { Parser } from 'htmlparser2';
+import { RE2JS } from 're2js';
 import type { FeedItem } from '@/api/zhihu/feed';
 
-// Dot matches paragraph breaks; Unicode characters (including emoji) count once.
-// No g/y flags: repeated evaluations must not depend on RegExp.lastIndex.
-const REGEX_FLAGS = 'su';
+/** Mobile resource budgets; oversized sources/bodies are rejected, never sliced. */
+export const FEED_REGEX_LIMITS = {
+  patterns: 20,
+  patternLength: 256,
+  inputLength: 16_384,
+  programSize: 4096,
+  htmlLength: 262_144,
+  textLength: 65_536,
+  segments: 2048,
+} as const;
 
-function compilePattern(pattern: string): RegExp | null {
+/** Compile bounded RE2 rules without native RegExp fallback. */
+function compilePattern(pattern: string): RE2JS | null {
+  if (
+    pattern.length === 0 ||
+    pattern.length > FEED_REGEX_LIMITS.patternLength
+  ) {
+    return null;
+  }
   try {
-    return new RegExp(pattern, REGEX_FLAGS);
+    // Unicode code points are intrinsic to RE2; DOTALL includes paragraph breaks.
+    const expression = RE2JS.compile(pattern, RE2JS.DOTALL);
+    return expression.programSize() <= FEED_REGEX_LIMITS.programSize
+      ? expression
+      : null;
   } catch {
     return null;
   }
 }
 
-/** Accept only unique, nonempty, valid regex sources from persisted settings. */
+/** Accept bounded, unique, nonempty RE2 sources from persisted settings. */
 export function normalizeFeedRegexPatterns(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   const patterns = new Set<string>();
   for (const entry of value) {
+    if (patterns.size === FEED_REGEX_LIMITS.patterns) break;
     if (typeof entry !== 'string') continue;
     const pattern = entry.trim();
-    if (pattern && compilePattern(pattern)) patterns.add(pattern);
+    if (!patterns.has(pattern) && compilePattern(pattern))
+      patterns.add(pattern);
   }
   return Array.from(patterns);
 }
 
-/** Blank lines are ignored; error positions refer to the original editor lines. */
+/** Errors use original editor line numbers; unsupported/oversized rules cannot save. */
 export function parseFeedRegexInput(input: string): {
   patterns: string[];
   invalidLines: number[];
 } {
+  if (input.length > FEED_REGEX_LIMITS.inputLength) {
+    return { patterns: [], invalidLines: [1] };
+  }
   const patterns = new Set<string>();
   const invalidLines: number[] = [];
   input.split(/\r?\n/).forEach((line, index) => {
     const pattern = line.trim();
-    if (!pattern) return;
-    if (compilePattern(pattern)) patterns.add(pattern);
-    else invalidLines.push(index + 1);
+    if (!pattern || patterns.has(pattern)) return;
+    if (patterns.size < FEED_REGEX_LIMITS.patterns && compilePattern(pattern)) {
+      patterns.add(pattern);
+    } else {
+      invalidLines.push(index + 1);
+    }
   });
   return { patterns: Array.from(patterns), invalidLines };
 }
@@ -98,28 +125,62 @@ function htmlToFilterText(html: string): string {
     .trim();
 }
 
-const compiledPatterns = new WeakMap<readonly string[], RegExp[]>();
+const compiledPatterns = new WeakMap<
+  readonly string[],
+  readonly RE2JS[] | null
+>();
 const bodyTexts = new WeakMap<FeedItem, string>();
 
+/** Cache text only from complete, bounded bodies, retaining paragraph boundaries. */
 function getBodyText(item: FeedItem): string {
   const cached = bodyTexts.get(item);
   if (cached !== undefined) return cached;
   const content = item.content;
-  const html =
-    typeof content === 'string'
-      ? content
-      : Array.isArray(content)
-        ? content
-            .filter((segment) => segment.type === 'text')
-            .map((segment) => segment.content || segment.own_text || '')
-            .join('\n')
-        : '';
+  let html = '';
+  if (typeof content === 'string') {
+    if (content.length <= FEED_REGEX_LIMITS.htmlLength) html = content;
+  } else if (
+    Array.isArray(content) &&
+    content.length <= FEED_REGEX_LIMITS.segments
+  ) {
+    const parts: string[] = [];
+    let length = 0;
+    for (const segment of content) {
+      if (segment.type !== 'text') continue;
+      const part = segment.content || segment.own_text || '';
+      length += part.length + (parts.length > 0 ? 1 : 0);
+      if (length > FEED_REGEX_LIMITS.htmlLength) {
+        parts.length = 0;
+        break;
+      }
+      parts.push(part);
+    }
+    html = parts.join('\n');
+  }
   const text = htmlToFilterText(html);
-  bodyTexts.set(item, text);
-  return text;
+  const boundedText = text.length <= FEED_REGEX_LIMITS.textLength ? text : '';
+  bodyTexts.set(item, boundedText);
+  return boundedText;
 }
 
-/** Match full recommendation bodies only; excerpts must not look like short answers. */
+/** Cache compiled rules by their immutable settings array, stopping at the rule cap. */
+function compilePatterns(patterns: readonly string[]): readonly RE2JS[] | null {
+  const sources = new Set<string>();
+  const expressions: RE2JS[] = [];
+  for (const entry of patterns) {
+    if (expressions.length === FEED_REGEX_LIMITS.patterns) break;
+    if (typeof entry !== 'string') continue;
+    const source = entry.trim();
+    if (sources.has(source)) continue;
+    const expression = compilePattern(source);
+    if (!expression) continue;
+    sources.add(source);
+    expressions.push(expression);
+  }
+  return expressions.length > 0 ? expressions : null;
+}
+
+/** Match complete recommendation bodies with linear-time RE2; never execute user RegExp. */
 export function matchesFeedRegex(
   item: FeedItem,
   patterns: readonly string[],
@@ -132,16 +193,17 @@ export function matchesFeedRegex(
     return false;
   }
   let expressions = compiledPatterns.get(patterns);
-  if (!expressions) {
-    expressions = normalizeFeedRegexPatterns(patterns).flatMap((pattern) => {
-      const expression = compilePattern(pattern);
-      return expression ? [expression] : [];
-    });
+  if (expressions === undefined) {
+    expressions = compilePatterns(patterns);
     compiledPatterns.set(patterns, expressions);
   }
-  if (expressions.length === 0) return false;
+  if (expressions === null) return false;
   const text = getBodyText(item);
+  // find() requests match boundaries, bypassing RE2JS 2.8.6's DFA Unicode
+  // transition cache. Its one-pass/NFA or memoized bit-state paths avoid
+  // exponential backtracking; test() and RE2Set.match() use that DFA cache.
   return (
-    text.length > 0 && expressions.some((expression) => expression.test(text))
+    text.length > 0 &&
+    expressions.some((expression) => expression.matcher(text).find())
   );
 }

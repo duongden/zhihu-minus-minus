@@ -70,6 +70,7 @@
     "htmlparser2": "^7.2.0",
     "katex": "^0.16.45",
     "nativewind": "^4.2.2",
+    "re2js": "2.8.6",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-native": "0.83.10",
