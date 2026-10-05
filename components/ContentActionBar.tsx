@@ -5,7 +5,7 @@ import Animated from 'react-native-reanimated';
 import { useRuntimeThemeColors } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 
-export const CONTENT_ACTION_BAR_HEIGHT = 44;
+export const CONTENT_ACTION_BAR_HEIGHT = 48;
 
 interface ContentActionBarProps {
   bottomInset: number;
