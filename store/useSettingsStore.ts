@@ -9,6 +9,7 @@ import type {
 } from '@/constants/theme';
 import type { RichContentRenderer } from '@/features/rich-content';
 import type { FilterMode, FilterQualityLevel } from '@/utils/feedFilter';
+import { normalizeFeedRegexPatterns } from '@/utils/feedRegex';
 
 export type { RichContentRenderer } from '@/features/rich-content';
 
@@ -148,8 +149,10 @@ export interface AppSettings {
   recommendRequestAdInterval: number;
 
   // —— 本地内容过滤（见 utils/feedFilter.ts）——
-  /** 过滤总开关。默认关：行为改变型功能不在升级后静默生效。 */
+  /** 本地广告与内容过滤总开关，默认开启。 */
   enableLocalFeedFilter: boolean;
+  /** 针对完整正文纯文本的自定义正则表达式规则。 */
+  filterRegexPatterns: string[];
   /** 被过滤内容的展示方式：折叠占位（默认）或直接隐藏。 */
   filterMode: FilterMode;
   /** 折叠模式下是否在占位行上显示原因文案（仅折叠模式有载体）。 */
@@ -212,7 +215,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   recommendRequestIncludeDesktop: true,
   recommendRequestIncludeAdInterval: true,
   recommendRequestAdInterval: DEFAULT_RECOMMEND_AD_INTERVAL,
-  enableLocalFeedFilter: false,
+  enableLocalFeedFilter: true,
+  filterRegexPatterns: [],
   filterMode: 'collapse',
   filterShowReason: true,
   filterBlockPaid: true,
@@ -284,6 +288,23 @@ export const useSettingsStore = create<SettingsState>()(
             nextSettings.recommendRequestAdInterval,
           );
           // 兜底：过滤 union 字段写入非枚举值时退回默认
+          if (typeof nextSettings.enableLocalFeedFilter !== 'boolean') {
+            nextSettings.enableLocalFeedFilter = true;
+          }
+          if ('filterRegexPatterns' in newSettings) {
+            const patterns = normalizeFeedRegexPatterns(
+              newSettings.filterRegexPatterns,
+            );
+            const previousPatterns = state.filterRegexPatterns;
+            // Feed memoization and the compiled-regex cache use array identity.
+            nextSettings.filterRegexPatterns =
+              patterns.length === previousPatterns.length &&
+              patterns.every(
+                (pattern, index) => pattern === previousPatterns[index],
+              )
+                ? previousPatterns
+                : patterns;
+          }
           if (!isValidFilterMode(nextSettings.filterMode)) {
             nextSettings.filterMode = 'collapse';
           }
@@ -297,7 +318,7 @@ export const useSettingsStore = create<SettingsState>()(
     {
       name: 'zhihu-settings-storage',
       storage: createJSONStorage(() => settingsStorage),
-      version: 16,
+      version: 17,
       migrate: (rawPersistedState: unknown, version: number) => {
         const persistedState =
           normalizePersistedSettingsState(rawPersistedState);
@@ -345,7 +366,6 @@ export const useSettingsStore = create<SettingsState>()(
 
         // 升级到 v8 时兜底本地内容过滤字段
         if (version < 8) {
-          persistedState.enableLocalFeedFilter = false;
           persistedState.filterMode = isValidFilterMode(
             persistedState.filterMode,
           )
@@ -440,6 +460,15 @@ export const useSettingsStore = create<SettingsState>()(
         )
           ? persistedState.answerReadingMode
           : 'detail';
+
+        // v17 adds custom regex rules and enables filtering for unset choices.
+        persistedState.enableLocalFeedFilter =
+          typeof persistedState.enableLocalFeedFilter === 'boolean'
+            ? persistedState.enableLocalFeedFilter
+            : true;
+        persistedState.filterRegexPatterns = normalizeFeedRegexPatterns(
+          persistedState.filterRegexPatterns,
+        );
 
         return persistedState as unknown as SettingsState;
       },

@@ -4,15 +4,17 @@
  * 字段依据见 api/zhihu/feed.ts 的 FeedItem 注释——所有信号都来自实测推荐流可用字段，
  * 不依赖项目过往读取过但接口实际不返回的字段（favlists_count / author.followers_count）。
  *
- * 过滤分两条独立的可调开关族：
+ * 过滤包含独立的可调规则：
  *   - 推广/营销：盐选、广告平台、知乎学堂、微信引流、推广标注、机构号、广告主
  *   - 内容质量：三档强度阈值，按内容类型走组合条件
+ *   - 自定义正则：匹配完整正文的纯文本
  *
  * 豁免（关注作者 / 关注者赞过）作为独立开关，且默认开启，判在广告与质量之前。
  */
 
 import type { FeedItem } from '@/api/zhihu';
 import { getInMemoryFeedKey } from '@/utils/feedIdentity';
+import { matchesFeedRegex } from '@/utils/feedRegex';
 
 const LOCAL_FEED_FILTER_TABS = new Set(['recommend']);
 
@@ -37,12 +39,14 @@ export interface FeedFilterRules {
   /** 内容质量过滤总开关 */
   enableQuality: boolean;
   qualityLevel: FilterQualityLevel;
+  /** 自定义正则源；空数组表示不启用。 */
+  regexPatterns: string[];
   /** 永不过滤（豁免） */
   keepFollowing: boolean;
   keepUpvotedByFollowee: boolean;
 }
 
-export type FilterCategory = 'ad' | 'quality';
+export type FilterCategory = 'ad' | 'quality' | 'regex';
 
 export interface FilterVerdict {
   /** null = 保留；非空字符串为人类可读过滤原因。 */
@@ -138,7 +142,12 @@ export function evaluateFeedItem(
     return { reason: '广告主发布的内容', category: 'ad' };
   }
 
-  // 3. 内容质量：按类型的组合条件
+  // 3. 自定义正则与质量开关独立，沿用关注豁免与展示方式。
+  if (matchesFeedRegex(item, rules.regexPatterns)) {
+    return { reason: '命中自定义正则', category: 'regex' };
+  }
+
+  // 4. 内容质量：按类型的组合条件
   if (rules.enableQuality) {
     const t = QUALITY_THRESHOLDS[rules.qualityLevel];
     const reason = qualityReason(item, t);

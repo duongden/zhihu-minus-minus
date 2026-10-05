@@ -30,10 +30,12 @@ beforeEach(() => {
   jest.mocked(SecureStore.getItemAsync).mockResolvedValue(null);
 });
 
-test('defaults to tiqian-super-mini with visual feedback enabled in settings version 16', () => {
+test('defaults to tiqian-super-mini with visual feedback and filtering enabled in settings version 17', () => {
   expect(useSettingsStore.getState().richContentRenderer).toBe('native-v2');
   expect(useSettingsStore.getState().enablePressFeedback).toBe(true);
-  expect(useSettingsStore.persist.getOptions().version).toBe(16);
+  expect(useSettingsStore.getState().enableLocalFeedFilter).toBe(true);
+  expect(useSettingsStore.getState().filterRegexPatterns).toEqual([]);
+  expect(useSettingsStore.persist.getOptions().version).toBe(17);
 });
 
 test.each([
@@ -90,7 +92,8 @@ test('retains unrelated settings and the earlier settings migrations', async () 
     pressOpacity: 0.82,
     androidFeedbackType: 'ripple',
     enablePressFeedback: true,
-    enableLocalFeedFilter: false,
+    enableLocalFeedFilter: true,
+    filterRegexPatterns: [],
     enableHapticFeedback: true,
     useNativeIOSBottomTabs: true,
     recommendRequestAdInterval: -10,
@@ -121,7 +124,7 @@ test('hydrates legacy settings and writes back only the new renderer field', asy
       fontSizeScale: 1.3,
       enablePressFeedback: true,
     },
-    version: 16,
+    version: 17,
   });
   expect(JSON.parse(persistedJson).state).not.toHaveProperty('useWebView');
 });
@@ -202,4 +205,158 @@ test('adds the answer destination mode on upgrade while preserving explicit choi
     answerReadingMode: 'invalid',
   } as unknown as Partial<AppSettings>);
   expect(useSettingsStore.getState().answerReadingMode).toBe('detail');
+});
+
+test.each([
+  false,
+  true,
+])('preserves a saved v16 filtering preference of %s', async (enabled) => {
+  expect(await migrate({ enableLocalFeedFilter: enabled }, 16)).toMatchObject({
+    enableLocalFeedFilter: enabled,
+    filterRegexPatterns: [],
+  });
+});
+
+test.each([
+  1, 7, 16,
+])('enables filtering only for missing or invalid choices in v%s settings', async (version) => {
+  expect((await migrate({}, version)).enableLocalFeedFilter).toBe(true);
+  expect(
+    (await migrate({ enableLocalFeedFilter: 'invalid' }, version))
+      .enableLocalFeedFilter,
+  ).toBe(true);
+  expect(
+    (await migrate({ enableLocalFeedFilter: false }, version))
+      .enableLocalFeedFilter,
+  ).toBe(false);
+});
+
+test('persists and restores sanitized custom regex rules together with a disabled filter', async () => {
+  const suppliedPatterns = [' 广告\\s*推广 ', '^(?:优惠|福利)', '广告\\s*推广'];
+  const expectedPatterns = ['广告\\s*推广', '^(?:优惠|福利)'];
+  useSettingsStore.getState().updateSettings({
+    enableLocalFeedFilter: false,
+    filterRegexPatterns: suppliedPatterns,
+  });
+  expect(useSettingsStore.getState().filterRegexPatterns).toEqual(
+    expectedPatterns,
+  );
+  expect(suppliedPatterns[0]).toBe(' 广告\\s*推广 ');
+  const persistedJson = jest
+    .mocked(SecureStore.setItemAsync)
+    .mock.calls.at(-1)?.[1];
+  if (!persistedJson) throw new Error('Filter preferences must be persisted');
+  expect(JSON.parse(persistedJson)).toMatchObject({
+    state: {
+      enableLocalFeedFilter: false,
+      filterRegexPatterns: expectedPatterns,
+    },
+    version: 17,
+  });
+  useSettingsStore.setState({
+    enableLocalFeedFilter: true,
+    filterRegexPatterns: [],
+  });
+  jest.mocked(SecureStore.getItemAsync).mockResolvedValue(persistedJson);
+  await useSettingsStore.persist.rehydrate();
+  expect(useSettingsStore.getState()).toMatchObject({
+    enableLocalFeedFilter: false,
+    filterRegexPatterns: expectedPatterns,
+  });
+});
+
+test('sanitizes invalid custom regex payloads on migration and updates', async () => {
+  const invalidPayload = [' 福利 ', '[', '', 42, null, '福利'];
+  const migrated = await migrate({ filterRegexPatterns: invalidPayload }, 16);
+  expect(migrated.filterRegexPatterns).toEqual(['福利']);
+  expect(invalidPayload).toEqual([' 福利 ', '[', '', 42, null, '福利']);
+  expect(
+    (await migrate({ filterRegexPatterns: '福利' }, 16)).filterRegexPatterns,
+  ).toEqual([]);
+  useSettingsStore.getState().updateSettings({
+    filterRegexPatterns: invalidPayload,
+  } as unknown as Partial<AppSettings>);
+  expect(useSettingsStore.getState().filterRegexPatterns).toEqual(['福利']);
+  useSettingsStore.getState().updateSettings({
+    filterRegexPatterns: null,
+    enableLocalFeedFilter: 'invalid',
+  } as unknown as Partial<AppSettings>);
+  expect(useSettingsStore.getState().filterRegexPatterns).toEqual([]);
+  expect(useSettingsStore.getState().enableLocalFeedFilter).toBe(true);
+});
+
+test.each([
+  { patterns: [] },
+  { patterns: ['广告\\s*推广', '^(?:优惠|福利)'] },
+])('retains regex rule references across unrelated updates for %j', ({
+  patterns,
+}) => {
+  const { updateSettings } = useSettingsStore.getState();
+  updateSettings({ filterRegexPatterns: patterns });
+  const savedPatterns = useSettingsStore.getState().filterRegexPatterns;
+
+  updateSettings({ fontSizeScale: 1.4 });
+  expect(useSettingsStore.getState().filterRegexPatterns).toBe(savedPatterns);
+  updateSettings({ enableLocalFeedFilter: false });
+  expect(useSettingsStore.getState().filterRegexPatterns).toBe(savedPatterns);
+  updateSettings({ enableLocalFeedFilter: true });
+  expect(useSettingsStore.getState().filterRegexPatterns).toBe(savedPatterns);
+  expect(savedPatterns).toEqual(patterns);
+});
+
+test('reuses regex rules when an explicit update normalizes to the saved rules', () => {
+  const { updateSettings } = useSettingsStore.getState();
+  updateSettings({ filterRegexPatterns: ['广告\\s*推广', '^(?:优惠|福利)'] });
+  const savedPatterns = useSettingsStore.getState().filterRegexPatterns;
+  const suppliedPatterns = [
+    ' 广告\\s*推广 ',
+    '^(?:优惠|福利)',
+    '广告\\s*推广',
+    '',
+  ];
+
+  updateSettings({ filterRegexPatterns: suppliedPatterns });
+  expect(useSettingsStore.getState().filterRegexPatterns).toBe(savedPatterns);
+  expect(savedPatterns).toEqual(['广告\\s*推广', '^(?:优惠|福利)']);
+  expect(suppliedPatterns).toEqual([
+    ' 广告\\s*推广 ',
+    '^(?:优惠|福利)',
+    '广告\\s*推广',
+    '',
+  ]);
+});
+
+test('replaces changed and cleared regex rules without mutating prior rules', () => {
+  const { updateSettings } = useSettingsStore.getState();
+  updateSettings({ filterRegexPatterns: ['广告\\s*推广', '^(?:优惠|福利)'] });
+  const originalPatterns = useSettingsStore.getState().filterRegexPatterns;
+
+  updateSettings({ filterRegexPatterns: ['盐选'] });
+  const changedPatterns = useSettingsStore.getState().filterRegexPatterns;
+  expect(changedPatterns).not.toBe(originalPatterns);
+  expect(changedPatterns).toEqual(['盐选']);
+  expect(originalPatterns).toEqual(['广告\\s*推广', '^(?:优惠|福利)']);
+
+  updateSettings({ filterRegexPatterns: [] });
+  const clearedPatterns = useSettingsStore.getState().filterRegexPatterns;
+  expect(clearedPatterns).not.toBe(changedPatterns);
+  expect(clearedPatterns).toEqual([]);
+  expect(changedPatterns).toEqual(['盐选']);
+  expect(originalPatterns).toEqual(['广告\\s*推广', '^(?:优惠|福利)']);
+});
+
+test('preserves an explicit new regex rule order without mutating saved rules', () => {
+  const { updateSettings } = useSettingsStore.getState();
+  updateSettings({ filterRegexPatterns: ['广告\\s*推广', '^(?:优惠|福利)'] });
+  const savedPatterns = useSettingsStore.getState().filterRegexPatterns;
+
+  updateSettings({ filterRegexPatterns: ['^(?:优惠|福利)', '广告\\s*推广'] });
+  expect(useSettingsStore.getState().filterRegexPatterns).not.toBe(
+    savedPatterns,
+  );
+  expect(useSettingsStore.getState().filterRegexPatterns).toEqual([
+    '^(?:优惠|福利)',
+    '广告\\s*推广',
+  ]);
+  expect(savedPatterns).toEqual(['广告\\s*推广', '^(?:优惠|福利)']);
 });

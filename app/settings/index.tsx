@@ -57,7 +57,7 @@ const SEARCH_ENTRIES: ReadonlyArray<SearchEntry> = [
     icon: 'filter-outline',
     href: '/settings/filter',
     keywords:
-      '过滤 推荐 屏蔽 广告 营销 盐选 付费 微信 机构 低质量 去重 缓存 曝光 请求 参数',
+      '过滤 推荐 屏蔽 正则 regex 广告 营销 盐选 付费 微信 机构 低质量 去重 缓存 曝光 请求 参数',
   },
   {
     label: '功能开关',

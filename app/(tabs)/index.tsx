@@ -860,6 +860,7 @@ const FeedList = React.forwardRef<
       filterBlockAdvertiser,
       filterEnableQuality,
       filterQualityLevel,
+      filterRegexPatterns,
       filterKeepFollowing,
       filterKeepUpvotedByFollowee,
     } = useSettingsStore();
@@ -901,6 +902,7 @@ const FeedList = React.forwardRef<
         blockAdvertiser: filterBlockAdvertiser,
         enableQuality: filterEnableQuality,
         qualityLevel: filterQualityLevel,
+        regexPatterns: filterRegexPatterns,
         keepFollowing: filterKeepFollowing,
         keepUpvotedByFollowee: filterKeepUpvotedByFollowee,
       }),
@@ -914,6 +916,7 @@ const FeedList = React.forwardRef<
         filterBlockAdvertiser,
         filterEnableQuality,
         filterQualityLevel,
+        filterRegexPatterns,
         filterKeepFollowing,
         filterKeepUpvotedByFollowee,
       ],
