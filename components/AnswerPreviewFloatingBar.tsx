@@ -45,7 +45,7 @@ export function AnswerPreviewFloatingBar({
 
   return (
     <ContentActionBar
-      bottom={bottomInset}
+      bottomInset={bottomInset}
       height={FLOATING_BAR_HEIGHT}
       visible={shown}
       style={animatedStyle}

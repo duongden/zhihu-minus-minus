@@ -22,7 +22,10 @@ import {
 import { recordReadHistory } from '@/api/zhihu/history';
 import { followMember, unfollowMember } from '@/api/zhihu/member';
 import { BouncyButton } from '@/components/BouncyButton';
-import { ContentActionBar } from '@/components/ContentActionBar';
+import {
+  ContentActionBar,
+  getContentActionBarBottom,
+} from '@/components/ContentActionBar';
 import { ContentActionButton } from '@/components/ContentActionButton';
 import { DownvoteButton } from '@/components/DownvoteButton';
 import { FollowButton } from '@/components/FollowButton';
@@ -44,12 +47,18 @@ import type { ZhihuArticle } from '@/types/zhihu';
 import { formatDate } from '@/utils/date';
 import { getZhihuErrorStatus } from '@/utils/zhihuError';
 
+const ARTICLE_ACTION_BAR_OFFSET = 10;
+
 export default function ArticleDetail() {
   const colorScheme = useColorScheme();
   const primaryColor = useThemeColor({}, 'primary');
   const linkColor = useThemeColor({}, 'link');
   const { id, source } = useLocalSearchParams();
   const insets = useSafeAreaInsets();
+  const actionBarBottom = getContentActionBarBottom(
+    insets.bottom,
+    ARTICLE_ACTION_BAR_OFFSET,
+  );
   const router = useRouter();
 
   const isDaily = source === 'daily';
@@ -348,7 +357,9 @@ export default function ArticleDetail() {
         onMomentumScrollEnd={readingProgress.commitProgress}
         contentContainerStyle={{
           paddingTop: isDaily ? 0 : insets.top + 60,
-          paddingBottom: isDaily ? 100 + insets.bottom : 120 + insets.bottom,
+          paddingBottom: isDaily
+            ? 100 + insets.bottom
+            : 120 + actionBarBottom - ARTICLE_ACTION_BAR_OFFSET,
         }}
       >
         {isDaily ? (
@@ -479,12 +490,19 @@ export default function ArticleDetail() {
         visible={readingProgress.restoredOffset !== null}
         onBackToTop={readingProgress.scrollToTop}
         onDismiss={readingProgress.dismissRestoreNotice}
-        bottomOffset={isDaily ? 20 : 88}
+        bottomOffset={
+          isDaily
+            ? 20
+            : 88 + actionBarBottom - insets.bottom - ARTICLE_ACTION_BAR_OFFSET
+        }
       />
 
       {/* Floating Footer Actions for Standard Articles */}
       {!isDaily && (
-        <ContentActionBar bottom={insets.bottom + 10}>
+        <ContentActionBar
+          bottomInset={insets.bottom}
+          bottomOffset={ARTICLE_ACTION_BAR_OFFSET}
+        >
           <View className="flex-row items-center px-5 h-full bg-transparent">
             <View className="flex-row items-center bg-transparent">
               <LikeButton
