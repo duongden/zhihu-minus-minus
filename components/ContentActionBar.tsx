@@ -6,16 +6,26 @@ import { useRuntimeThemeColors } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 
 interface ContentActionBarProps {
-  bottom: number;
+  bottomInset: number;
+  bottomOffset?: number;
   height?: number;
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
   visible?: boolean;
 }
 
+/** Preserve larger safe-area distances; keep small insets visibly floating. */
+export function getContentActionBarBottom(
+  bottomInset: number,
+  bottomOffset = 0,
+): number {
+  return Math.max(bottomInset + bottomOffset, 16);
+}
+
 /** Common floating surface; each content screen owns its action row layout. */
 export function ContentActionBar({
-  bottom,
+  bottomInset,
+  bottomOffset = 0,
   height = 64,
   children,
   style,
@@ -23,6 +33,7 @@ export function ContentActionBar({
 }: ContentActionBarProps) {
   const colors = useRuntimeThemeColors();
   const colorScheme = useColorScheme();
+  const bottom = getContentActionBarBottom(bottomInset, bottomOffset);
   return (
     <Animated.View
       pointerEvents={visible ? 'auto' : 'none'}

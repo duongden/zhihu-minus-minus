@@ -9,7 +9,10 @@ import { followMember, unfollowMember } from '@/api/zhihu/member';
 import { getPin } from '@/api/zhihu/pin';
 import { getContentVoteCount, getContentVoteState } from '@/api/zhihu/voters';
 import { BouncyButton } from '@/components/BouncyButton';
-import { ContentActionBar } from '@/components/ContentActionBar';
+import {
+  ContentActionBar,
+  getContentActionBarBottom,
+} from '@/components/ContentActionBar';
 import { ContentActionButton } from '@/components/ContentActionButton';
 import { FollowButton } from '@/components/FollowButton';
 import { LikeButton } from '@/components/LikeButton';
@@ -36,6 +39,7 @@ export default function PinDetailScreen() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const actionBarBottom = getContentActionBarBottom(insets.bottom);
   const textColor = Colors[colorScheme].text;
   const backgroundColor = Colors[colorScheme].background;
 
@@ -199,7 +203,7 @@ export default function PinDetailScreen() {
         onContentSizeChange={readingProgress.onContentSizeChange}
         onScrollEndDrag={readingProgress.commitProgress}
         onMomentumScrollEnd={readingProgress.commitProgress}
-        contentContainerStyle={{ paddingBottom: 100 + insets.bottom }}
+        contentContainerStyle={{ paddingBottom: 100 + actionBarBottom }}
       >
         {/* 作者信息栏 */}
         <View className="flex-row items-center p-5 justify-between bg-transparent">
@@ -259,10 +263,11 @@ export default function PinDetailScreen() {
         visible={readingProgress.restoredOffset !== null}
         onBackToTop={readingProgress.scrollToTop}
         onDismiss={readingProgress.dismissRestoreNotice}
+        bottomOffset={88 + actionBarBottom - insets.bottom}
       />
 
       {/* 底部交互栏 */}
-      <ContentActionBar bottom={insets.bottom > 0 ? insets.bottom : 15}>
+      <ContentActionBar bottomInset={insets.bottom}>
         <View className="flex-row items-center px-5 h-full bg-transparent">
           <View className="flex-row items-center bg-transparent">
             <LikeButton

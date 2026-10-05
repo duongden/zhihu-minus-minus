@@ -21,7 +21,10 @@ import { type AnswerDetail, deleteAnswer, getAnswer } from '@/api/zhihu';
 import { getAllContentCollectionStatus } from '@/api/zhihu/collection';
 import { followMember, unfollowMember } from '@/api/zhihu/member';
 import { BouncyButton } from '@/components/BouncyButton';
-import { ContentActionBar } from '@/components/ContentActionBar';
+import {
+  ContentActionBar,
+  getContentActionBarBottom,
+} from '@/components/ContentActionBar';
 import { ContentActionButton } from '@/components/ContentActionButton';
 import { useDetailNavigationHeight } from '@/components/DetailNavigationHeader';
 import { DownvoteButton } from '@/components/DownvoteButton';
@@ -84,6 +87,7 @@ export const AnswerDetailView = ({
 }: AnswerDetailViewProps) => {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const actionBarBottom = getContentActionBarBottom(insets.bottom);
 
   const colorScheme = useColorScheme();
   const navigationHeight = insets.top + useDetailNavigationHeight();
@@ -446,7 +450,7 @@ export const AnswerDetailView = ({
         }}
         contentContainerStyle={{
           paddingTop: navigationHeight + 14,
-          paddingBottom: 100 + insets.bottom,
+          paddingBottom: 100 + actionBarBottom,
         }}
       >
         <View
@@ -613,7 +617,7 @@ export const AnswerDetailView = ({
         contentHeight={contentHeight}
         viewportHeight={viewportHeight}
         top={navigationHeight + 8}
-        bottom={insets.bottom + 84}
+        bottom={actionBarBottom + 84}
         visible={isFocused && contentLayoutReady}
       />
 
@@ -621,10 +625,11 @@ export const AnswerDetailView = ({
         visible={readingProgress.restoredOffset !== null}
         onBackToTop={readingProgress.scrollToTop}
         onDismiss={readingProgress.dismissRestoreNotice}
+        bottomOffset={88 + actionBarBottom - insets.bottom}
       />
 
       {/* Footer Actions */}
-      <ContentActionBar bottom={insets.bottom}>
+      <ContentActionBar bottomInset={insets.bottom}>
         <View className="flex-row items-center px-5 h-full bg-transparent">
           <View className="flex-row items-center bg-transparent">
             <LikeButton

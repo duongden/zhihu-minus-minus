@@ -24,6 +24,7 @@ import {
 } from '@/components/AnswerPreviewFloatingBar';
 import { AnswerPreviewPlainBody } from '@/components/AnswerPreviewPlainBody';
 import { AnswerPreviewQuestionHeader } from '@/components/AnswerPreviewQuestionHeader';
+import { getContentActionBarBottom } from '@/components/ContentActionBar';
 import { ContentActionButton } from '@/components/ContentActionButton';
 import {
   DetailNavigationHeader,
@@ -289,6 +290,7 @@ export function AnswerPreviewList({
   const router = useRouter();
   const colors = useRuntimeThemeColors();
   const insets = useSafeAreaInsets();
+  const actionBarBottom = getContentActionBarBottom(insets.bottom);
   const navigationHeight = useDetailNavigationHeight();
   const queryClient = useQueryClient();
   const query = useAnswerPreviewQuery({
@@ -521,7 +523,7 @@ export function AnswerPreviewList({
           contentContainerStyle={{
             paddingHorizontal: 6,
             paddingTop: insets.top + navigationHeight + 4,
-            paddingBottom: insets.bottom + FLOATING_BAR_HEIGHT + 20,
+            paddingBottom: actionBarBottom + FLOATING_BAR_HEIGHT + 20,
           }}
           renderItem={({ item, index }) =>
             item.type === 'login_prompt' ? (
