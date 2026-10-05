@@ -152,14 +152,6 @@ class RichTextView(context: Context, appContext: AppContext) : ExpoView(context,
     textView.isClickable = true
   }
 
-  override fun requestChildFocus(child: View?, focused: View?) {
-    // ReactScrollView scrolls to the full focused view even for a touch. A
-    // selectable flow can be many screens tall, so tapping visible text must
-    // not reveal its whole rectangle. Keep focus bookkeeping and leave
-    // keyboard navigation, accessibility and active selection dragging intact.
-    super.requestChildFocus(child, if (focused === textView && textView.suppressTouchFocusScroll) null else focused)
-  }
-
   override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
     super.onMeasure(widthMeasureSpec, heightMeasureSpec)
     measureText()
