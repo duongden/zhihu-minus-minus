@@ -111,7 +111,7 @@ test('scans every bundled structured case directly with counts and sanitized pag
     result.traits.includes('capture-derived'),
   );
   assert.equal(synthetic.length, 5);
-  assert.equal(captured.length, 5);
+  assert.equal(captured.length, 6);
   for (const result of results) {
     assert.equal(result.sourceType, 'structured_content');
     assert.deepEqual(result.errors, [], result.id);
@@ -155,11 +155,11 @@ test('scans every bundled structured case directly with counts and sanitized pag
       (sum, result) => sum + structuredStats(result).structuredSegments,
       0,
     ),
-    48,
+    87,
   );
   assert.equal(
     captured.reduce((sum, result) => sum + structuredStats(result).marks, 0),
-    99,
+    109,
   );
 });
 

@@ -10,6 +10,7 @@ import Colors from '@/constants/Colors';
 import {
   type RichContentRenderer,
   ZhihuContent,
+  ZhihuStructuredContent,
 } from '@/features/rich-content';
 import { getRichContentDevFixture } from '@/features/rich-content/dev/fixtures';
 import { useSettingsStore } from '@/store/useSettingsStore';
@@ -68,8 +69,9 @@ export default function RichContentFixtureDetailScreen() {
     );
   }
 
+  const webviewLabel = fixture.structuredContent ? 'JSON 分段' : 'WebView';
   const rendererLabel =
-    renderer === 'webview' ? 'WebView / DOM' : 'tiqian-super-mini';
+    renderer === 'webview' ? webviewLabel : 'tiqian-super-mini';
 
   return (
     <RNView style={[styles.screen, { backgroundColor }]}>
@@ -87,7 +89,9 @@ export default function RichContentFixtureDetailScreen() {
             {fixture.sourceType} · {fixture.contentPath}
           </Text>
           <Text type="secondary" style={styles.meta}>
-            {fixture.segmentInfos?.length ?? 0} 条 segment_infos
+            {fixture.structuredContent
+              ? `${fixture.structuredContent.segments.length} 条 JSON 分段`
+              : `${fixture.segmentInfos?.length ?? 0} 条 segment_infos`}
           </Text>
           <Text type="secondary" style={styles.meta}>
             {fixture.traits.join(' · ')}
@@ -119,7 +123,7 @@ export default function RichContentFixtureDetailScreen() {
                       renderer === 'webview' ? { color: onPrimary } : undefined,
                     ]}
                   >
-                    WebView
+                    {webviewLabel}
                   </Text>
                 </BouncyButton>
                 <BouncyButton
@@ -193,18 +197,28 @@ export default function RichContentFixtureDetailScreen() {
           pointerEvents={interactionsEnabled ? 'auto' : 'none'}
           style={styles.content}
         >
-          <ZhihuContent
-            key={`${fixture.id}:${rendererLabel}:${mountIndex}`}
-            content={fixture.content}
-            contentArray={fixture.contentArray}
-            segmentInfos={fixture.segmentInfos}
-            linkCardInfo={fixture.linkCardInfo}
-            objectId={fixture.objectId}
-            type={fixture.rendererType}
-            renderer={renderer}
-            selectable={interactionsEnabled}
-            variant={fixture.variant}
-          />
+          {fixture.structuredContent ? (
+            <ZhihuStructuredContent
+              key={`${fixture.id}:${rendererLabel}:${mountIndex}`}
+              content={fixture.structuredContent}
+              documentId={`fixture:${fixture.id}`}
+              renderer={renderer === 'webview' ? 'blocks' : 'native-v2'}
+              selectable={interactionsEnabled}
+            />
+          ) : (
+            <ZhihuContent
+              key={`${fixture.id}:${rendererLabel}:${mountIndex}`}
+              content={fixture.content}
+              contentArray={fixture.contentArray}
+              segmentInfos={fixture.segmentInfos}
+              linkCardInfo={fixture.linkCardInfo}
+              objectId={fixture.objectId}
+              type={fixture.rendererType}
+              renderer={renderer}
+              selectable={interactionsEnabled}
+              variant={fixture.variant}
+            />
+          )}
         </RNView>
       </ScrollView>
     </RNView>

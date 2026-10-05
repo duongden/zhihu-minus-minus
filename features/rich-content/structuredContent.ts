@@ -87,7 +87,10 @@ export function parseStructuredContentPaging(
   };
 }
 
-function parseMark(value: unknown, text: string): ZhihuStructuredContentMark {
+function parseMark(
+  value: unknown,
+  text: string,
+): ZhihuStructuredContentMark | null {
   const mark = record(value);
   const range = {
     start_index: integer(mark.start_index),
@@ -97,6 +100,10 @@ function parseMark(value: unknown, text: string): ZhihuStructuredContentMark {
     throw new Error(INVALID_CONTENT);
   }
   switch (mark.type) {
+    case 'seg_like':
+      // Paragraph reactions annotate existing prose. Until their interaction
+      // model is supported, retain the text without importing business IDs.
+      return null;
     case 'bold':
       return { ...range, type: 'bold' };
     case 'link': {
@@ -153,7 +160,10 @@ function parseText(value: unknown): ZhihuStructuredContentTextPayload {
   const text = string(payload.text);
   return {
     text,
-    marks: array(payload.marks).map((mark) => parseMark(mark, text)),
+    marks: array(payload.marks).flatMap((mark) => {
+      const parsed = parseMark(mark, text);
+      return parsed ? [parsed] : [];
+    }),
   };
 }
 
@@ -227,7 +237,7 @@ function parseSegment(value: unknown): ZhihuStructuredContentSegment {
   }
 }
 
-/** Unknown blocks/marks reject the whole body instead of silently losing text. */
+/** Unknown structures reject the body; known reaction annotations keep prose. */
 export function parseZhihuStructuredContent(
   value: unknown,
 ): ZhihuStructuredContent {

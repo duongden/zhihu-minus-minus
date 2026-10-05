@@ -90,6 +90,7 @@ async function loadFixtureSource(
   filePath,
   contentPath,
   allowStructuredPages = false,
+  expectStructuredContent = false,
 ) {
   const raw = await readFile(filePath, 'utf8');
   if (path.extname(filePath).toLowerCase() !== JSON_FIXTURE_EXTENSION) {
@@ -114,12 +115,34 @@ async function loadFixtureSource(
     return { document, structuredPages: document.pages };
   }
 
+  if (
+    allowStructuredPages &&
+    isRecord(document) &&
+    document.source === 'capture-derived' &&
+    Array.isArray(document.data)
+  ) {
+    return {
+      document,
+      structuredPages: document.data
+        .filter((entry) => isRecord(entry) && entry.type === 'answer')
+        .map((entry) => entry.structured_content),
+    };
+  }
+
   const selectedContentPath =
     contentPath ??
     (getFixtureValue(document, 'type') === 'question_feed_card'
       ? 'target.content'
       : 'content');
   const selectedContent = getFixtureValue(document, selectedContentPath);
+  if (expectStructuredContent) {
+    if (!isRecord(selectedContent)) {
+      throw new Error(
+        `JSON fixture ${filePath} must contain structured content at ${selectedContentPath}`,
+      );
+    }
+    return { document, structuredPages: [selectedContent] };
+  }
   if (typeof selectedContent !== 'string') {
     throw new Error(
       `JSON fixture ${filePath} must contain string content at ${selectedContentPath}`,
@@ -228,11 +251,14 @@ export function analyzeStructuredContentPages(pages) {
     }
     for (const mark of payload.marks) {
       stats.marks += 1;
-      if (!isRecord(mark) || !Object.hasOwn(stats.markTypes, mark.type)) {
+      if (
+        !isRecord(mark) ||
+        (mark.type !== 'seg_like' && !Object.hasOwn(stats.markTypes, mark.type))
+      ) {
         errors.push(`${location} contains an unsupported mark`);
         continue;
       }
-      stats.markTypes[mark.type] += 1;
+      stats.markTypes[mark.type] = (stats.markTypes[mark.type] ?? 0) + 1;
       if (
         !Number.isSafeInteger(mark.start_index) ||
         !Number.isSafeInteger(mark.end_index) ||
@@ -460,19 +486,29 @@ export async function loadManifest(manifestPath) {
 
 export async function analyzeFixtureCase(fixtureCase, manifestPath) {
   const filePath = path.resolve(path.dirname(manifestPath), fixtureCase.file);
-  const { content, document } = await loadFixtureSource(
+  const { content, document, structuredPages } = await loadFixtureSource(
     filePath,
     fixtureCase.contentPath,
+    false,
+    fixtureCase.sourceType === 'structured_content',
   );
-  const segmentAnalysis = analyzeSegmentInfos(
-    document,
-    fixtureCase.sourceType,
-    content,
-  );
-  const stats = {
-    ...analyzeHtml(content),
-    segmentInfos: segmentAnalysis.count,
-  };
+  let stats;
+  let analysisErrors;
+  if (structuredPages) {
+    ({ stats, errors: analysisErrors } =
+      analyzeStructuredContentPages(structuredPages));
+  } else {
+    const segmentAnalysis = analyzeSegmentInfos(
+      document,
+      fixtureCase.sourceType,
+      content,
+    );
+    stats = {
+      ...analyzeHtml(content),
+      segmentInfos: segmentAnalysis.count,
+    };
+    analysisErrors = segmentAnalysis.errors;
+  }
   return {
     ...fixtureCase,
     filePath,
@@ -482,7 +518,7 @@ export async function analyzeFixtureCase(fixtureCase, manifestPath) {
       ...(document
         ? compareExpectedMetadata(document, fixtureCase.expectedMetadata)
         : []),
-      ...segmentAnalysis.errors,
+      ...analysisErrors,
     ],
   };
 }

@@ -10,7 +10,18 @@ import {
   getStructuredContentContinuation,
   normalizeZhihuAnswerPreviewPage,
 } from '../api/zhihu/nextRender';
-import { mergeStructuredContentPages } from '../features/rich-content/structuredContent';
+import { compileZhihuDocument } from '../features/rich-content/compileRichText';
+import {
+  decodeRichContentDevFixture,
+  parseRichContentFixtureManifest,
+} from '../features/rich-content/dev/fixtureDecoder';
+import nextRenderSegLikeFixture from '../features/rich-content/fixtures/cases/next-render-seg-like-001.json';
+import richContentManifest from '../features/rich-content/fixtures/manifest.json';
+import {
+  mergeStructuredContentPages,
+  normalizeZhihuStructuredContent,
+  parseStructuredContentPaging,
+} from '../features/rich-content/structuredContent';
 import { useAnswerPreviewQuery } from '../hooks/useAnswerPreviewQuery';
 import { useAuthStore } from '../store/useAuthStore';
 import type { ZhihuStructuredContent } from '../types/zhihu';
@@ -135,6 +146,74 @@ test('normalizes native metadata, keeps login prompts and rejects an unknown bod
     structuredContent: null,
     contentError: expect.any(String),
   });
+});
+
+test('renders all captured answers with seg_like annotations without losing prose, bold marks or paging boundaries', () => {
+  const source = nextRenderSegLikeFixture;
+  const original = JSON.stringify(source);
+  const page = normalizeZhihuAnswerPreviewPage(source);
+  const answers = page.data.filter((item) => item.type === 'answer');
+  expect(answers).toHaveLength(5);
+  expect(
+    answers.map((item) => item.structuredContent?.segments.length),
+  ).toEqual([2, 11, 8, 10, 8]);
+  expect(page.paging.is_end).toBe(false);
+  expect(getAnswerPreviewContinuation([page], [])).toEqual({
+    next: source.paging.next,
+  });
+  let retainedBoldMarks = 0;
+  let annotationMarks = 0;
+  for (const [index, item] of answers.entries()) {
+    expect(item.contentError).toBeUndefined();
+    const body = item.structuredContent;
+    if (!body) throw new Error('Expected renderable captured answer');
+    const rawSegments = source.data[index].structured_content.segments;
+    for (const [segmentIndex, segment] of body.segments.entries()) {
+      if (segment.type !== 'paragraph')
+        throw new Error('Expected captured paragraph');
+      const raw = rawSegments[segmentIndex].paragraph;
+      expect(segment.paragraph.text).toBe(raw.text);
+      expect(segment.paragraph.marks).toEqual(
+        raw.marks.filter((mark) => mark.type !== 'seg_like'),
+      );
+      annotationMarks += raw.marks.filter(
+        (mark) => mark.type === 'seg_like',
+      ).length;
+      retainedBoldMarks += segment.paragraph.marks.filter(
+        (mark) => mark.type === 'bold',
+      ).length;
+    }
+    const document = normalizeZhihuStructuredContent(body, {
+      documentId: `captured-answer:${item.id}`,
+    });
+    const compilation = compileZhihuDocument(document, {
+      fontSize: 17,
+      lineHeight: 25.5,
+    });
+    expect(compilation.diagnostics).toEqual([]);
+    expect(
+      compilation.parts
+        .flatMap((part) => (part.type === 'flow' ? [part.flow.text] : []))
+        .join('\n'),
+    ).toBe(rawSegments.map((segment) => segment.paragraph.text).join('\n'));
+    const paging = parseStructuredContentPaging(body.paging);
+    expect(paging.is_end).toBe(true);
+    expect(paging.next).not.toBe('');
+    expect(getStructuredContentContinuation([body], [])).toEqual({});
+  }
+  expect(annotationMarks).toBe(4);
+  expect(retainedBoldMarks).toBe(6);
+  const summary = parseRichContentFixtureManifest(richContentManifest).find(
+    (entry) => entry.id === 'next-render-seg-like-001',
+  );
+  if (!summary) throw new Error('Expected registered next-render fixture');
+  const devFixture = decodeRichContentDevFixture(summary, source);
+  expect(devFixture.structuredContent).toEqual(answers[0].structuredContent);
+  expect(devFixture.content).toBe('');
+  expect(devFixture.objectId).toBe(source.data[0].id);
+  expect(devFixture.rendererType).toBe('answer');
+  expect(JSON.stringify(source)).toBe(original);
+  expect(apiClient.get).not.toHaveBeenCalled();
 });
 
 test('requests complete server continuation URLs with stable headers and refuses other origins or endpoints', async () => {

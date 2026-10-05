@@ -426,6 +426,37 @@
         "type": "answer",
         "content_need_truncated": false
       }
+    },
+    {
+      "id": "next-render-seg-like-001",
+      "file": "./cases/next-render-seg-like-001.json",
+      "contentPath": "data.0.structured_content",
+      "sourceType": "structured_content",
+      "collectedAt": "2026-10-05",
+      "traits": [
+        "capture-derived",
+        "structured-content",
+        "paragraph",
+        "seg-like",
+        "bold",
+        "utf16",
+        "two-level-paging",
+        "json-envelope"
+      ],
+      "expected": {
+        "paragraphs": 2,
+        "structuredSegments": 2,
+        "marks": 1
+      },
+      "expectedMetadata": {
+        "data.length": 5,
+        "data.0.structured_content.segments.length": 2,
+        "data.1.structured_content.segments.length": 11,
+        "data.2.structured_content.segments.length": 8,
+        "data.3.structured_content.segments.length": 10,
+        "data.4.structured_content.segments.length": 8,
+        "paging.is_end": false
+      }
     }
   ]
 }
