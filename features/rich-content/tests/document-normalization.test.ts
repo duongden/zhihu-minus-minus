@@ -62,6 +62,7 @@ describe('prototype HTML to ZhihuDocument normalization', () => {
     expect(document.blocks[0]).toMatchObject({
       type: 'video',
       videoId: '42',
+      lensId: '42',
       url: 'https://www.zhihu.com/zvideo/42',
       title: '示例视频',
       resource: {
@@ -378,6 +379,7 @@ describe('prototype HTML to ZhihuDocument normalization', () => {
     expect(document.blocks[0]).toMatchObject({
       type: 'video',
       videoId: '44',
+      lensId: '44',
       url: 'https://www.zhihu.com/video/44',
       poster: { url: 'https://example.com/poster.png' },
     });
@@ -385,6 +387,42 @@ describe('prototype HTML to ZhihuDocument normalization', () => {
       type: 'code',
       language: 'typescript',
       text: '  one\n    two',
+    });
+  });
+
+  it('keeps Lens identity separate when the video-box href has a different zvideo ID', () => {
+    const { document } = normalize(
+      '<a class="video-box" data-lens-id="101" href="https://www.zhihu.com/zvideo/202">视频</a>',
+    );
+    expect(document.blocks[0]).toMatchObject({
+      type: 'video',
+      videoId: '202',
+      lensId: '101',
+      url: 'https://www.zhihu.com/zvideo/202',
+    });
+  });
+
+  it.each([
+    '<span><img data-original-src="https://example.com/nested-cover.png"></span>',
+    '<span><img data-actualsrc="javascript:alert(1)" src="https://example.com/nested-cover.png"></span>',
+  ])('keeps nested lazy video covers and skips unsafe candidates: %s', (image) => {
+    const { document } = normalize(
+      `<a class="video-box" data-lens-id="101">${image}</a>`,
+    );
+    expect(document.blocks[0]).toMatchObject({
+      type: 'video',
+      lensId: '101',
+      poster: { url: 'https://example.com/nested-cover.png' },
+    });
+  });
+
+  it('uses a video-box thumbnail before its child placeholder', () => {
+    const { document } = normalize(
+      '<a class="video-box" data-lens-id="101" data-thumbnail="https://example.com/thumbnail.png"><span><img src="https://example.com/placeholder.png"></span></a>',
+    );
+    expect(document.blocks[0]).toMatchObject({
+      type: 'video',
+      poster: { url: 'https://example.com/thumbnail.png' },
     });
   });
 

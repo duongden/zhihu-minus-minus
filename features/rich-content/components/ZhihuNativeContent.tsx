@@ -25,6 +25,7 @@ import {
 } from '@/modules/zhihu-rich-text';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import type { ZhihuContentSegment, ZhihuSegmentInfo } from '@/types/zhihu';
+import { getZhihuVideoRoute } from '@/utils/zhihuVideoRoute';
 import {
   compileZhihuDocument,
   getRichTextSelectionText,
@@ -582,52 +583,47 @@ function NativeBlock(props: BlockViewProps) {
       ) : (
         <FormulaBlock formula={block.formula} width={width} color={textColor} />
       );
-    case 'video':
-      return (
+    case 'video': {
+      const route = getZhihuVideoRoute({
+        ...block,
+        resourceUrl: block.resource?.url,
+      });
+      return route ? (
         <Pressable
-          onPress={() => onLink(block.url)}
+          onPress={() => onLink(route)}
           accessibilityRole="button"
-          style={[
-            styles.mediaCard,
-            { borderColor, backgroundColor: surfaceColor },
-          ]}
+          accessibilityLabel={
+            block.title ? `播放视频：${block.title}` : '播放视频'
+          }
+          style={[styles.block, { width }]}
         >
           <View
-            style={{
-              width: '100%',
-              aspectRatio: 16 / 9,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
+            pointerEvents="none"
+            style={[styles.videoCover, { backgroundColor: surfaceColor }]}
           >
             {block.poster ? (
               <Image
-                source={{ uri: block.poster.url }}
-                style={StyleSheet.absoluteFill}
+                testID="rich-content-video-cover"
+                source={{ uri: block.poster.offlineUri ?? block.poster.url }}
+                accessible={false}
                 resizeMode="cover"
+                style={StyleSheet.absoluteFill}
               />
             ) : null}
-            <View
-              style={{
-                backgroundColor: '#00000088',
-                borderRadius: 24,
-                width: 48,
-                height: 48,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <Text style={{ color: '#ffffff', fontSize: 22 }}>▶</Text>
+            <View pointerEvents="none" style={styles.videoPlayButton}>
+              <Text style={styles.videoPlayIcon}>▶</Text>
             </View>
           </View>
-          <Text style={[styles.cardTitle, { color: textColor }]}>
-            ▶ {block.title || '视频'}
-          </Text>
-          <Text style={[styles.caption, { color: linkColor }]}>
-            打开{block.resource ? '视频资源' : '视频页面'}
+          <Text style={{ color: linkColor, fontSize, marginTop: 6 }}>
+            {block.title || '播放视频'}
           </Text>
         </Pressable>
+      ) : (
+        <Text style={[styles.block, { color: secondaryColor, fontSize }]}>
+          视频不可用
+        </Text>
       );
+    }
     case 'linkCard':
       if (props.renderLinkCard) return props.renderLinkCard(block);
       return (
@@ -1518,6 +1514,22 @@ const NativeDocumentContent = React.memo(function NativeDocumentContent({
 });
 
 const styles = StyleSheet.create({
+  videoCover: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  videoPlayButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#00000088',
+  },
+  videoPlayIcon: { color: '#ffffff', fontSize: 24 },
   content: { width: '100%', alignItems: 'center' },
   block: { marginVertical: 10 },
   imageFallback: {

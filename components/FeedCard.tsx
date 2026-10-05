@@ -92,6 +92,7 @@ function areFeedCardPropsEqual(
   return (
     previousItem.id === nextItem.id &&
     previousItem.type === nextItem.type &&
+    previousItem.videoSource === nextItem.videoSource &&
     previousItem.title === nextItem.title &&
     previousItem.titleString === nextItem.titleString &&
     previousItem.questionId === nextItem.questionId &&
@@ -131,7 +132,7 @@ const FeedCardComponent = ({ item, tab, answerContext }: FeedCardProps) => {
 
   const [voted, setVoted] = useState(item.voted || 0);
   const [voteCount, setVoteCount] = useState(item.voteCount || 0);
-  const identity = `${item.type}:${item.id}`;
+  const identity = `${item.type}:${item.videoSource || ''}:${item.id}`;
   const currentIdentityRef = useRef(identity);
   currentIdentityRef.current = identity;
   const pendingVotesRef = useRef(new Set<string>());
@@ -174,7 +175,11 @@ const FeedCardComponent = ({ item, tab, answerContext }: FeedCardProps) => {
     if (isVideoType) {
       router.push({
         pathname: '/video/[id]',
-        params: { id: item.id, title: cleanTitle },
+        params: {
+          id: item.id,
+          title: cleanTitle,
+          source: item.videoSource || 'zvideo',
+        },
       });
       return;
     }

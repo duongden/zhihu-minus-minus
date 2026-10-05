@@ -1,5 +1,7 @@
 import { isTag, isText, type Node } from 'domhandler';
 import { DomUtils, parseDocument } from 'htmlparser2';
+import { getZhihuVideoRoute } from '@/utils/zhihuVideoRoute';
+import { videoPlaybackHtml } from './videoHtml';
 
 const CONTENT_TAGS = new Set(
   'a abbr b blockquote br caption code col colgroup dd del details div dl dt em figcaption figure h1 h2 h3 h4 h5 h6 hr i img kbd li mark ol p pre q s section small span strong sub summary sup table tbody td th thead tfoot tr u ul video source'.split(
@@ -106,6 +108,49 @@ export function sanitizeRichContentHtml(html: string): string {
     nodes.flatMap((node): Node[] => {
       if (isText(node)) return [node];
       if (!isTag(node) || REMOVED_TAGS.has(node.name)) return [];
+      if (
+        node.name === 'video' ||
+        (node.name === 'a' &&
+          (node.attribs.class?.split(/\s+/).includes('video-box') ||
+            node.attribs['data-lens-id']))
+      ) {
+        const source = node.children.find(
+          (child) => isTag(child) && child.name === 'source',
+        );
+        const resourceUrl =
+          node.attribs.src ||
+          (source && isTag(source) ? source.attribs.src : undefined);
+        const route = getZhihuVideoRoute({
+          lensId: node.attribs['data-lens-id'],
+          url: node.attribs.href
+            ? getSafeRichContentUrl(node.attribs.href)
+            : undefined,
+          resourceUrl: resourceUrl
+            ? getSafeRichContentUrl(resourceUrl, true)
+            : undefined,
+          title: node.attribs.title,
+        });
+        const image = DomUtils.findOne(
+          (child) => child.name === 'img',
+          node.children,
+          true,
+        );
+        const posterUrl = [
+          node.attribs.poster,
+          node.attribs['data-thumbnail'],
+          image?.attribs['data-actualsrc'],
+          image?.attribs['data-original'],
+          image?.attribs['data-original-src'],
+          image?.attribs.src,
+        ]
+          .map((value) =>
+            value ? getSafeRichContentUrl(value, true) : undefined,
+          )
+          .find((value) => value !== undefined);
+        return parseDocument(
+          videoPlaybackHtml({ route, posterUrl, title: node.attribs.title }),
+        ).children;
+      }
       const children = clean(node.children);
       if (!CONTENT_TAGS.has(node.name)) return children;
       node.children = children;

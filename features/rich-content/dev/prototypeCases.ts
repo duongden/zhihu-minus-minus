@@ -87,7 +87,7 @@ export const richContentPrototypeCases: readonly RichContentPrototypeCase[] = [
   {
     id: 'media',
     title: '媒体与表格',
-    hint: '图片可预览，卡片和视频展示可打开的页面；表格与代码可横向滚动，脚注点开后可返回正文。',
+    hint: '图片可预览，卡片可打开链接，视频占位展示不可用状态；表格与代码可横向滚动，脚注点开后可返回正文。',
     html: `<h2>独立 block 与正文配合</h2><p>媒体保留独立布局，正文从下一条文本流继续。</p><figure>${imageTag(landscape, 'width="600" height="300" alt="合成山景" data-rawwidth="600" data-rawheight="300"')}<figcaption>全部使用本地合成图形。</figcaption></figure><a class="LinkCard" href="https://example.com/typography" data-draft-title="一个排版参考卡片">一个排版参考卡片</a><a class="video-box" href="https://example.com/video" data-lens-id="prototype-video">视频页面占位（无播放资源）</a><table><caption>表格横向滚动</caption><thead><tr><th>内容类型</th><th>原型行为</th><th>选择边界</th></tr></thead><tbody><tr><td>普通段落</td><td>连续文本流</td><td>同一流可跨段</td></tr><tr><td>图片 / 视频</td><td>独立媒体布局</td><td>形成媒体边界</td></tr><tr><td>表格</td><td>原生滚动容器</td><td>单元格文本</td></tr></tbody></table><pre><code>const typography = { fontSize: 17, lineHeight: 1.6, paragraphSpacing: 14 };\nconsole.log('横向滚动查看长行');</code></pre><p data-pid="footnote-a">这句话带有一条脚注<a class="footnote-ref" data-numero="1">[1]</a>。点击编号即可查看解释。</p><section class="footnotes"><ol><li data-numero="1"><p>这是一条合成脚注。定义只保存一次，正文中的引用指向这条定义；点击“返回正文”关闭面板。</p></li></ol></section>`,
   },
   {

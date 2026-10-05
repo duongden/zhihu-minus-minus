@@ -5,6 +5,7 @@ import { useRuntimeThemeColors } from '@/components/Themed';
 import { radii, typography } from '@/constants/designTokens';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import type { ZhihuContentSegment } from '@/types/zhihu';
+import { getZhihuVideoRoute } from '@/utils/zhihuVideoRoute';
 import katexRuntime from '../assets/katex-runtime.json';
 import katexStyle from '../assets/katex-style.json';
 import {
@@ -18,6 +19,7 @@ import {
   RICH_CONTENT_PARAGRAPH_SPACING,
 } from '../presentation';
 import type { RichContentTypographyOptions } from '../types';
+import { videoPlaybackHtml } from '../videoHtml';
 import {
   getSafeRichContentUrl,
   sanitizeRichContentHtml,
@@ -85,13 +87,18 @@ function contentSegmentsToHtml(
         return `<a data-draft-type="link-card"${attribute('href', segment.url)}${attribute('data-draft-cover', segment.data_draft_cover)}>${escapeHtml(title)}</a>`;
       }
       if (segment.type === 'video') {
-        const videoId = segment.video_id || segment.video_bo_id;
-        const url =
-          segment.url ||
-          (videoId && /^\d+$/.test(videoId)
-            ? `https://www.zhihu.com/zvideo/${videoId}`
-            : undefined);
-        return `<p><a${attribute('href', url)}>${escapeHtml(typeof segment.title === 'string' ? segment.title : '视频')}</a></p>`;
+        const route = getZhihuVideoRoute({
+          lensId: segment.video_id || segment.video_bo_id,
+          url: segment.url,
+          title: segment.title,
+        });
+        return videoPlaybackHtml({
+          route,
+          posterUrl: segment.thumbnail
+            ? getSafeRichContentUrl(segment.thumbnail, true)
+            : undefined,
+          title: segment.title,
+        });
       }
       return `<div>${typeof segment.content === 'string' ? segment.content : typeof segment.own_text === 'string' ? segment.own_text : ''}</div><p>${escapeHtml(typeof segment.title === 'string' ? segment.title : '[暂不支持的想法内容]')}</p>`;
     })
@@ -274,6 +281,38 @@ export default React.memo(function ZhihuDOMContent({
         .zhihu-content a {
           color: ${primaryColor};
           text-decoration: none;
+        }
+        .zhihu-content .zhihu-video {
+          display: block;
+          position: relative;
+          margin: 15px 0;
+          -webkit-user-select: none;
+          user-select: none;
+          -webkit-touch-callout: none;
+        }
+        .zhihu-content .zhihu-video-with-cover {
+          aspect-ratio: 16 / 9;
+          overflow: hidden;
+          background-color: ${themeColors.backgroundTertiary};
+        }
+        .zhihu-content .zhihu-video img.zhihu-video-cover {
+          display: block;
+          width: 100%;
+          height: 100% !important;
+          object-fit: cover;
+          margin: 0;
+          border-radius: 0;
+          -webkit-touch-callout: none;
+        }
+        .zhihu-video-with-cover .zhihu-video-play {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -50%);
+          padding: 4px 8px;
+          color: white;
+          background-color: rgba(0, 0, 0, 0.6);
+          white-space: nowrap;
         }
         .zhihu-content a.zhihu-link-card {
           display: block;
@@ -657,10 +696,19 @@ export default React.memo(function ZhihuDOMContent({
           return null;
         }
 
+        function findVideoTarget(target) {
+          while (target && target !== container) {
+            if (target.classList && target.classList.contains('zhihu-video')) return target;
+            target = target.parentElement;
+          }
+          return null;
+        }
+
         container.addEventListener('touchstart', function(e) {
           clearImageLongPress();
           isLongPress = false;
           if (e.touches.length !== 1) return;
+          if (findVideoTarget(e.target)) return;
 
           var target = e.target;
           while (target && target !== container) {
@@ -720,6 +768,13 @@ export default React.memo(function ZhihuDOMContent({
             return;
           }
           let target = e.target;
+          const videoTarget = findVideoTarget(target);
+          if (videoTarget) {
+            e.preventDefault();
+            const href = videoTarget.getAttribute('href');
+            if (href) postBridgeMessage({ type: 'link', href });
+            return;
+          }
           let cardTarget = target;
           while (cardTarget && cardTarget !== container) {
             if (

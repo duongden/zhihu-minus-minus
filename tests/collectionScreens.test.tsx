@@ -13,6 +13,7 @@ import MyCollectionsScreen from '../app/collections/index';
 let mockCookies: string | null = 'z_c0=synthetic';
 const mockNavigation = { setOptions: jest.fn() };
 const mockRouter = { push: jest.fn() };
+const mockVideoTypes = new Map<string, string | undefined>();
 jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
 jest.mock('../api/client', () => ({
   hasAuthenticationCookie: (cookies: string | null) => Boolean(cookies),
@@ -45,14 +46,22 @@ jest.mock('../components/useColorScheme', () => ({
   useColorScheme: () => 'light',
 }));
 jest.mock('../components/CreationCard', () => ({
-  CreationCard: ({ item, type }: { item: { id: string }; type: string }) =>
-    jest
+  CreationCard: ({
+    item,
+    type,
+  }: {
+    item: { id: string; type?: string };
+    type: string;
+  }) => {
+    if (type === 'video') mockVideoTypes.set(item.id, item.type);
+    return jest
       .requireActual('react')
       .createElement(
         jest.requireActual('react-native').Text,
         null,
         `${type}:${item.id}`,
-      ),
+      );
+  },
 }));
 jest.mock('../components/overlays/BottomSheet', () => ({
   BottomSheet: ({
@@ -239,6 +248,7 @@ test('collection refresh requests only the first page and preserves question and
     data: [
       { content: { id: 'q', type: 'question' }, created: '' },
       { content: { id: 'v', type: 'zvideo' }, created: '' },
+      { content: { id: 'lens', type: 'video' }, created: '' },
     ],
     paging: { is_end: true, next: '' },
   };
@@ -264,6 +274,9 @@ test('collection refresh requests only the first page and preserves question and
   await act(() => finish(refreshedPage));
   await waitFor(() => expect(host.getByText('question:q')).toBeTruthy());
   expect(host.getByText('video:v')).toBeTruthy();
+  expect(host.getByText('video:lens')).toBeTruthy();
+  expect(mockVideoTypes.get('v')).toBe('zvideo');
+  expect(mockVideoTypes.get('lens')).toBe('video');
   expect(
     host.getByTestId('collection-list').props.accessibilityState.busy,
   ).toBe(false);

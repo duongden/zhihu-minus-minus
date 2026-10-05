@@ -449,3 +449,49 @@ test('ordinary creation cards navigate to answers and reset their more menu afte
   expect(host.queryByText('收起回答')).toBeNull();
   expect(host.queryByText('展开全文')).toBeNull();
 });
+
+test.each([
+  'lens',
+  'zvideo',
+  undefined,
+] as const)('video feed cards route with their source %s and retain the legacy default', async (source) => {
+  const item: FeedItem = { ...baseItem, type: 'videos', videoSource: source };
+  const host = await render(<FeedCard item={item} />);
+  await fireEvent.press(host.getByText('合成原卡片'));
+  expect(mockPush).toHaveBeenLastCalledWith({
+    pathname: '/video/[id]',
+    params: { id: item.id, title: item.title, source: source || 'zvideo' },
+  });
+});
+
+test('a memoized video card with the same ID switches its playback namespace', async () => {
+  const item: FeedItem = { ...baseItem, type: 'videos', videoSource: 'lens' };
+  const host = await render(<FeedCard item={item} />);
+  await fireEvent.press(host.getByText('合成原卡片'));
+  expect(mockPush).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      params: expect.objectContaining({ source: 'lens' }),
+    }),
+  );
+  await host.rerender(<FeedCard item={{ ...item, videoSource: 'zvideo' }} />);
+  await fireEvent.press(host.getByText('合成原卡片'));
+  expect(mockPush).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      params: expect.objectContaining({ source: 'zvideo' }),
+    }),
+  );
+});
+
+test.each([
+  ['video', 'lens'],
+  ['zvideo', 'zvideo'],
+  [undefined, 'zvideo'],
+] as const)('collection creation cards retain raw video type %s when routing', async (rawType, source) => {
+  const item = { id: '2088306465639604943', type: rawType, title: '收藏视频' };
+  const host = await render(<CreationCard item={item} type="video" />);
+  await fireEvent.press(host.getByText('收藏视频'));
+  expect(mockPush).toHaveBeenLastCalledWith({
+    pathname: '/video/[id]',
+    params: { id: item.id, title: item.title, source },
+  });
+});

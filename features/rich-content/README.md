@@ -103,6 +103,12 @@ Enriched组件、专属dialect normalizer、相关测试、依赖和native patch
 
 通常使用 `ZhihuContent` 让正文遵循持久偏好；需要固定后端时可显式传入 `renderer="native-v2"`。该外壳已经封装完整 WebView fallback及图片/链接交互；JSON 文档只在选择 WebView 或缺少原生模块时安全序列化，经过原有清洗及 DOM bridge。字面公式分隔符不被再次当作公式解析，选区只使用文字坐标稳定的真实段落。直接使用 `ZhihuNativeContent` 时必须提供 `renderFallback: () => React.ReactNode`；开发研究模式可提供独立 JSON 分段组件。首次native测量使用同排版骨架或宿主placeholder。模块本身无需反向依赖外壳。
 
+## 正文视频播放
+
+HTML `video` / `source`、`video-box` 和想法 `video` 分段保留安全封面，中央显示“播放视频”，点击进入应用内原生播放器。封面优先读取 `poster`、视频卡片子图的懒加载地址或想法 `thumbnail`；没有封面时保留文字播放入口。`data-lens-id` 与想法 `video_id` / `video_bo_id` 保存为 `lensId`，优先于可能不同的 `zvideo` 页面 ID；知乎 `/video/<id>` 同样是 Lens ID，`/zvideo/<id>` 则先读取视频详情中的播放身份。播放器按 Lens API 返回的 playlist 选择实际资源。
+
+原生和 WebView 正文共用 `utils/zhihuVideoRoute.ts`。直接媒体资源仅接受 HTTP(S) MP4、HLS 等地址；缺少有效身份或资源时显示“视频不可用”。WebView 清洗把原始视频标签改成带封面的应用链接，不加载视频网页或 iframe。视频封面不进入图片预览、正文画廊或图片长按菜单。合成回归 `video-playback-001` 由 inbox 结构检查后登记，所有 ID 和资源地址均为合成数据，不包含签名资源。
+
 ## 真实正文的启用入口
 
 该后端于2026-10-01按用户选择命名为 `tiqian-super-mini`（原称Native V2）。设置与开发页面使用新名字；公共 `renderer` 值及持久偏好仍为 `native-v2`，已有选择无需迁移。文字布局继续使用Android TextView和iOS TextKit，Tiqian规则研究仍见相关文档。

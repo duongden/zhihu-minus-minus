@@ -80,6 +80,7 @@ import {
   normalizeUserFeedType,
   type UserFeedType,
 } from '@/utils/userProfile';
+import { getZhihuVideoSource } from '@/utils/zhihuVideo';
 
 interface ProfileContentSegment {
   type?: string;
@@ -932,6 +933,7 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
           ? 0
           : (getContentVoteState(mappedType, displayItem) ?? 0),
       type: mappedType,
+      videoSource: getZhihuVideoSource(rawType),
     };
 
     return (

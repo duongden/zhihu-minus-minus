@@ -1,3 +1,5 @@
+import { isPlayableVideoUrl } from './zhihuVideo';
+
 export function isExpoInternalUrl(url: string): boolean {
   return (
     url.includes('expo-development-client') || url.includes('expo-auth-session')
@@ -177,6 +179,40 @@ function normalizeSupportedPath(path: string): string | null {
   return null;
 }
 
+/** Lens media IDs and zvideo page IDs use separate playback resolvers. */
+function parseVideoPath(path: string, originalUrl: string): string | null {
+  const cleanPath = path.split(/[?#]/, 1)[0].replace(/\/+$/, '');
+  const match = cleanPath
+    .replace(/^\/oia(?=\/|$)/, '')
+    .match(/^\/(zvideos?|videos?)\/(\d+|direct)$/);
+  if (!match) return null;
+  const parsed = new URL(originalUrl, 'https://www.zhihu.com');
+  const internal =
+    parsed.protocol === 'zhihu--:' || originalUrl.trim().startsWith('/');
+  const requestedSource = internal ? parsed.searchParams.get('source') : null;
+  if (match[2] === 'direct') {
+    const uri = parsed.searchParams.get('uri');
+    if (
+      !internal ||
+      requestedSource !== 'direct' ||
+      !uri ||
+      !isPlayableVideoUrl(uri)
+    )
+      return null;
+    return `/video/direct?source=direct&uri=${encodeURIComponent(uri)}`;
+  }
+  const source =
+    requestedSource === 'lens' || requestedSource === 'zvideo'
+      ? requestedSource
+      : internal || match[1].startsWith('z')
+        ? 'zvideo'
+        : 'lens';
+  const title = internal
+    ? parsed.searchParams.get('title')?.slice(0, 300)
+    : undefined;
+  return `/video/${match[2]}?source=${source}${title ? `&title=${encodeURIComponent(title)}` : ''}`;
+}
+
 /**
  * 解析并规范化知乎链接，将其转换为应用内的路由路径
  * @param url 原始 URL (可以是 http/https 链接，也可以是 deep link)
@@ -187,7 +223,9 @@ export function parseZhihuUrl(url: string | null): string | null {
 
   try {
     const path = extractPath(url);
-    return path ? normalizeSupportedPath(path) : null;
+    return path
+      ? (parseVideoPath(path, url) ?? normalizeSupportedPath(path))
+      : null;
   } catch {
     console.error('[URL Parser] Failed to parse URL');
     return null;
