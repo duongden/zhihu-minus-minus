@@ -6,8 +6,10 @@ import { inspectApk } from '../modules/zhihu-persistence';
 import {
   type ApkUpdate,
   cleanupUpdatePartials,
+  discardVerifiedApk,
   downloadAndInstallVerifiedApk,
   downloadVerifiedApk,
+  installVerifiedApk,
   UPDATE_CANCEL_TIMEOUT_MS,
   UPDATE_DOWNLOAD_TIMEOUT_MS,
 } from '../utils/updateDownload';
@@ -451,4 +453,91 @@ test('stale cleanup never removes the currently active transfer', async () => {
   });
   controller.abort();
   await failed;
+});
+
+test('reports verification separately and never opens the installer while only downloading', async () => {
+  const onPhase = jest.fn();
+  const verified = await downloadVerifiedApk(update, { onPhase });
+  expect(onPhase.mock.calls).toEqual([['downloading'], ['verifying']]);
+  expect(verified).toMatch(/\.apk$/);
+  expect(IntentLauncher.startActivityAsync).not.toHaveBeenCalled();
+  expect(Sharing.shareAsync).not.toHaveBeenCalled();
+});
+
+test('cancellation at the verification transition prevents inspection and installation', async () => {
+  const controller = new AbortController();
+  await expect(
+    downloadVerifiedApk(update, {
+      signal: controller.signal,
+      onPhase: (phase) => {
+        if (phase === 'verifying') controller.abort();
+      },
+    }),
+  ).rejects.toMatchObject({ code: 'cancelled' });
+  expect(inspectApk).not.toHaveBeenCalled();
+  expect(IntentLauncher.startActivityAsync).not.toHaveBeenCalled();
+});
+
+test('can retain a failed installation for retry without removing the verified file', async () => {
+  const verified = await downloadVerifiedApk(update);
+  jest.mocked(FileSystem.deleteAsync).mockClear();
+  jest
+    .mocked(IntentLauncher.startActivityAsync)
+    .mockRejectedValueOnce(new Error());
+  jest.mocked(Sharing.shareAsync).mockRejectedValueOnce(new Error());
+  await expect(
+    installVerifiedApk(verified, { retainOnFailure: true }),
+  ).rejects.toMatchObject({ code: 'storage' });
+  expect(FileSystem.deleteAsync).not.toHaveBeenCalled();
+  await installVerifiedApk(verified, { retainOnFailure: true });
+  expect(IntentLauncher.startActivityAsync).toHaveBeenCalledTimes(2);
+});
+
+test.each([
+  false,
+  true,
+])('cancellation before installer handoff respects a previous handoff (%s)', async (alreadyHandedOff) => {
+  const verified = await downloadVerifiedApk(update);
+  jest.mocked(FileSystem.deleteAsync).mockClear();
+  let started: (() => void) | undefined;
+  const began = new Promise<void>((resolve) => {
+    started = resolve;
+  });
+  jest.mocked(FileSystem.getContentUriAsync).mockImplementationOnce(() => {
+    started?.();
+    return new Promise(() => undefined);
+  });
+  const controller = new AbortController();
+  const operation = installVerifiedApk(verified, {
+    signal: controller.signal,
+    retainOnFailure: true,
+    alreadyHandedOff,
+  });
+  const failed = expect(operation).rejects.toMatchObject({ code: 'cancelled' });
+  await began;
+  controller.abort();
+  await failed;
+  if (alreadyHandedOff) expect(FileSystem.deleteAsync).not.toHaveBeenCalled();
+  else
+    expect(FileSystem.deleteAsync).toHaveBeenCalledWith(verified, {
+      idempotent: true,
+    });
+  expect(IntentLauncher.startActivityAsync).not.toHaveBeenCalled();
+});
+
+test('discard only accepts updater-owned verified file paths', async () => {
+  const verified = await downloadVerifiedApk(update);
+  jest.mocked(FileSystem.deleteAsync).mockClear();
+  await discardVerifiedApk(verified);
+  expect(FileSystem.deleteAsync).toHaveBeenCalledWith(verified, {
+    idempotent: true,
+  });
+  jest.mocked(FileSystem.deleteAsync).mockClear();
+  await expect(
+    discardVerifiedApk('file:///test/documents/auth-storage.json'),
+  ).rejects.toMatchObject({ code: 'storage' });
+  await expect(
+    discardVerifiedApk('file:///test/cache/updates/../zhihu-update-v0.8.0.apk'),
+  ).rejects.toMatchObject({ code: 'storage' });
+  expect(FileSystem.deleteAsync).not.toHaveBeenCalled();
 });

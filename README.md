@@ -87,6 +87,14 @@ Windows 无法运行 `eas build --local`，请使用 [Windows 本地构建指南
 
 - 当前原生配置的 iOS 最低版本为 **15.1**。Release 中的 IPA 未签名，不能直接当作可安装成品使用。
 
+使用 **SideStore 或 AltStore Classic** 时，可以添加以下订阅源，从源中安装并在侧载工具内更新应用：
+
+```text
+https://github.com/huamurui/zhihu-minus-minus/releases/latest/download/altstore-source.json
+```
+
+该地址会在首次包含 `altstore-source.json` 的正式 Release 发布后生效，并跟随最新正式版本更新；临时构建和草稿 Release 不会更新公开源。适用于普通 IPA 侧载，签名和续期仍由侧载工具处理。源格式与兼容说明见 [AltStore 官方文档](https://faq.altstore.io/developers/make-a-source) 和 [SideStore 官方文档](https://docs.sidestore.io/docs/advanced/app-sources)。
+
 如果你有 mac，可以试试自己打包：
 
 1. `git clone` 本仓库。

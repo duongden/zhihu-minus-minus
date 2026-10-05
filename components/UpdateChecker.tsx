@@ -4,19 +4,16 @@ import * as SecureStore from 'expo-secure-store';
 import * as WebBrowser from 'expo-web-browser';
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { Linking, Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { Linking, Platform, ScrollView, StyleSheet } from 'react-native';
 import {
   getGithubReleaseHistory,
   getLatestGithubRelease,
 } from '@/api/githubReleases';
 import { MarkdownText } from '@/components/MarkdownText';
 import { AppDialog } from '@/components/overlays/AppDialog';
-import { Text, useRuntimeThemeColors } from '@/components/Themed';
+import { UpdateDownloadBar } from '@/components/UpdateDownloadBar';
+import { useUpdateDownload } from '@/hooks/useUpdateDownload';
 import { showToast } from '@/utils/toast';
-import {
-  cleanupUpdatePartials,
-  downloadAndInstallVerifiedApk,
-} from '@/utils/updateDownload';
 import {
   assertUpdateActive,
   type GithubReleaseAsset,
@@ -119,27 +116,11 @@ export const useCheckUpdate = (
 };
 
 export const UpdateChecker: React.FC = () => {
-  const [downloadProgress, setDownloadProgress] = useState(0);
-  const [isDownloading, setIsDownloading] = useState(false);
   const [pendingUpdate, setPendingUpdate] = useState<UpdateInfo | null>(null);
-  const downloadRef = useRef<AbortController | null>(null);
-  const cleanupRef = useRef<Promise<void>>(Promise.resolve());
-  const mountedRef = useRef(true);
-  const { primary: primaryColor } = useRuntimeThemeColors();
+  const download = useUpdateDownload();
   useCheckUpdate(setPendingUpdate);
 
-  useEffect(() => {
-    mountedRef.current = true;
-    cleanupRef.current = cleanupUpdatePartials().catch(() =>
-      console.warn('清理更新临时文件失败'),
-    );
-    return () => {
-      mountedRef.current = false;
-      downloadRef.current?.abort();
-    };
-  }, []);
-
-  if (!isDownloading && !pendingUpdate) return null;
+  if (!download.state && !pendingUpdate) return null;
   const closeUpdate = () => setPendingUpdate(null);
   const ignoreUpdate = async () => {
     if (!pendingUpdate) return;
@@ -164,48 +145,13 @@ export const UpdateChecker: React.FC = () => {
     void opening.catch(() => showToast('无法打开 GitHub 版本页面'));
   };
   const startDownload = () => {
-    if (!pendingUpdate?.apkAsset || downloadRef.current) return;
-    const info = pendingUpdate;
-    const asset = pendingUpdate.apkAsset;
-    const controller = new AbortController();
-    downloadRef.current = controller;
+    if (!pendingUpdate?.apkAsset) return;
+    download.start({
+      tag: pendingUpdate.latestVersionTag,
+      asset: pendingUpdate.apkAsset,
+      checksumAsset: pendingUpdate.checksumAsset,
+    });
     setPendingUpdate(null);
-    setDownloadProgress(0);
-    setIsDownloading(true);
-    void cleanupRef.current
-      .then(() => {
-        assertUpdateActive(controller.signal);
-        return downloadAndInstallVerifiedApk(
-          {
-            tag: info.latestVersionTag,
-            asset,
-            checksumAsset: info.checksumAsset,
-          },
-          {
-            signal: controller.signal,
-            onProgress: (fraction) => {
-              if (
-                mountedRef.current &&
-                downloadRef.current === controller &&
-                !controller.signal.aborted
-              )
-                setDownloadProgress(fraction);
-            },
-          },
-        );
-      })
-      .catch((error: unknown) => {
-        if (!mountedRef.current || controller.signal.aborted) return;
-        showToast(
-          error instanceof UpdateFailure ? error.message : '更新失败，请重试',
-        );
-        setPendingUpdate(info);
-      })
-      .finally(() => {
-        if (downloadRef.current !== controller) return;
-        downloadRef.current = null;
-        if (mountedRef.current) setIsDownloading(false);
-      });
   };
 
   return (
@@ -249,71 +195,20 @@ export const UpdateChecker: React.FC = () => {
           </ScrollView>
         </AppDialog>
       ) : null}
-      {isDownloading ? (
-        <AppDialog
-          visible
-          title="正在下载并校验更新"
-          icon="cloud-download-outline"
-          dismissible={false}
-          actions={[
-            {
-              label: '取消',
-              onPress: () => downloadRef.current?.abort(),
-              variant: 'secondary',
-            },
-          ]}
-        >
-          <View style={styles.progressContent}>
-            <View style={styles.progressTrack}>
-              <View
-                style={[
-                  styles.progressBar,
-                  {
-                    width: `${downloadProgress * 100}%`,
-                    backgroundColor: primaryColor,
-                  },
-                ]}
-              />
-            </View>
-            <Text style={styles.percentText}>
-              {(downloadProgress * 100).toFixed(1)}%
-            </Text>
-            <Text type="secondary" style={styles.hint}>
-              校验通过后将启动安装
-            </Text>
-          </View>
-        </AppDialog>
+      {download.state ? (
+        <UpdateDownloadBar
+          state={download.state}
+          onCancel={download.cancel}
+          onDismiss={download.dismiss}
+          onInstall={download.install}
+          onRetry={download.retry}
+        />
       ) : null}
     </>
   );
 };
 
 const styles = StyleSheet.create({
-  progressContent: {
-    width: '100%',
-    alignItems: 'center',
-    marginTop: 22,
-  },
   updateNotes: { width: '100%', maxHeight: 300, marginTop: 4 },
   updateNotesContent: { paddingBottom: 2 },
-  progressTrack: {
-    width: '100%',
-    height: 6,
-    backgroundColor: 'rgba(128,128,128,0.2)',
-    borderRadius: 3,
-    overflow: 'hidden',
-    marginBottom: 10,
-  },
-  progressBar: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  percentText: {
-    fontSize: 16,
-    fontWeight: '600',
-    marginBottom: 15,
-  },
-  hint: {
-    fontSize: 13,
-  },
 });

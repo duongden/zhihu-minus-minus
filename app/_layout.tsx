@@ -189,7 +189,6 @@ function RootLayout() {
         <SafeAreaProvider>
           <RootSiblingParent>
             <ThemeProvider value={theme}>
-              <UpdateChecker />
               <ClipboardLinkModal
                 visible={clipboardModalVisible}
                 url={clipboardUrl}
@@ -312,6 +311,7 @@ function RootLayout() {
               {/* 全局收藏提醒和弹窗 */}
               <CollectionToastOverlay />
               <CollectionSelectorModal />
+              <UpdateChecker />
             </ThemeProvider>
           </RootSiblingParent>
         </SafeAreaProvider>

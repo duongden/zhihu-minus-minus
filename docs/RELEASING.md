@@ -34,7 +34,7 @@ Android job 需要全部 5 个 Secret：`EXPO_TOKEN` 加上 4 个 telemetry Secr
 2. `build-android` 使用 EAS CLI 23 和 `preview` profile，在 Ubuntu 上执行 `assembleRelease` 生成四个单 ABI APK，并检查每个 APK 实际包含的 ABI。`preview` 是 EAS 构建配置名称，不再写入 APK 文件名。
 3. `build-ios` 在 macOS 26 上执行 iOS prebuild、CocoaPods 安装和无签名 `xcodebuild`，再把 `.app` 打包为 IPA。
 4. 两个平台分别上传 artifact，临时 artifact 默认保留 7 天。
-5. `release` 模式下载全部产物，生成 `SHA256SUMS.txt`，先用 arm64-v8a APK 创建 Release，再上传其余附件，确保旧版一键更新仍将 arm64-v8a 识别为第一个 APK。
+5. `release` 模式下载全部产物，从真实 IPA 生成 `altstore-source.json` 和 `SHA256SUMS.txt`，先用 arm64-v8a APK 创建草稿 Release，再上传其余附件，确保旧版一键更新仍将 arm64-v8a 识别为第一个 APK。只有全部附件上传成功后，才按 `publish_release` 公开 Release。
 6. Release 的说明由 GitHub 结合 [`.github/release.yml`](../.github/release.yml) 和 PR label 自动生成；工作流额外注明 ABI、未签名 IPA 和校验文件信息。
 
 如果任一质量或平台构建 job 失败，Release job 不会运行。修复后可以在原 workflow run 中重跑失败 job，或重新触发工作流；重新触发 `release` 前仍须使用未占用的版本号/tag。
@@ -48,11 +48,40 @@ Android job 需要全部 5 个 Secret：`EXPO_TOKEN` 加上 4 个 telemetry Secr
 | `zhihu-minus-minus-v<version>-compat-x86.apk` | Android 32 位 x86 兼容包，未完成完整实机验证 |
 | `zhihu-minus-minus-v<version>-compat-x86_64.apk` | Android 64 位 x86 兼容包，未完成完整实机验证 |
 | `zhihu-minus-minus-v<version>-unsigned.ipa` | 未签名 iOS 包，需要用户自行签名和安装 |
-| `SHA256SUMS.txt` | 全部 APK/IPA 的 SHA-256 校验值 |
+| `altstore-source.json` | SideStore / AltStore Classic 订阅源，指向同一 Release 的 IPA |
+| `SHA256SUMS.txt` | 全部 APK、IPA 和订阅源的 SHA-256 校验值 |
 
 从 v0.6.2 起，客户端会根据设备支持的 ABI 精确选择更新 APK。无法识别设备 ABI 或找不到匹配附件时，不会盲目下载错误架构，只保留 GitHub Release 下载入口。arm64-v8a 仍需作为第一个附件创建，以兼容 v0.6.1 及更早客户端的更新逻辑。
 
 更新选择器同时兼容上述新文件名和历史带 `-preview-` 的文件名。尚未包含此兼容修改的 v0.6.2 及后续旧客户端只识别历史文件名；首次升级到采用新文件名的版本时，需要通过 GitHub Release 下载入口手动选择设备对应的 APK。发布工作流只生成上述四个 APK，不额外上传旧名称副本。
+
+## iOS 侧载订阅源
+
+SideStore 和 AltStore Classic 共用以下源地址：
+
+```text
+https://github.com/huamurui/zhihu-minus-minus/releases/latest/download/altstore-source.json
+```
+
+首次包含源文件的正式 Release 发布后，该 URL 才可用。GitHub 的 `latest` 地址仅指向公开的正式 Release：`build` 模式不会生成或发布源，草稿中的源不会覆盖公开版本。手动发布草稿前，确认其包含四个 APK、一个 IPA、订阅源和校验文件，并保持为正式 Release；后续正式版本也须通过此流程附带同名源文件，避免 `latest` 地址失效。
+
+[`scripts/generate-altstore-source.py`](../scripts/generate-altstore-source.py) 使用 Python 3 标准库读取 IPA 中的 `Info.plist` 和应用/扩展可执行文件：版本与 bundle identifier 必须匹配 `app.json`，build number、最低 iOS 版本、权限用途和 IPA 字节数直接取自实际产物。无签名及无 entitlement 的 ad-hoc 签名都会生成空 entitlement 列表；带 XML entitlement 的签名会提取权限键，无法确认的 DER-only entitlement 或冲突权限用途会使发布失败。脚本不读取 telemetry Secret，也不依赖生成的 `ios/` 工程。
+
+源中的 `versions` 仅包含本次发布版本，IPA 下载 URL 固定到该版本 tag，图标固定到该次构建的 commit；不会生成 `marketplaceID` 或 notarized `build` 字段。该源用于普通 IPA 侧载，签名、续期和安装由 SideStore / AltStore Classic 执行，不适用于 AltStore PAL。格式依据 [AltStore 官方文档](https://faq.altstore.io/developers/make-a-source)，SideStore 的兼容约定见 [官方说明](https://docs.sidestore.io/docs/advanced/app-sources)。
+
+本地验证时传入已构建的 IPA：
+
+```bash
+python3 scripts/generate-altstore-source.py \
+  --ipa "/path/to/zhihu-minus-minus-v<version>-unsigned.ipa" \
+  --output /tmp/altstore-source.json \
+  --repository huamurui/zhihu-minus-minus \
+  --commit "$(git rev-parse HEAD)" \
+  --date YYYY-MM-DD
+npm test -- tests/altstoreSource.test.js --runInBand
+```
+
+将版本号和日期替换为本次产物对应值；同一 IPA、commit、日期和配置会产生相同源文件。本地生成只校验元数据，不会上传 IPA 或公开订阅源；实际安装、更新与签名流程仍需用正式产物在侧载工具中验证。
 
 ## Pull Request 检查
 

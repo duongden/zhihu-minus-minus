@@ -373,9 +373,16 @@ jobs:
             exit 1
           fi
 
+          python3 scripts/generate-altstore-source.py \
+            --ipa "${IPAS[0]}" \
+            --output dist/altstore-source.json \
+            --repository "$GITHUB_REPOSITORY" \
+            --commit "$GITHUB_SHA" \
+            --date "$(date -u +%F)"
+
           (
             cd dist
-            sha256sum ./*.apk ./*.ipa > SHA256SUMS.txt
+            sha256sum ./*.apk ./*.ipa ./altstore-source.json > SHA256SUMS.txt
           )
 
           echo "tag=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
@@ -403,7 +410,7 @@ jobs:
             --target "$GITHUB_SHA"
             --generate-notes
             --fail-on-no-commits
-            --notes "Android 默认提供已验证的 arm64-v8a APK；其余 compat APK 未经实机验证，供对应架构设备手动安装。iOS 为未签名 IPA。SHA256SUMS.txt 可用于校验下载文件。"
+            --notes "Android 默认提供已验证的 arm64-v8a APK；其余 compat APK 未经实机验证，供对应架构设备手动安装。iOS 为未签名 IPA，SideStore / AltStore Classic 订阅源：https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/altstore-source.json 。SHA256SUMS.txt 可用于校验下载文件。"
             --draft
           )
 
@@ -414,12 +421,13 @@ jobs:
 
           mapfile -t REMAINING_FILES < <(
             find dist -maxdepth 1 -type f \
-              \( -name "*.apk" -o -name "*.ipa" -o -name "SHA256SUMS.txt" \) \
+              \( -name "*.apk" -o -name "*.ipa" -o -name "altstore-source.json" -o -name "SHA256SUMS.txt" \) \
               ! -path "$PRIMARY_APK" |
               sort
           )
           gh release upload "$RELEASE_TAG" "${REMAINING_FILES[@]}"
 
+          # The stable source URL changes only when the complete release is public.
           if [ "$PUBLISH_RELEASE" = "true" ]; then
             gh release edit "$RELEASE_TAG" --draft=false
           fi
