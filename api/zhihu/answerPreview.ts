@@ -31,9 +31,7 @@ export interface ZhihuPreviewAnswer {
     is_favorited: boolean;
     voting: -1 | 0 | 1;
   };
-  structuredContent: ZhihuStructuredContent | null;
-  /** A rejected or missing body must never be presented as complete prose. */
-  contentError?: string;
+  structuredContent: ZhihuStructuredContent;
 }
 
 export interface ZhihuPreviewLoginPrompt {
@@ -62,7 +60,6 @@ export interface ZhihuRenderContinuation {
 
 const INVALID_RESPONSE = '回答预览返回结构无效';
 const INVALID_CONTINUATION = '回答预览分页地址无效';
-const UNSUPPORTED_CONTENT = '这条回答的正文格式暂不支持预览，请进入回答详情';
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -138,12 +135,9 @@ function normalizeAnswer(value: Record<string, unknown>): ZhihuPreviewAnswer {
   const statistics = record(reaction?.statistics);
   const relation = record(reaction?.relation);
   const vote = text(relation?.vote).toLowerCase();
-  let structuredContent: ZhihuStructuredContent | null = null;
-  try {
-    structuredContent = parseZhihuStructuredContent(value.structured_content);
-  } catch {
-    // Keep metadata and a visible detail fallback when any source node is unknown.
-  }
+  const structuredContent = parseZhihuStructuredContent(
+    value.structured_content,
+  );
   return {
     id: identifier(value.id),
     type: 'answer',
@@ -165,7 +159,6 @@ function normalizeAnswer(value: Record<string, unknown>): ZhihuPreviewAnswer {
       voting: vote === 'up' ? 1 : vote === 'down' ? -1 : 0,
     },
     structuredContent,
-    ...(structuredContent ? {} : { contentError: UNSUPPORTED_CONTENT }),
   };
 }
 

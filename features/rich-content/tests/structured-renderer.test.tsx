@@ -3,14 +3,36 @@ import { parseDocument } from 'htmlparser2';
 import { StyleSheet } from 'react-native';
 import type { RichTextNativeViewProps } from '../../../modules/zhihu-rich-text';
 import type { ZhihuStructuredContent } from '../../../types/zhihu';
+import { compileZhihuDocument, mapRichTextSelection } from '../compileRichText';
 import type { ZhihuNativeContentProps } from '../components/ZhihuNativeContent';
 import { ZhihuStructuredContent as StructuredRenderer } from '../components/ZhihuStructuredContent';
 import type { ZhihuImageResource } from '../document';
+import { walkZhihuDocument } from '../documentTraversal';
+import nextRenderSegLikeFixture from '../fixtures/cases/next-render-seg-like-001.json';
+import { resolveNativeAnswerSegment } from '../nativeInteractions';
 import type { RichTextFlow } from '../richText';
+import {
+  getStructuredContentSegmentInfos,
+  parseZhihuStructuredContent,
+} from '../structuredContent';
+import type { ZhihuContentProps } from '../types';
 
 let mockNativeAvailable = true;
 const mockNativeViews = new Map<string, RichTextNativeViewProps>();
 const mockNativeInputs: ZhihuNativeContentProps[] = [];
+const mockSharedInputs: ZhihuContentProps[] = [];
+
+jest.mock('../components/ZhihuContent', () => {
+  const react = jest.requireActual<typeof import('react')>('react');
+  const native =
+    jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    ZhihuContent: (props: ZhihuContentProps) => {
+      mockSharedInputs.push(props);
+      return react.createElement(native.View, { testID: 'shared-body-host' });
+    },
+  };
+});
 
 jest.mock('htmlparser2', () => ({
   ...jest.requireActual<typeof import('htmlparser2')>('htmlparser2'),
@@ -177,9 +199,136 @@ beforeEach(() => {
   mockNativeAvailable = true;
   mockNativeViews.clear();
   mockNativeInputs.length = 0;
+  mockSharedInputs.length = 0;
 });
 
 describe('isolated structured-content renderer', () => {
+  it('uses the shared production host with complete source identities through preview, expansion and refresh', async () => {
+    const first = parseZhihuStructuredContent(
+      nextRenderSegLikeFixture.data[0].structured_content,
+    );
+    const duplicated = parseZhihuStructuredContent(
+      nextRenderSegLikeFixture.data[1].structured_content,
+    ).segments[0];
+    if (duplicated.type !== 'paragraph')
+      throw new Error('Expected captured source paragraph');
+    const source: ZhihuStructuredContent = {
+      ...first,
+      segments: [
+        ...first.segments.map((segment) =>
+          segment.type === 'paragraph'
+            ? {
+                ...segment,
+                paragraph: {
+                  ...segment.paragraph,
+                  // Decimal synthetic IDs exercise the same validator as real
+                  // business IDs without retaining or requesting real targets.
+                  marks: segment.paragraph.marks.map((mark) =>
+                    mark.type === 'seg_like'
+                      ? {
+                          ...mark,
+                          seg_like: {
+                            ...mark.seg_like,
+                            seg_ids: ['200', '201'],
+                          },
+                        }
+                      : mark,
+                  ),
+                },
+              }
+            : segment,
+        ),
+        duplicated,
+        { ...duplicated, id: `${duplicated.id}:hidden-duplicate` },
+      ],
+    };
+    const original = JSON.stringify(source);
+    const onRefresh = jest.fn();
+    const host = await render(
+      <StructuredRenderer
+        content={source}
+        documentId="answer:42"
+        objectId="42"
+        renderer="shared"
+        onRefresh={onRefresh}
+        selectable={false}
+      />,
+    );
+    const preview = mockSharedInputs.at(-1);
+    const document = preview?.document;
+    if (!document) throw new Error('Expected shared source document');
+    expect(preview).toMatchObject({
+      objectId: '42',
+      type: 'answer',
+      onRefresh,
+      selectable: false,
+    });
+    expect(preview?.renderer).toBeUndefined();
+    expect(document.blocks).toHaveLength(3);
+    expect(document.blocks[2]).not.toHaveProperty('paragraphId');
+    expect(preview?.segmentInfos).toEqual(
+      getStructuredContentSegmentInfos(source),
+    );
+    expect(preview?.segmentInfos).toHaveLength(1);
+    const compiled = compileZhihuDocument(document, {
+      fontSize: 17,
+      lineHeight: 26,
+    });
+    const flow = compiled.parts.find((part) => part.type === 'flow');
+    if (flow?.type !== 'flow') throw new Error('Expected captured source flow');
+    expect(mapRichTextSelection(flow.flow, 0, 44)).toMatchObject({
+      start: { paragraphId: 'synthetic-paragraph-001-001', offset: 0 },
+      end: { paragraphId: 'synthetic-paragraph-001-001', offset: 44 },
+    });
+    const segment = [...walkZhihuDocument(document)].find(
+      (node) => node.type === 'segment',
+    );
+    if (!segment) throw new Error('Expected complete source reaction');
+    expect(
+      resolveNativeAnswerSegment(
+        {
+          nodeId: segment.id,
+          paragraphId: segment.paragraphId,
+          start: 0,
+          end: 44,
+          text: flow.flow.text.slice(0, 44),
+          segment,
+        },
+        {
+          objectId: preview.objectId,
+          type: preview.type,
+          document,
+          segmentInfos: preview.segmentInfos,
+        },
+      ),
+    ).toMatchObject({ interaction: { seg_ids: ['200', '201'] } });
+
+    await fireEvent.press(screen.getByTestId('structured-content-toggle'));
+    const expanded = mockSharedInputs.at(-1);
+    expect(expanded?.document?.blocks).toHaveLength(4);
+    expect(expanded?.document?.blocks.slice(0, 3)).toEqual(document.blocks);
+    expect(expanded?.document?.blocks[3]).not.toHaveProperty('paragraphId');
+    expect(expanded?.segmentInfos).toEqual(preview?.segmentInfos);
+    expanded?.onRefresh?.();
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+    await fireEvent.press(screen.getByTestId('structured-content-toggle'));
+    expect(mockSharedInputs.at(-1)?.document?.blocks).toEqual(document.blocks);
+    await host.rerender(
+      <StructuredRenderer
+        content={source}
+        documentId="answer:42"
+        objectId="42"
+        renderer="shared"
+        onRefresh={onRefresh}
+        selectable
+      />,
+    );
+    expect(mockSharedInputs.at(-1)?.selectable).toBe(true);
+    expect(JSON.stringify(source)).toBe(original);
+    expect(mockNativeInputs).toHaveLength(0);
+    expect(parseDocument).not.toHaveBeenCalled();
+  });
+
   it('uses actual segment slicing for preview, expansion and collapse without mutating JSON', async () => {
     const source = content();
     const before = JSON.stringify(source);
@@ -237,7 +386,12 @@ describe('isolated structured-content renderer', () => {
     expect(input?.segmentInfos).toBeUndefined();
     expect(input?.onSegmentPress).toBeUndefined();
     expect(input?.onSelectionChange).toBeUndefined();
-    expect(JSON.stringify(input?.document)).not.toContain('paragraphId');
+    expect(input?.document?.blocks[0]).toHaveProperty(
+      'paragraphId',
+      'unverified-business-id',
+    );
+    expect(input?.document?.blocks[1]).not.toHaveProperty('paragraphId');
+    expect(input?.document?.blocks[2]).not.toHaveProperty('paragraphId');
     await measureCurrentDocument();
     expect(
       displayedImages().every(

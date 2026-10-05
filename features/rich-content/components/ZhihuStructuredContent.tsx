@@ -17,13 +17,20 @@ import type {
   ZhihuInlineRun,
 } from '../document';
 import { getZhihuDocumentPreviewImages } from '../documentTraversal';
-import { normalizeZhihuStructuredContent } from '../structuredContent';
+import {
+  getStructuredContentSegmentInfos,
+  normalizeZhihuStructuredContent,
+} from '../structuredContent';
+import { ZhihuContent } from './ZhihuContent';
 import { ZhihuNativeContent } from './ZhihuNativeContent';
 
 export interface ZhihuStructuredContentProps {
   content: ZhihuStructuredContentData;
   documentId: string;
-  renderer: 'blocks' | 'native-v2';
+  renderer: 'shared' | 'blocks' | 'native-v2';
+  /** Real answer ID for the common body host; documentId scopes expansion. */
+  objectId?: string;
+  onRefresh?: () => void;
   /** Preview actual source segments; expanding never mutates their text or marks. */
   previewSegmentCount?: number;
   resources?: Readonly<Record<string, ZhihuImageResource>>;
@@ -77,12 +84,14 @@ function InlineFormula({
   );
 }
 
-/** JSON segments retain their own paging and never use HTML or segment reactions. */
+/** Source segments control paging; the common body host controls reading. */
 export const ZhihuStructuredContent = React.memo(
   function ZhihuStructuredContent({
     content,
     documentId,
     renderer,
+    objectId,
+    onRefresh,
     previewSegmentCount = 3,
     resources,
     onLinkPress,
@@ -108,23 +117,38 @@ export const ZhihuStructuredContent = React.memo(
     const previewCount = Number.isSafeInteger(previewSegmentCount)
       ? Math.max(1, previewSegmentCount)
       : 3;
-    const visibleContent = useMemo(
-      () => ({
-        ...content,
-        segments: isExpanded
-          ? content.segments
-          : content.segments.slice(0, previewCount),
-      }),
-      [content, isExpanded, previewCount],
-    );
-    const document = useMemo(
+    const completeDocument = useMemo(
       () =>
-        normalizeZhihuStructuredContent(visibleContent, {
+        normalizeZhihuStructuredContent(content, {
           documentId,
           resources,
         }),
-      [visibleContent, documentId, resources],
+      [content, documentId, resources],
     );
+    const document = useMemo(
+      () =>
+        isExpanded
+          ? completeDocument
+          : {
+              ...completeDocument,
+              blocks: completeDocument.blocks.slice(0, previewCount),
+            },
+      [completeDocument, isExpanded, previewCount],
+    );
+    const completeSegmentInfos = useMemo(
+      () => getStructuredContentSegmentInfos(content),
+      [content],
+    );
+    const segmentInfos = useMemo(() => {
+      const visiblePids = new Set(
+        document.blocks.flatMap((block) =>
+          block.type === 'paragraph' && block.paragraphId
+            ? [block.paragraphId]
+            : [],
+        ),
+      );
+      return completeSegmentInfos.filter((info) => visiblePids.has(info.pid));
+    }, [completeSegmentInfos, document]);
     const previewImages = useMemo(
       () => getZhihuDocumentPreviewImages(document).map((image) => image.url),
       [document],
@@ -337,7 +361,16 @@ export const ZhihuStructuredContent = React.memo(
           if (Number.isFinite(nextWidth) && nextWidth > 0) setWidth(nextWidth);
         }}
       >
-        {renderer === 'native-v2' ? (
+        {renderer === 'shared' ? (
+          <ZhihuContent
+            document={document}
+            objectId={objectId ?? documentId}
+            type="answer"
+            segmentInfos={segmentInfos}
+            onRefresh={onRefresh}
+            selectable={selectable}
+          />
+        ) : renderer === 'native-v2' ? (
           <View testID="structured-content-native">
             <ZhihuNativeContent
               content=""

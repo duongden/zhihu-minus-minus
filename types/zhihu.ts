@@ -96,6 +96,9 @@ export interface ZhihuSegmentReaction {
   comment_count: number;
   is_like: boolean;
   seg_ids?: string[] | string;
+  /** 跨段反应不能提交为单段 start/end PID；保留服务端标志。 */
+  is_span?: boolean | number | string;
+  my_comment_count?: number;
 }
 
 export interface ZhihuSegmentMark {
@@ -795,17 +798,26 @@ export interface ZhihuStructuredContentHorizontalRuleSegment
   type: 'hr';
 }
 
+/** 未识别块只在具有明确正文文字时提供可见 fallback。 */
+export interface ZhihuStructuredContentUnsupportedSegment
+  extends ZhihuStructuredContentSegmentIdentity {
+  type: 'unsupported';
+  sourceType: string;
+  fallbackText: string;
+}
+
 export type ZhihuStructuredContentSegment =
   | ZhihuStructuredContentParagraphSegment
   | ZhihuStructuredContentHeadingSegment
   | ZhihuStructuredContentListSegment
   | ZhihuStructuredContentImageSegment
-  | ZhihuStructuredContentHorizontalRuleSegment;
+  | ZhihuStructuredContentHorizontalRuleSegment
+  | ZhihuStructuredContentUnsupportedSegment;
 
 /**
  * 标记作用于同一文字 payload.text 的半开范围 [start_index, end_index)。
- * 样本符合字符偏移且排除 UTF-8 字节偏移，但没有非 BMP 字符，
- * 因而尚不能区分 Unicode 码点与 UTF-16 code unit；不要据此直接提交业务选区。
+ * 非 BMP 段落样本的完整范围确认采用 UTF-16 code unit。
+ * 附加标记无效时保留原文；业务动作还须通过真实段落身份与源切片验证。
  * 范围不互斥，已观测到 bold 与 entity_word 重叠。
  */
 export interface ZhihuStructuredContentMarkRange {
@@ -869,8 +881,24 @@ export interface ZhihuStructuredContentFormulaMark
   formula: ZhihuStructuredContentFormulaPayload;
 }
 
+export interface ZhihuStructuredContentSegmentLikePayload {
+  comment_count: number;
+  count: number;
+  is_like: boolean;
+  is_span: boolean;
+  my_comment_count: number;
+  seg_ids: string[];
+}
+
+export interface ZhihuStructuredContentSegmentLikeMark
+  extends ZhihuStructuredContentMarkRange {
+  type: 'seg_like';
+  seg_like: ZhihuStructuredContentSegmentLikePayload;
+}
+
 export type ZhihuStructuredContentMark =
   | ZhihuStructuredContentBoldMark
   | ZhihuStructuredContentLinkMark
   | ZhihuStructuredContentEntityWordMark
-  | ZhihuStructuredContentFormulaMark;
+  | ZhihuStructuredContentFormulaMark
+  | ZhihuStructuredContentSegmentLikeMark;

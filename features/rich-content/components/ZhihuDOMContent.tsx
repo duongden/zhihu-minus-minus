@@ -35,7 +35,7 @@ export interface ZhihuDOMContentProps {
   onImagePress: (src: string) => void;
   onImageLongPress?: (src: string) => void;
   onLinkPress: (href: string) => void;
-  onSegmentPress: (pid: string) => void;
+  onSegmentPress?: (pid: string, nodeId?: string) => void;
   onTextSelected?: (info: TextSelectionInfo | null) => void;
   onReady?: () => void;
   style?: StyleProp<ViewStyle>;
@@ -526,6 +526,9 @@ export default React.memo(function ZhihuDOMContent({
             paragraphs.forEach((p) => {
               const pid = p.getAttribute('data-pid');
               if (!pid) return;
+              // Semantic documents already mark the precise ranges. Avoid
+              // decorating the whole paragraph or dispatching a guessed mark.
+              if (p.querySelector('[data-segment-node-id]')) return;
 
               const segment = segmentInfos.find(s => s.pid === pid);
               if (!segment) return;
@@ -615,6 +618,7 @@ export default React.memo(function ZhihuDOMContent({
         if (typeof renderMathInElement === 'function') {
           try {
             renderMathInElement(container, {
+                ignoredClasses: ['zhihu-literal-text'],
               delimiters: [
                 { left: '$$', right: '$$', display: true },
                 { left: '$', right: '$', display: false },
@@ -750,7 +754,8 @@ export default React.memo(function ZhihuDOMContent({
             if ((target.tagName === 'P' || target.tagName === 'SPAN') && target.classList.contains('segment-interactable')) {
               const pid = target.getAttribute('data-pid');
               if (pid) {
-                postBridgeMessage({ type: 'segment', pid });
+                const nodeId = target.getAttribute('data-segment-node-id');
+                postBridgeMessage({ type: 'segment', pid, ...(nodeId ? { nodeId } : {}) });
                 return;
               }
             }
@@ -761,7 +766,7 @@ export default React.memo(function ZhihuDOMContent({
         // Text selection detection
         function findParagraph(node) {
           while (node && node !== container) {
-            if (node.nodeType === 1 && node.getAttribute && node.getAttribute('data-pid')) {
+            if (node.nodeType === 1 && node.getAttribute && node.getAttribute('data-pid') && !node.getAttribute('data-segment-node-id')) {
               return node;
             }
             node = node.parentElement || node.parentNode;
@@ -962,7 +967,7 @@ export default React.memo(function ZhihuDOMContent({
               }
               break;
             case 'segment':
-              onSegmentPress(data.pid);
+              onSegmentPress?.(data.pid, data.nodeId);
               break;
             case 'selection':
               {

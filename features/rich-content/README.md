@@ -38,9 +38,9 @@ import { ZhihuContent } from '@/features/rich-content';
 
 ## 类型与数据边界
 
-当前组件继续接收 HTML 字符串或想法分段数组。`ZhihuContentProps`、`LinkCardProps`、`RichContentObjectType` 从公共入口导出；`contentArray` 复用 `types/zhihu.ts` 的 `ZhihuContentSegment`，知识点元数据复用 `ZhihuSegmentInfo`、`ZhihuSegmentMark` 和 `ZhihuSegmentReaction`。单数 `RichContentObjectType` 表示正文对象，复数 `RichContentEntityType` 表示查询接口类型。
+`ZhihuContent` 接收 HTML 字符串、想法分段数组或已规范化的 `document`，共用正文后端、排版和互动。`ZhihuContentProps`、`LinkCardProps`、`RichContentObjectType` 从公共入口导出；`contentArray` 复用 `types/zhihu.ts` 的 `ZhihuContentSegment`，知识点元数据复用 `ZhihuSegmentInfo`、`ZhihuSegmentMark` 和 `ZhihuSegmentReaction`。单数 `RichContentObjectType` 表示正文对象，复数 `RichContentEntityType` 表示查询接口类型。
 
-`structured_content` 使用 `types/zhihu.ts` 中的 `ZhihuStructuredContent` 类型，组件 `ZhihuStructuredContent` 直接消费 JSON 分段，覆盖 paragraph、heading、list_node、image、hr，以及 bold、link、entity_word、formula。原生分段模式生成 React Native 节点；tiqian 模式先映射到 `ZhihuDocument`，再交给原生文本流，均不序列化为 HTML/XML。重叠 marks 按范围端点拆分，公式使用源码或 `img_url`，保留字面文本中的 `<`、`&` 等字符。偏移单位尚未由非 BMP 样本证实，有歧义的文字保守显示为纯文本；不生成业务段评用的 paragraphId，也不配用旧 `segment_infos`。
+`structured_content` 使用 `types/zhihu.ts` 中的 `ZhihuStructuredContent` 类型，组件 `ZhihuStructuredContent` 直接消费 JSON 分段，覆盖 paragraph、heading、list_node、image、hr，以及 bold、link、entity_word、formula、seg_like。生产预览通过 `renderer="shared"` 把 `ZhihuDocument` 交给统一 `ZhihuContent`；开发对照保留 blocks/native-v2 两种研究模式。格式按范围端点拆分，互动标记保留完整范围；非 BMP 实样已验证 UTF-16 偏移，切开代理对的标记不启用。只有唯一真实 paragraph.pid 与准确 seg_like 范围可生成段落业务信息，不补造标题或列表段落 ID。
 
 开发构建从“我的 → 富文本测试案例 → structured_content 渲染对照”进入独立测试页。五个主要案例来自用户附件的真实回答，保留全部 48 个分段、99 个 marks 和分页标志，覆盖列表公式、标题与重叠词条、密集公式与分隔、图片布局、段落与链接。身份文字按原长度替换，ID、业务链接和不透明上下文脱敏；正文图和公式图保留原公开 HTTPS 地址，运行时加载，仓库不新增下载图片。可以切换渲染器、展开收起分段、查看脱敏 JSON；额外合成案例演示本地续页追加。样本放在 `fixtures/inbox/structured-content/`，由 `dev/structuredCases.ts` 显式登记，案例切换不写持久设置、不调用正文或互动接口。
 
@@ -101,7 +101,7 @@ WebView 正文在 JS 侧经过 HTML 标签、属性、URL 和内联样式白名�
 
 Enriched组件、专属dialect normalizer、相关测试、依赖和native patch已于2026-09-30正式移除；[实验01](./docs/renderer-v2-experiment-01-enriched-html.md)仅保留历史研究，不再提供运行入口或fallback。tiqian-super-mini在Android/iOS以外的平台或模块未包含的客户端回退到 WebView。
 
-通常使用 `ZhihuContent` 让正文遵循持久偏好；需要固定后端时可显式传入 `renderer="native-v2"`。该外壳已经封装完整 WebView fallback及图片/链接交互。直接使用 `ZhihuNativeContent` 时必须提供 `renderFallback: () => React.ReactNode`，由宿主返回完整的正文 adapter，供无模块/不支持平台降级；HTML 宿主使用 WebView，结构化宿主使用独立的 JSON 分段组件。首次native测量使用同排版骨架或宿主placeholder。模块本身无需反向依赖外壳。V2源选区和知识点事件仅在原生模块可用时生效。
+通常使用 `ZhihuContent` 让正文遵循持久偏好；需要固定后端时可显式传入 `renderer="native-v2"`。该外壳已经封装完整 WebView fallback及图片/链接交互；JSON 文档只在选择 WebView 或缺少原生模块时安全序列化，经过原有清洗及 DOM bridge。字面公式分隔符不被再次当作公式解析，选区只使用文字坐标稳定的真实段落。直接使用 `ZhihuNativeContent` 时必须提供 `renderFallback: () => React.ReactNode`；开发研究模式可提供独立 JSON 分段组件。首次native测量使用同排版骨架或宿主placeholder。模块本身无需反向依赖外壳。
 
 ## 真实正文的启用入口
 
@@ -181,6 +181,6 @@ stash 的高度测量优化已被本轮 WebView 修复覆盖，RNRH 专属组件
 
 ## 回答预览列表
 
-回答阅读方式与正文后端分开设置：前者决定点击普通卡片后的入口，后者决定 HTML 详情正文的排版。预览列表直接消费新接口的 `structured_content`，复用中立文档及 tiqian 文本流；模块不可用时使用 JSON 分段 adapter。展开收起按真实 segments 进行，正文续页与外层回答列表分别管理。服务端未支持的结构或请求失败会明确显示详情入口，不回填成旧正文，也不构造业务段评标记。开发对照保留页面内的渲染与展开设置，不写入生产阅读方式。
+回答阅读方式与正文后端分开设置：前者决定点击普通卡片后的入口，后者决定详情及预览展开正文的排版。预览列表直接消费新接口的 `structured_content`，与详情共用 `ZhihuContent` 的后端选择、字号行距、段落互动、选字、图片图库/长按和链接。展开收起按真实 segments 进行，正文续页与外层回答列表分别管理。未知或损坏的附加标记保留原文，未知块有明确文字时保留其文字；真正缺失正文或请求失败提供重试，不把缺失正文标为已完成。详情按钮是主动切换阅读方式的入口。开发对照保留页面内的渲染与展开设置，不写入生产阅读方式。
 
-用户后续提供的成功响应包含 `seg_like` 段落互动标记。该标记只附加点赞/评论元数据，解析时保留原始正文、分页和其他格式标记，不导入其业务 ID；其他未支持的正文结构仍会显示详情入口。脱敏回归 `next-render-seg-like-001` 保留 5 个回答、39 个段落及 UTF-16 范围，登记的首条正文也可在稳定案例页对照 JSON 分段与 tiqian。该页直接消费结构化对象，不经 HTML。
+用户后续提供的成功响应包含 `seg_like` 段落互动标记。`count` 对应共享 `like_count`，其余点赞/评论状态和片段 ID 按实际字段保留。业务动作要求唯一真实 PID、准确原文范围、有效片段 ID；重复 PID、交叉范围、跨段反应和混合公式保留正文与复制，不猜测业务坐标。完整正文先校验身份再切片，隐藏分段中的重复 PID 也不会被误启用。WebView 精确片段事件携带内部节点 ID，仍通过相同业务校验；选区继续按真实整段计算偏移。互动成功刷新预览来源。脱敏回归 `next-render-seg-like-001` 保留 5 个回答、39 个段落及 UTF-16 范围，开发页不调用互动接口。

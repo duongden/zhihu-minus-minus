@@ -114,14 +114,16 @@ beforeEach(() => {
   useAuthStore.setState({ cookies: null });
 });
 
-test('normalizes native metadata, keeps login prompts and rejects an unknown body without losing its detail identity', () => {
+test('normalizes metadata and login prompts while retaining text from unknown source blocks', () => {
   const page = normalizeZhihuAnswerPreviewPage(
     response([
       answer(),
       { id: 'login-prompt', type: 'login_prompt', description: '登录后继续' },
       answer('unsupported', {
         ...content([]),
-        segments: [{ id: 'unknown', type: 'unobserved-node' }],
+        segments: [
+          { id: 'unknown', type: 'unobserved-node', text: '保留正文' },
+        ],
       }),
     ]),
   );
@@ -143,9 +145,15 @@ test('normalizes native metadata, keeps login prompts and rejects an unknown bod
   });
   expect(page.data[2]).toMatchObject({
     id: 'unsupported',
-    structuredContent: null,
-    contentError: expect.any(String),
+    structuredContent: {
+      segments: [
+        { id: 'unknown', type: 'unsupported', fallbackText: '保留正文' },
+      ],
+    },
   });
+  expect(() =>
+    normalizeZhihuAnswerPreviewPage(response([answer('missing', null)])),
+  ).toThrow();
 });
 
 test('renders all captured answers with seg_like annotations without losing prose, bold marks or paging boundaries', () => {
@@ -164,7 +172,6 @@ test('renders all captured answers with seg_like annotations without losing pros
   let retainedBoldMarks = 0;
   let annotationMarks = 0;
   for (const [index, item] of answers.entries()) {
-    expect(item.contentError).toBeUndefined();
     const body = item.structuredContent;
     if (!body) throw new Error('Expected renderable captured answer');
     const rawSegments = source.data[index].structured_content.segments;
@@ -173,9 +180,7 @@ test('renders all captured answers with seg_like annotations without losing pros
         throw new Error('Expected captured paragraph');
       const raw = rawSegments[segmentIndex].paragraph;
       expect(segment.paragraph.text).toBe(raw.text);
-      expect(segment.paragraph.marks).toEqual(
-        raw.marks.filter((mark) => mark.type !== 'seg_like'),
-      );
+      expect(segment.paragraph.marks).toEqual(raw.marks);
       annotationMarks += raw.marks.filter(
         (mark) => mark.type === 'seg_like',
       ).length;

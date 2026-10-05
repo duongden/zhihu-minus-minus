@@ -202,6 +202,6 @@ xcrun simctl openurl booted 'zhihu--:///dev/rich-content/prototype?caseId=attach
 
 ## 回答阅读方式与预览列表
 
-回答入口 `/answer/[id]` 按 `answerReadingMode` 选择详情或预览卡片列表，默认 `detail`；settings version 16 给旧设置补齐该值。`readingMode=detail` 提供预览失败后的详情入口。问题页、收藏夹与点赞页先显示普通摘要卡片，不在列表中加载完整正文。长按 FeedCard 的临时预览菜单保持原有行为。
+回答入口 `/answer/[id]` 按 `answerReadingMode` 选择详情或预览卡片列表，默认 `detail`；settings version 16 给旧设置补齐该值。`readingMode=detail` 用于主动切换到详情。问题页、收藏夹与点赞页先显示普通摘要卡片，不在列表中加载完整正文。长按 FeedCard 的临时预览菜单保持原有行为。
 
-预览列表使用 `/next-render` 的结构化 JSON 正文，将回答列表分页与单回答正文 `/next-content-render` 分页分开。两者保留服务端完整续页 URL，先检查 `is_end`，限制地址来源与路径，拒绝重复续页。查询按当前账号会话隔离；正文续页不得混用旧 HTML `segment_infos` 或造出段评范围。未知结构和加载失败提供重试或详情入口，不把部分正文当作完整内容。未取得的初始会话与游标参数暂为空，续页沿用服务器值；本轮只有静态检查和 mock 回归，没有验证真实 API 是否接受这些空值。
+预览列表使用 `/next-render` 的结构化 JSON 正文，将回答列表分页与单回答正文 `/next-content-render` 分页分开。两者保留服务端完整续页 URL，先检查 `is_end`，限制地址来源与路径，拒绝重复续页。查询按当前账号会话隔离；正文从实际 paragraph.pid 和 seg_like 派生互动信息，不混用旧 HTML 业务 ID 或补造范围。生产预览通过 `ZhihuContent.document` 共用详情的渲染后端及交互；选择 WebView/缺模块时才安全转换为 HTML，默认原生路径不生成 HTML。未知附加标记保留原文；真实正文结构缺失或加载失败显示重试。未取得的初始会话与游标参数暂为空，续页沿用服务器值；用户提供的成功响应证明该次空值请求成功，仍未主动调用真实 API。

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { ZhihuContentSegment, ZhihuSegmentInfo } from '@/types/zhihu';
+import type { ZhihuDocument } from './document';
 import type { RichContentVariant } from './imagePolicy';
 
 /** 单个正文的对象类型；查询 key 使用 queryPolicy 中的复数类型。 */
@@ -22,6 +23,8 @@ export interface ZhihuContentProps {
   content?: string;
   /** 想法接口返回的分段结构，与收藏、Feed 共用领域类型。 */
   contentArray?: readonly ZhihuContentSegment[];
+  /** 已规范化的正文；与 HTML 共用后端选择、排版及交互。 */
+  document?: ZhihuDocument;
   segmentInfos?: readonly ZhihuSegmentInfo[];
   /** 卡片值可能是 JSON 字符串或对象，必须在使用时验证字段。 */
   linkCardInfo?: Readonly<Record<string, unknown>>;

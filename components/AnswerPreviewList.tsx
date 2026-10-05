@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { type Href, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import React, {
   useCallback,
   useEffect,
@@ -9,7 +9,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { ActivityIndicator, Linking, RefreshControl } from 'react-native';
+import { ActivityIndicator, RefreshControl } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { recordReadHistory } from '@/api/zhihu/history';
 import {
@@ -22,7 +22,6 @@ import {
   DetailNavigationHeader,
   useDetailNavigationHeight,
 } from '@/components/DetailNavigationHeader';
-import { ImagePreviewModal } from '@/components/ImagePreviewModal';
 import { LikeButton } from '@/components/LikeButton';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { ShareMenu } from '@/components/ShareMenu';
@@ -37,12 +36,6 @@ import { getAuthSessionVersion } from '@/store/useAuthStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import type { ZhihuStructuredContent as StructuredContent } from '@/types/zhihu';
 import { refreshInfiniteQuery, shouldRetryQuery } from '@/utils/query';
-import { showToast } from '@/utils/toast';
-import {
-  extractZhihuRedirectTarget,
-  getSafeExternalUrl,
-  parseZhihuUrl,
-} from '@/utils/url';
 import { getZhihuErrorMessage } from '@/utils/zhihuError';
 import { BouncyButton } from './BouncyButton';
 
@@ -51,8 +44,7 @@ const initialContentIds = new WeakMap<StructuredContent, number>();
 let initialContentSequence = 0;
 
 /** Cache identity is local; neither prose nor opaque continuation URLs become keys. */
-function initialContentId(content: StructuredContent | null): number {
-  if (!content) return 0;
+function initialContentId(content: StructuredContent): number {
   const existing = initialContentIds.get(content);
   if (existing !== undefined) return existing;
   const identity = ++initialContentSequence;
@@ -67,8 +59,7 @@ interface AnswerPreviewCardProps {
   onExpandedChange: (expanded: boolean) => void;
   onDetail: () => void;
   onMore: () => void;
-  onLinkPress: (url: string) => void;
-  onImagePress: (url: string, gallery: readonly string[]) => void;
+  onRefresh: () => void;
 }
 
 const AnswerPreviewCard = React.memo(function AnswerPreviewCard({
@@ -78,8 +69,7 @@ const AnswerPreviewCard = React.memo(function AnswerPreviewCard({
   onExpandedChange,
   onDetail,
   onMore,
-  onLinkPress,
-  onImagePress,
+  onRefresh,
 }: AnswerPreviewCardProps) {
   const router = useRouter();
   const colors = useRuntimeThemeColors();
@@ -88,15 +78,12 @@ const AnswerPreviewCard = React.memo(function AnswerPreviewCard({
   const body = useInfiniteQuery({
     queryKey: ['answer-preview-content', sessionVersion, item.id, sourceId],
     initialPageParam: undefined as string | undefined,
-    initialData: initialContent
-      ? { pages: [initialContent], pageParams: [undefined] }
-      : undefined,
+    initialData: { pages: [initialContent], pageParams: [undefined] },
     enabled: false,
     staleTime: Infinity,
     queryFn: async ({ pageParam, signal }) => {
       if (getAuthSessionVersion() !== sessionVersion)
         throw new Error('会话已变化');
-      if (!initialContent) throw new Error('正文暂不可用');
       if (!pageParam) return initialContent;
       return getNextContentRender(pageParam, { signal, sessionVersion });
     },
@@ -162,42 +149,31 @@ const AnswerPreviewCard = React.memo(function AnswerPreviewCard({
           ) : null}
         </View>
       </BouncyButton>
-      {!content && item.excerpt ? (
-        <Text type="secondary" numberOfLines={2} className="mb-3">
-          {item.excerpt}
-        </Text>
-      ) : null}
-      {content ? (
-        <ZhihuStructuredContent
-          content={content}
-          documentId={`answer-preview:${sessionVersion}:${item.id}:${sourceId}`}
-          renderer="native-v2"
-          previewSegmentCount={3}
-          expanded={expanded}
-          onExpandedChange={(nextExpanded) => {
-            onExpandedChange(nextExpanded);
-            if (
-              nextExpanded &&
-              body.data?.pages.length === 1 &&
-              !body.isFetchNextPageError
-            )
-              loadMore?.();
-          }}
-          hasMore={Boolean(continuation.next)}
-          isLoadingMore={body.isFetchingNextPage}
-          loadMoreError={loadError}
-          onLoadMore={loadMore}
-          expandLabel="展开回答"
-          collapseLabel="收起回答"
-          showFallbackNotice={false}
-          onLinkPress={onLinkPress}
-          onImagePress={onImagePress}
-        />
-      ) : (
-        <Text type="secondary" className="mb-3">
-          {item.contentError || '暂时无法预览正文，可进入详情阅读'}
-        </Text>
-      )}
+      <ZhihuStructuredContent
+        content={content}
+        documentId={`answer-preview:${sessionVersion}:${item.id}:${sourceId}`}
+        objectId={item.id}
+        renderer="shared"
+        onRefresh={onRefresh}
+        previewSegmentCount={3}
+        expanded={expanded}
+        onExpandedChange={(nextExpanded) => {
+          onExpandedChange(nextExpanded);
+          if (
+            nextExpanded &&
+            body.data?.pages.length === 1 &&
+            !body.isFetchNextPageError
+          )
+            loadMore?.();
+        }}
+        hasMore={Boolean(continuation.next)}
+        isLoadingMore={body.isFetchingNextPage}
+        loadMoreError={loadError}
+        onLoadMore={loadMore}
+        expandLabel="展开回答"
+        collapseLabel="收起回答"
+        showFallbackNotice={false}
+      />
       {!expanded && loadError ? (
         <Text type="secondary" className="mt-3">
           {loadError}
@@ -299,13 +275,7 @@ export function AnswerPreviewList({
     scope: string;
     item: ZhihuPreviewAnswer;
   } | null>(null);
-  const [imageState, setImageState] = useState<{
-    scope: string;
-    urls: string[];
-    index: number;
-  } | null>(null);
   const activeMenu = menuState?.scope === scope ? menuState.item : null;
-  const activeImages = imageState?.scope === scope ? imageState : null;
   const anchorIndex = query.items.findIndex(
     (item) => item.type === 'answer' && item.id === answerId,
   );
@@ -324,28 +294,9 @@ export function AnswerPreviewList({
     },
     [router, sortBy],
   );
-  const onLinkPress = useCallback(
-    (url: string) => {
-      const target = extractZhihuRedirectTarget(url);
-      const path = parseZhihuUrl(target);
-      if (path) router.push(path as Href);
-      else {
-        const externalUrl = getSafeExternalUrl(target);
-        if (externalUrl)
-          void Linking.openURL(externalUrl).catch(() =>
-            showToast('无法打开链接'),
-          );
-      }
-    },
-    [router],
-  );
-  const onImagePress = useCallback(
-    (url: string, gallery: readonly string[]) => {
-      const urls = gallery.includes(url) ? [...gallery] : [url];
-      setImageState({ scope, urls, index: Math.max(0, urls.indexOf(url)) });
-    },
-    [scope],
-  );
+  const refreshBody = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: query.queryKey });
+  }, [queryClient, query.queryKey]);
   const screenTitle =
     title ||
     query.items.find((item) => item.type === 'answer')?.question.title ||
@@ -428,8 +379,7 @@ export function AnswerPreviewList({
                   openDetail(item.id, item.question.id, item.question.title)
                 }
                 onMore={() => setMenuState({ scope, item })}
-                onLinkPress={onLinkPress}
-                onImagePress={onImagePress}
+                onRefresh={refreshBody}
               />
             )
           }
@@ -509,12 +459,6 @@ export function AnswerPreviewList({
               }
             : null
         }
-      />
-      <ImagePreviewModal
-        visible={Boolean(activeImages)}
-        imageUrls={activeImages?.urls ?? []}
-        initialIndex={activeImages?.index ?? 0}
-        onClose={() => setImageState(null)}
       />
     </View>
   );

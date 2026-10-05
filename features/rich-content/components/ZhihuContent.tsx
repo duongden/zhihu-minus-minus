@@ -42,7 +42,16 @@ import {
   parseZhihuUrl,
 } from '@/utils/url';
 import { getZhihuErrorStatus } from '@/utils/zhihuError';
-import type { ZhihuDocument, ZhihuLinkCardBlock } from '../document';
+import type {
+  ZhihuDocument,
+  ZhihuInlineRun,
+  ZhihuLinkCardBlock,
+} from '../document';
+import { serializeZhihuDocumentHtml } from '../documentHtml';
+import {
+  getZhihuDocumentPreviewImages,
+  walkZhihuDocument,
+} from '../documentTraversal';
 import {
   getNativeHighlightDisplayText,
   resolveNativeAnswerSegment,
@@ -57,6 +66,7 @@ import type {
 } from '../types';
 import ZhihuDOMContent, { type TextSelectionInfo } from './ZhihuDOMContent';
 import {
+  isRichTextNativeAvailable,
   ZhihuNativeContent,
   type ZhihuNativeContentSelection,
   type ZhihuNativeSegmentAction,
@@ -299,10 +309,27 @@ interface ActiveSegment {
   endIndex: number;
 }
 
+/** DOM segment spans are emitted only for source text with inline formatting. */
+function sourceInlineText(runs: readonly ZhihuInlineRun[]): string | undefined {
+  let text = '';
+  for (const run of runs) {
+    const value =
+      'children' in run
+        ? sourceInlineText(run.children)
+        : run.type === 'text' || run.type === 'inlineCode'
+          ? run.text
+          : undefined;
+    if (value === undefined) return undefined;
+    text += value;
+  }
+  return text;
+}
+
 export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
   ({
     content,
     contentArray,
+    document: sourceDocument,
     segmentInfos,
     linkCardInfo,
     objectId,
@@ -327,6 +354,28 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
       (useNative && settings.richContentRenderer === 'webview'
         ? 'native-v2'
         : settings.richContentRenderer);
+    const document = useMemo(
+      () =>
+        sourceDocument
+          ? { ...sourceDocument, id: `${type}:${objectId}` }
+          : undefined,
+      [sourceDocument, type, objectId],
+    );
+    const documentHtml = useMemo(
+      () =>
+        document &&
+        (selectedRenderer === 'webview' || !isRichTextNativeAvailable())
+          ? serializeZhihuDocumentHtml(document)
+          : undefined,
+      [document, selectedRenderer],
+    );
+    const documentImages = useMemo(
+      () =>
+        document
+          ? getZhihuDocumentPreviewImages(document).map((image) => image.url)
+          : undefined,
+      [document],
+    );
     const themeColors = useRuntimeThemeColors();
     const textSecondaryColor = useThemeColor({}, 'textSecondary');
     const contentBorderColor = useThemeColor({}, 'contentBorder');
@@ -504,7 +553,35 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
       setActionSheetUrl(src);
     }, []);
     const onSegmentPressCallback = useCallback(
-      (pid: string) => {
+      (pid: string, nodeId?: string) => {
+        if (document) {
+          const runs = [...walkZhihuDocument(document)].filter(
+            (node) =>
+              node.type === 'segment' &&
+              node.paragraphId === pid &&
+              (nodeId === undefined || node.id === nodeId),
+          );
+          // Older PID-only events must not guess among several mark ranges.
+          if (runs.length !== 1 || runs[0].type !== 'segment') return;
+          const run = runs[0];
+          const text = sourceInlineText(run.children);
+          if (!text?.trim()) return;
+          const resolved = resolveNativeAnswerSegment(
+            {
+              nodeId: run.id,
+              paragraphId: pid,
+              start: run.range.start,
+              end: run.range.end,
+              text,
+              segment: run,
+            },
+            { objectId, type, segmentInfos, document },
+          );
+          if (resolved)
+            handlePress(pid, resolved.segment, resolved.interaction);
+          else setNativeHighlight({ text });
+          return;
+        }
         const segment = segmentMap.get(pid);
         if (segment) {
           const interaction = findActiveInteraction(segment);
@@ -513,7 +590,15 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
           }
         }
       },
-      [segmentMap, findActiveInteraction, handlePress],
+      [
+        document,
+        objectId,
+        type,
+        segmentInfos,
+        segmentMap,
+        findActiveInteraction,
+        handlePress,
+      ],
     );
     const onNativeSegmentPressCallback = useCallback(
       (action: ZhihuNativeSegmentAction, document: ZhihuDocument) => {
@@ -575,6 +660,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
     const interactionSource = useRef({
       content,
       contentArray,
+      document,
       objectId,
       type,
       selectedRenderer,
@@ -585,6 +671,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
       if (
         previous.content === content &&
         previous.contentArray === contentArray &&
+        previous.document === document &&
         previous.objectId === objectId &&
         previous.type === type &&
         previous.selectedRenderer === selectedRenderer
@@ -593,6 +680,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
       interactionSource.current = {
         content,
         contentArray,
+        document,
         objectId,
         type,
         selectedRenderer,
@@ -601,7 +689,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
       setModalVisible(false);
       setActiveSegment(null);
       setNativeHighlight(null);
-    }, [content, contentArray, objectId, type, selectedRenderer]);
+    }, [content, contentArray, document, objectId, type, selectedRenderer]);
 
     const onTextSelectedCallback = useCallback(
       (info: TextSelectionInfo | null) => {
@@ -642,13 +730,13 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
     );
     const renderWebViewContent = () => (
       <ZhihuDOMContent
-        htmlContent={content || ''}
-        contentArray={contentArray}
+        htmlContent={documentHtml ?? content ?? ''}
+        contentArray={document ? undefined : contentArray}
         segmentInfosStr={JSON.stringify(segmentInfos)}
         linkCardInfoStr={JSON.stringify(linkCardInfo || {})}
         colorScheme={colorScheme}
         onReady={onLayoutReady}
-        onImagePress={onImagePressCallback}
+        onImagePress={(src) => onImagePressCallback(src, documentImages)}
         onImageLongPress={onImageLongPressCallback}
         onLinkPress={handleInternalLink}
         onSegmentPress={onSegmentPressCallback}
@@ -667,6 +755,7 @@ export const ZhihuContent: React.FC<ZhihuContentProps> = React.memo(
           <ZhihuNativeContent
             content={content || ''}
             contentArray={contentArray}
+            document={document}
             objectId={objectId}
             type={type}
             segmentInfos={segmentInfos}
