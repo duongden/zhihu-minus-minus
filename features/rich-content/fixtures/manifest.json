@@ -449,6 +449,36 @@
       }
     },
     {
+      "id": "quote-paragraph-spacing-001",
+      "file": "./cases/quote-paragraph-spacing-001.json",
+      "contentPath": "content",
+      "sourceType": "answer",
+      "collectedAt": "2026-10-05",
+      "traits": [
+        "synthetic",
+        "blockquote",
+        "paragraph-spacing",
+        "long-text",
+        "trailing-whitespace",
+        "line-break",
+        "json-envelope"
+      ],
+      "expected": {
+        "paragraphs": 6,
+        "headings": 0,
+        "totalImages": 0,
+        "activeImages": 0,
+        "formulaImages": 0,
+        "videoBoxes": 0,
+        "linkCards": 0
+      },
+      "expectedMetadata": {
+        "type": "answer",
+        "id": "synthetic-quote-paragraph-spacing",
+        "content_need_truncated": false
+      }
+    },
+    {
       "id": "next-render-seg-like-001",
       "file": "./cases/next-render-seg-like-001.json",
       "contentPath": "data.0.structured_content",

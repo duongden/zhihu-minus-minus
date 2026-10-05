@@ -58,12 +58,12 @@ const CONTENT_RENDERER_OPTIONS: readonly {
 }[] = [
   {
     value: 'native-v2',
-    label: 'tiqian-super-mini（默认）',
+    label: '原生渲染（默认）',
     description: 'tiqian super mini 版；更好的公式、图片、划线...的中文排版。',
   },
   {
     value: 'webview',
-    label: '网页排版',
+    label: 'WebView（不再推荐）',
     description: '使用网页布局显示正文。',
   },
 ];

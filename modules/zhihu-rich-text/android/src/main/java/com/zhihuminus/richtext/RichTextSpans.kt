@@ -70,9 +70,11 @@ internal class QuoteMarginSpan(
     paint.color = color
     paint.style = Paint.Style.FILL
     val other = x + dir * stripeWidth
-    // ParagraphHeightSpan adds the inter-paragraph gap to the last line's
-    // descent. Only the final paragraph in a quote ends before that gap.
-    val stripeBottom = if (end >= range.end) max(top, bottom - trailingSpacing) else bottom
+    // The callback's visible end excludes the paragraph newline and trailing
+    // spaces. Use the full layout line end to identify the paragraph's last
+    // visual line, then exclude its external gap from the quote stripe.
+    val fullLineEnd = layout.getLineEnd(layout.getLineForOffset(start))
+    val stripeBottom = quoteStripeBottom(top, bottom, fullLineEnd, range.end, trailingSpacing)
     canvas.drawRect(minOf(x, other).toFloat(), top.toFloat(), max(x, other).toFloat(), stripeBottom.toFloat(), paint)
     paint.color = previousColor
     paint.style = previousStyle

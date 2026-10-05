@@ -213,8 +213,18 @@ arm64 Debug已覆盖安装到V2509A（API 36），保留应用数据，通过USB
 
 按用户要求，本轮只进行源码审查和静态检查，不启动模拟器、真机或原生应用。
 
-Android 引用线原先直接使用 `LeadingMarginSpan` 的整行 `top..bottom`；段落高度 span 把段后间距加入末行 descent，引用线因此多画了段距。现在连续引用的最后一段在末行扣除其段后间距，引用内部相邻段落的线仍连续；没有新增换行或改动选区/source map。既有引用 fixture 及跨正文/引用选区案例继续复用。
+Android 引用线原先直接使用 `LeadingMarginSpan` 的整行 `top..bottom`；段落高度 span 把段后间距加入末行 descent，引用线因此多画了段距。当时增加了连续引用最后一段的末行段距扣除，但使用绘制回调的可见 end 判断段尾，后续核查发现引用后还有段落时该判断无法生效，修正见下节。引用内部相邻段落的线仍连续；没有新增换行或改动选区/source map。
 
 点击正文时的瞬间滚动有明确的静态路径：可选择 TextView 在触摸中取得焦点，本地 RN 0.83 的 `ReactScrollView.requestChildFocus` 会立即滚动到整个 focused 子视图；一个 flow 可跨越多屏。最初向祖先传递空 focused 的修正引入了闪退：用户连接的安卓真机崩溃日志显示 `ReactAndroidHWInputDeviceHelper.onFocusChanged` 不接受 null，调用栈直接经过本地 `RichTextView.requestChildFocus`。现在撤销该 override，始终传递真实焦点；`FlowTextView.getDrawingRect` 仅在同步普通触摸内返回触点矩形，避免外层尝试显示整个 flow。长按、已有选区、拖动、键盘和无障碍请求仍使用正常矩形；延迟布局也恢复正常矩形。附件列表为空时，逐帧同步提前返回，省去祖先滚动容器和屏幕可见范围查找。
 
 详情正文的透明候选层已设置 `pointerEvents="none"` 并隐藏其无障碍子节点，阅读滚动指示器也不接收触摸；底部按钮位于正文 ScrollView 之外。静态检查没有找到能明确解释“极少数首次进入后整条底栏无法点击、重进恢复”的稳定遮罩或禁用路径，因此未凭推测重写 Pager、底栏或选择生命周期。修正后的 `:zhihu-rich-text:compileDebugKotlin --offline` 已通过；只读取了现有真机崩溃日志，未安装或启动应用。修正后的触摸、引用末端视觉、长按拖柄与父滚动组合、底栏偶发故障、iOS 和 Release 性能仍须后续平台复验。
+
+## 2026-10-05：引用末行范围修正
+
+再次核查引用底部延长问题时，确认前一节的段距裁剪存在边界错误。compiler 在段间只追加一个语义换行，并将前段的 `range.end` 扩展到换行之后；Android `Layout.drawText` 传给 `drawLeadingMargin` 的 end 却来自 `getLineVisibleEnd`，会排除换行与末尾空白。例如 `引用\n后文` 的引用范围 end 是 3，绘制回调 end 是 2，原先 `end >= range.end` 无法识别末行。本地 SDK 30 和 36.1 的源码均保留这一行为。
+
+引用竖线现在通过 `layout.getLineEnd(layout.getLineForOffset(start))` 取得完整行结束位置，再判断段落末行并扣除外部段距。段距仍由 `ParagraphHeightSpan` 加入末行 descent，普通段落默认 14dp 并随系统字体缩放；本次只修正竖线边界。软折行与显式段内换行保留连线，高附件保留完整内容高度，连续引用段落内部仍跨段距连接。相邻独立 blockquote 的区分仍受现有 IR 只保留 quote kind、未保留容器身份的限制，本次未改变分组规则。
+
+新增合成 `quote-paragraph-spacing-001`，先经 inbox 分析再移入 cases/manifest，覆盖单段引用后正文、多段引用、长句、末尾空白与显式 br。JS 契约测试确认引用范围包含合成段间换行，br 留在同一段并保持源选择偏移；normalization 会清除普通段尾 ASCII 空格，因此 native 末尾空白用例由 JVM 测试直接构造。新增 8 项引用几何回归覆盖上述范围差异、连续引用、flow 末段、高附件与过大段距。这些测试验证范围与裁剪计算，不替代实际 Android Layout 和 Canvas 的视觉验收。
+
+本轮 `CI=1 npm run prebuild -- --platform android --no-install`、`./gradlew :zhihu-rich-text:compileDebugKotlin :zhihu-rich-text:testDebugUnitTest --offline` 均通过，最终原生测试共 20 项；`npm test -- features/rich-content/tests --runInBand` 的 25 个 suite / 412 项通过。`npm run check` 通过类型检查、501 个文件的只读 Biome、127 个 suite / 1402 项测试与 17 个 fixture 分析；Biome 保留 1 项既有 info。本轮未安装或运行真机/模拟器，未验证 iOS 或 Release；该改动需重新编译原生包后查看，Fast Refresh 不会更新 Kotlin 实现。

@@ -1,0 +1,7 @@
+{
+  "type": "answer",
+  "id": "synthetic-quote-paragraph-spacing",
+  "title": "合成引用段落间距回归",
+  "content": "<blockquote><p data-pid=\"single-quote\">单段引用。</p></blockquote><p data-pid=\"after-single-quote\">引用之后的普通段落。</p><blockquote><p data-pid=\"long-quote\">多段引用第一段：这是一段用于窄屏自然折行的合成长句，包含连续文字并保留同一个段落范围，引用标注线应跟随文字的实际显示行。</p><p data-pid=\"trailing-space-quote\">多段引用第二段，末尾留有空白。   </p><p data-pid=\"line-break-quote\">显式换行前<br>显式换行后。</p></blockquote><p data-pid=\"after-multiple-quotes\">多段引用之后的普通段落。</p>",
+  "content_need_truncated": false
+}

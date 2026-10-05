@@ -251,6 +251,101 @@ describe('Text Flow Island compilation and source ranges', () => {
     });
   });
 
+  it('keeps quote paragraph ranges through generated separators and explicit line breaks', () => {
+    const fixture: unknown = JSON.parse(
+      readFileSync(
+        path.join(
+          __dirname,
+          '../fixtures/cases/quote-paragraph-spacing-001.json',
+        ),
+        'utf8',
+      ),
+    );
+    if (
+      fixture === null ||
+      typeof fixture !== 'object' ||
+      !('content' in fixture) ||
+      typeof fixture.content !== 'string'
+    )
+      throw new Error('Expected the stored quote content');
+    const flow = firstFlow(fixture.content);
+    expect(
+      flow.paragraphs.map(
+        ({ paragraphId, kind, start, end, marginBottom }) => ({
+          paragraphId,
+          kind,
+          start,
+          end,
+          marginBottom,
+        }),
+      ),
+    ).toEqual([
+      {
+        paragraphId: 'single-quote',
+        kind: 'quote',
+        start: 0,
+        end: 6,
+        marginBottom: 14,
+      },
+      {
+        paragraphId: 'after-single-quote',
+        kind: 'paragraph',
+        start: 6,
+        end: 17,
+        marginBottom: 14,
+      },
+      {
+        paragraphId: 'long-quote',
+        kind: 'quote',
+        start: 17,
+        end: 78,
+        marginBottom: 14,
+      },
+      {
+        paragraphId: 'trailing-space-quote',
+        kind: 'quote',
+        start: 78,
+        end: 94,
+        marginBottom: 14,
+      },
+      {
+        paragraphId: 'line-break-quote',
+        kind: 'quote',
+        start: 94,
+        end: 107,
+        marginBottom: 14,
+      },
+      {
+        paragraphId: 'after-multiple-quotes',
+        kind: 'paragraph',
+        start: 107,
+        end: 119,
+        marginBottom: 14,
+      },
+    ]);
+    for (const paragraph of flow.paragraphs.filter(
+      ({ kind }) => kind === 'quote',
+    )) {
+      // Native paragraph spans include the generated paragraph separator.
+      expect(flow.text[paragraph.end - 1]).toBe('\n');
+      expect(
+        flow.sourceMap.find(
+          ({ start, end, kind }) =>
+            start === paragraph.end - 1 &&
+            end === paragraph.end &&
+            kind === 'synthetic',
+        ),
+      ).toBeDefined();
+    }
+    expect(flow.text.slice(78, 94)).toBe('多段引用第二段，末尾留有空白。\n');
+    expect(flow.text.slice(94, 107)).toBe('显式换行前\n显式换行后。\n');
+    expect(mapRichTextSelection(flow, 94, 106)).toMatchObject({
+      text: '显式换行前\n显式换行后。',
+      start: { paragraphId: 'line-break-quote', offset: 0 },
+      end: { paragraphId: 'line-break-quote', offset: 11 },
+    });
+  });
+
   it('keeps the stored article short list formulas in their original sentences without generated paragraph breaks', () => {
     const fixture: unknown = JSON.parse(
       readFileSync(

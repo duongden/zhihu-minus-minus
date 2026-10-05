@@ -10,12 +10,13 @@
 - `ReplacementSpan` 表示 `U+FFFC` 附件。异步读取图片、HTTP(S) SVG 和 `data:image/…`，解析 SVG 根节点的 `ex`/`em` 尺寸与 `vertical-align`；同一动画帧完成的资源统一回填、保留选区并重新测量。
 - 行高是最小值，附件较高时保留其完整 ascent/descent；宽度按容器上限缩小。系统复制会把已选中的附件占位符替换为 `copyText`。
 - 统一字号、最小行高和段距；Android 高质量换行及可选系统双齐。没有通过插入空格或改变正文内容模拟中西文间距。
+- Android 段后间距由 `LineHeightSpan` 加入末行 descent。引用竖线以 `Layout` 的完整行结束位置识别末行，并扣除引用外部的段距；绘制回调的可见文字 end 会省略换行和末尾空白，不能用来判断段落结束。相邻引用段落之间的线仍保持连续。
 - 不使用 `LinkMovementMethod`。普通点击分发链接、知识点或附件 action；长按仍交给系统选择，附件可附加 `attachmentLongPress` 事件。
 - 公式使用独立Paint，以当前 `textColor` 的SRC_IN滤镜绘制前景；普通图片保持原色。公式若在四个5%内缩角落中至少三个为近白不透明像素，加载时先转为灰度alpha mask去除浅底，避免底板和文字同时被染白。尺寸、基线和分类保持不变。
 - 解码资源按kind、URL、尺寸、字号/系统缩放及容器宽度保留在进程LRU中，以bitmap.byteCount计数，缓存上限24MB。缓存保留未染主题色的glyph/mask，主题切换在绘制时着色；kind防止普通图复用公式mask。重新挂载的文字流可直接使用已缓存几何；资源失败不阻塞正文首测，也不输出资源URL。
 - 附件加载由全进程共享的两个worker执行，空闲30秒后回收线程；相同资源key的进行中请求共享一次下载和解码。缓存检查与请求登记使用同一把锁，避免刚完成的资源再次下载。每个view只取消自己的订阅，最后一个订阅退出才取消底层任务；旧请求的迟到结果不能覆盖同key的新请求，generation 与 viewport revision 保护按帧回填，低内存/trim 回调清理进程缓存。
 
-附件并发、去重、取消和重试的纯JVM回归位于 `android/src/test/`，生成工程后在项目 `android/` 目录运行 `./gradlew :zhihu-rich-text:testDebugUnitTest`。这些测试不请求真实图源，不替代Android附件的视觉验收。
+附件并发、去重、取消和重试，以及引用末行边界与竖线裁剪的纯JVM回归位于 `android/src/test/`，生成工程后在项目 `android/` 目录运行 `./gradlew :zhihu-rich-text:testDebugUnitTest`。这些测试不请求真实图源，不替代Android布局与附件的视觉验收。
 
 ## iOS 初步实现
 
