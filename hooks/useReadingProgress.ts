@@ -6,6 +6,7 @@ import {
   useState,
 } from 'react';
 import { AppState, type LayoutChangeEvent } from 'react-native';
+import { ENABLE_READING_PROGRESS } from '@/constants/readingProgress';
 import { useProgressStore } from '@/store/useProgressStore';
 import {
   calculateReadingProgress,
@@ -44,6 +45,7 @@ export function useReadingProgress({
   layoutSource,
   scrollRef,
 }: UseReadingProgressOptions) {
+  const progressEnabled = ENABLE_READING_PROGRESS && enabled;
   const entry = useProgressStore((state) => state.progress[contentKey]);
   const saveProgress = useProgressStore((state) => state.saveProgress);
   const removeProgress = useProgressStore((state) => state.removeProgress);
@@ -103,15 +105,16 @@ export function useReadingProgress({
   }, [contentKey, enabled, layoutSource]);
 
   useEffect(() => {
+    if (!progressEnabled) return;
     const unsubscribe = useProgressStore.persist.onFinishHydration(() =>
       setHasHydrated(true),
     );
     if (useProgressStore.persist.hasHydrated()) setHasHydrated(true);
     return unsubscribe;
-  }, []);
+  }, [progressEnabled]);
 
   const commitProgress = useCallback(() => {
-    if (!enabled || !restoredRef.current) return;
+    if (!progressEnabled || !restoredRef.current) return;
 
     const result = calculateReadingProgress(
       offsetRef.current,
@@ -124,7 +127,7 @@ export function useReadingProgress({
     } else if (result.status === 'complete' || result.status === 'at-start') {
       removeProgress(contentKey);
     }
-  }, [contentKey, enabled, removeProgress, saveProgress]);
+  }, [contentKey, progressEnabled, removeProgress, saveProgress]);
 
   useLayoutEffect(() => {
     if (progressIdentityRef.current !== contentKey) {
@@ -146,13 +149,14 @@ export function useReadingProgress({
   }, [contentKey, commitProgress]);
 
   const scheduleSave = useCallback(() => {
-    if (!enabled || !restoredRef.current) return;
+    if (!progressEnabled || !restoredRef.current) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(commitProgress, SAVE_DELAY_MS);
-  }, [commitProgress, enabled]);
+  }, [commitProgress, progressEnabled]);
 
   const tryRestore = useCallback(() => {
-    if (!enabled || !ready || !hasHydrated || restoredRef.current) return;
+    if (!progressEnabled || !ready || !hasHydrated || restoredRef.current)
+      return;
     if (!entry) {
       restoredRef.current = true;
       return;
@@ -203,7 +207,15 @@ export function useReadingProgress({
       setRestoredOffset(targetOffset);
       onProgrammaticScrollRef.current?.(targetOffset);
     }, RESTORE_DELAY_MS);
-  }, [contentKey, enabled, entry, hasHydrated, ready, layoutSource, scrollRef]);
+  }, [
+    contentKey,
+    progressEnabled,
+    entry,
+    hasHydrated,
+    ready,
+    layoutSource,
+    scrollRef,
+  ]);
 
   useLayoutEffect(() => {
     committedTryRestoreRef.current = tryRestore;
@@ -257,11 +269,12 @@ export function useReadingProgress({
   }, [ready, tryRestore]);
 
   useEffect(() => {
+    if (!progressEnabled) return;
     const subscription = AppState.addEventListener('change', (nextState) => {
       if (nextState !== 'active') commitProgress();
     });
     return () => subscription.remove();
-  }, [commitProgress]);
+  }, [commitProgress, progressEnabled]);
 
   const onScroll = useCallback(
     (offset: number) => {
@@ -304,7 +317,12 @@ export function useReadingProgress({
 
   const scrollToTop = useCallback(() => {
     const current = restoreEligibilityRef.current;
-    if (!current.enabled || current.contentKey !== contentKey) return;
+    if (
+      !ENABLE_READING_PROGRESS ||
+      !current.enabled ||
+      current.contentKey !== contentKey
+    )
+      return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     offsetRef.current = 0;
     setRestoredOffset(null);
@@ -320,7 +338,7 @@ export function useReadingProgress({
     onContentSizeChange,
     onLayout,
     onScroll,
-    restoredOffset,
+    restoredOffset: ENABLE_READING_PROGRESS ? restoredOffset : null,
     scrollToTop,
   };
 }

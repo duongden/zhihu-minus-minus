@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
+import { ENABLE_READING_PROGRESS } from '@/constants/readingProgress';
 import {
   normalizeReadingProgress,
   READING_PROGRESS_STORE_VERSION,
@@ -49,6 +50,7 @@ export const useProgressStore = create<ProgressState>()(
       name: 'progress-storage',
       version: READING_PROGRESS_STORE_VERSION,
       storage: createJSONStorage(() => readingProgressStorage),
+      skipHydration: !ENABLE_READING_PROGRESS,
       partialize: ({ progress }) => ({ progress }),
       migrate: (persisted: unknown) => ({
         progress: normalizeReadingProgress(

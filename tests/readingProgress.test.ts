@@ -9,6 +9,10 @@ import {
   resolveReadingProgressOffset,
 } from '../utils/readingProgress';
 
+// Keep the retained implementation covered while production pauses this feature.
+jest.mock('../constants/readingProgress', () => ({
+  ENABLE_READING_PROGRESS: true,
+}));
 jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn(async () => null),
   setItemAsync: jest.fn(async () => undefined),
