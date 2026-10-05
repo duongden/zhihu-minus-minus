@@ -3,7 +3,11 @@ import {
   parseZhihuStructuredContent,
 } from '@/features/rich-content';
 import { getAuthSessionVersion } from '@/store/useAuthStore';
-import type { ZhihuStructuredContent } from '@/types/zhihu';
+import type {
+  ZhihuContentSegment,
+  ZhihuSegmentInfo,
+  ZhihuStructuredContent,
+} from '@/types/zhihu';
 import apiClient, { type ApiRequestOptions } from '../client';
 import { getZhihuAppEndpointHeaders } from './appApi';
 import type {
@@ -11,7 +15,7 @@ import type {
   ZhihuNextRenderParams,
 } from './nextRender';
 
-export interface ZhihuPreviewAnswer {
+export interface ZhihuPreviewAnswerMetadata {
   id: string;
   type: 'answer';
   question: { id: string; title: string };
@@ -31,7 +35,18 @@ export interface ZhihuPreviewAnswer {
     is_favorited: boolean;
     voting: -1 | 0 | 1;
   };
+}
+
+export interface ZhihuPreviewAnswer extends ZhihuPreviewAnswerMetadata {
   structuredContent: ZhihuStructuredContent;
+}
+
+export interface ZhihuPlainPreviewAnswer extends ZhihuPreviewAnswerMetadata {
+  content: string | readonly ZhihuContentSegment[];
+  segmentInfos?: readonly ZhihuSegmentInfo[];
+  linkCardInfo?: Readonly<Record<string, unknown>>;
+  contentNeedTruncated?: boolean;
+  answerType?: string;
 }
 
 export interface ZhihuPreviewLoginPrompt {
@@ -42,6 +57,11 @@ export interface ZhihuPreviewLoginPrompt {
 
 export type ZhihuAnswerPreviewItem =
   | ZhihuPreviewAnswer
+  | ZhihuPreviewLoginPrompt;
+
+export type ZhihuReadingPreviewItem =
+  | ZhihuPreviewAnswer
+  | ZhihuPlainPreviewAnswer
   | ZhihuPreviewLoginPrompt;
 
 export interface ZhihuAnswerPreviewPage {
@@ -105,7 +125,7 @@ export function validateZhihuRenderUrl(
     url.pathname !== path
   )
     throw new Error(INVALID_CONTINUATION);
-  return url.toString();
+  return value;
 }
 
 function continuationIdentity(value: string): string {
@@ -188,8 +208,20 @@ export function normalizeZhihuAnswerPreviewPage(
 
 export function buildZhihuNextRenderUrl(params: ZhihuNextRenderParams): string {
   const url = new URL('https://api.zhihu.com/next-render');
-  for (const [key, value] of Object.entries(params))
-    url.searchParams.set(key, String(value));
+  url.searchParams.set('id', params.id);
+  url.searchParams.set('type', 'answer');
+  url.searchParams.set('scenes', params.scenes ?? 'unknown');
+  if (params.scenes === 'question_feed') {
+    url.searchParams.set('collection_id', params.collection_id);
+    url.searchParams.set('collection_type', 'question');
+    url.searchParams.set(
+      'question_feed_session_id',
+      params.question_feed_session_id,
+    );
+    url.searchParams.set('question_feed_cursor', params.question_feed_cursor);
+  }
+  url.searchParams.set('context_expand', String(params.context_expand));
+  url.searchParams.set('is_native', String(params.is_native));
   return url.toString();
 }
 

@@ -217,12 +217,13 @@ function parseSegment(value: unknown): ZhihuStructuredContentSegment {
     }
     case 'list_node': {
       const list = record(segment.list_node);
-      if (list.type !== 'unordered') throw new Error(INVALID_CONTENT);
+      if (list.type !== 'unordered' && list.type !== 'ordered')
+        throw new Error(INVALID_CONTENT);
       return {
         id,
         type: 'list_node',
         list_node: {
-          type: 'unordered',
+          type: list.type,
           items: array(list.items).map((value) => {
             const item = record(value);
             return {
@@ -230,6 +231,26 @@ function parseSegment(value: unknown): ZhihuStructuredContentSegment {
               indent_level: integer(item.indent_level),
             };
           }),
+        },
+      };
+    }
+    case 'card': {
+      const card =
+        segment.card &&
+        typeof segment.card === 'object' &&
+        !Array.isArray(segment.card)
+          ? record(segment.card)
+          : {};
+      return {
+        id,
+        type: 'card',
+        card: {
+          title:
+            typeof card.title === 'string' && card.title.trim()
+              ? card.title
+              : '链接卡片',
+          url: typeof card.url === 'string' ? card.url : '',
+          cover: typeof card.cover === 'string' ? card.cover : '',
         },
       };
     }
@@ -640,7 +661,8 @@ function listBlock(
   id: string,
   resources?: Readonly<Record<string, ZhihuImageResource>>,
 ): ZhihuBlock {
-  const root: MutableList = { id, type: 'list', ordered: false, items: [] };
+  const ordered = segment.list_node.type === 'ordered';
+  const root: MutableList = { id, type: 'list', ordered, items: [] };
   const stack = [root];
   for (const [index, item] of segment.list_node.items.entries()) {
     const targetDepth = Math.min(
@@ -654,7 +676,7 @@ function listBlock(
         const nested: MutableList = {
           id: `${id}:nested:${index}`,
           type: 'list',
-          ordered: false,
+          ordered,
           items: [],
         };
         // At most one new level per item; do not fabricate empty parent items.
@@ -682,7 +704,7 @@ function listBlock(
   return root;
 }
 
-/** Convert the five observed JSON block kinds straight to the semantic model. */
+/** Convert observed JSON blocks straight to the semantic model. */
 export function normalizeZhihuStructuredContent(
   content: ZhihuStructuredContent,
   options: ZhihuStructuredContentNormalizationOptions = {},
@@ -723,6 +745,30 @@ export function normalizeZhihuStructuredContent(
         };
       case 'list_node':
         return listBlock(segment, id, options.resources);
+      case 'card': {
+        const url = getSafeRichContentUrl(segment.card.url);
+        if (!url) {
+          return {
+            id,
+            type: 'unsupported',
+            sourceType: 'structuredCard',
+            fallbackText: segment.card.title,
+          };
+        }
+        const image = imageResource(
+          [segment.card.cover],
+          0,
+          0,
+          options.resources,
+        );
+        return {
+          id,
+          type: 'linkCard',
+          title: segment.card.title,
+          url,
+          ...(image && { image }),
+        };
+      }
       case 'image': {
         const source = segment.image;
         const resource = imageResource(

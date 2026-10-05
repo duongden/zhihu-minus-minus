@@ -12,6 +12,7 @@ import type {
   ZhihuDocument,
   ZhihuImageResource,
 } from '../document';
+import { serializeZhihuDocumentHtml } from '../documentHtml';
 import { walkZhihuDocument } from '../documentTraversal';
 import { resolveNativeAnswerSegment } from '../nativeInteractions';
 import {
@@ -201,6 +202,103 @@ test('converts all five JSON nodes directly without modifying the source or pagi
   expect(JSON.stringify(source)).toBe(original);
   expect(parseZhihuStructuredContent(source).paging).toBe(PAGING);
   expect(parseStructuredContentPaging(PAGING).is_end).toBe(true);
+});
+
+test('ordered JSON lists and body cards retain safe shared semantics while optional metadata cannot reject prose', () => {
+  const safeUrl = 'https://www.zhihu.com/question/1001/answer/1002';
+  const title = '<script>literal</script> & 合成卡片';
+  const source = {
+    paging: PAGING,
+    segments: [
+      paragraph('前文'),
+      {
+        id: 'ordered-list',
+        type: 'list_node',
+        list_node: {
+          type: 'ordered',
+          items: [
+            { text: '首项', indent_level: 1, marks: [] },
+            { text: '嵌套项', indent_level: 2, marks: [] },
+            { text: '次项', indent_level: 1, marks: [] },
+          ],
+        },
+      },
+      {
+        id: 'card-safe',
+        type: 'card',
+        card: {
+          title,
+          url: safeUrl,
+          cover: IMAGE_URL,
+          extra_info: { unobserved: ['not display metadata'] },
+          id: null,
+        },
+      },
+      {
+        id: 'card-unsafe',
+        type: 'card',
+        card: { title: '保留卡片文字', url: 'javascript:alert(1)' },
+      },
+      {
+        id: 'card-missing-title',
+        type: 'card',
+        card: { url: safeUrl, cover: 'file:///untrusted/cover.png' },
+      },
+      { id: 'card-missing-payload', type: 'card' },
+      paragraph('后文', [], 'last-source'),
+    ],
+  };
+  const original = JSON.stringify(source);
+  const parsed = parseZhihuStructuredContent(source);
+  const document = normalizeZhihuStructuredContent(parsed);
+  const lists = [...walkZhihuDocument(document)].filter(
+    (node) => node.type === 'list',
+  );
+  expect(lists).toHaveLength(2);
+  expect(lists.every((node) => node.ordered)).toBe(true);
+  expect(document.blocks[2]).toMatchObject({
+    type: 'linkCard',
+    title,
+    url: safeUrl,
+    image: { mediaType: 'image', url: IMAGE_URL },
+  });
+  expect(document.blocks[3]).toMatchObject({
+    type: 'unsupported',
+    sourceType: 'structuredCard',
+    fallbackText: '保留卡片文字',
+  });
+  expect(document.blocks[4]).toMatchObject({
+    type: 'linkCard',
+    title: '链接卡片',
+    url: safeUrl,
+  });
+  expect(document.blocks[4]).not.toHaveProperty('image');
+  expect(document.blocks[5]).toMatchObject({
+    type: 'unsupported',
+    fallbackText: '链接卡片',
+  });
+  const compiled = compile(document);
+  expect(
+    compiled.parts
+      .filter((part) => part.type === 'block')
+      .map((part) => part.block.type),
+  ).toEqual(['linkCard', 'unsupported', 'linkCard', 'unsupported']);
+  const prose = compiled.parts
+    .flatMap((part) => (part.type === 'flow' ? [part.flow.text] : []))
+    .join('\n');
+  for (const text of ['前文', '1. 首项', '1. 嵌套项', '2. 次项', '后文'])
+    expect(prose).toContain(text);
+  const html = serializeZhihuDocumentHtml(document);
+  expect(html.match(/<ol>/g)).toHaveLength(2);
+  expect(html).toContain('class="zhihu-link-card"');
+  expect(html).toContain(
+    'href="https://www.zhihu.com/question/1001/answer/1002"',
+  );
+  expect(html).toContain('&lt;script&gt;literal&lt;/script&gt; &amp; 合成卡片');
+  expect(html).not.toMatch(
+    /<script>|javascript:|file:\/\/\/|extra_info|not display metadata/,
+  );
+  expect(JSON.stringify(source)).toBe(original);
 });
 
 test('retains raw markup-looking text and entities instead of HTML escaping, parsing or decoding them', () => {

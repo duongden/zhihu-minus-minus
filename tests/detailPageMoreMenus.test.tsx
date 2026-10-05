@@ -6,6 +6,11 @@ import ArticleDetail from '../app/article/[id]';
 import PinDetailScreen from '../app/pin/[id]';
 import QuestionDetail from '../app/question/[id]/index';
 import type { ActionSheetOption } from '../components/overlays/ActionSheet';
+import { seedAnswerPreviewEntry } from '../utils/answerPreviewEntry';
+
+jest.mock('../utils/answerPreviewEntry', () => ({
+  seedAnswerPreviewEntry: jest.fn(),
+}));
 
 interface MenuProps {
   visible: boolean;
@@ -467,9 +472,23 @@ test('question and answer more entries target distinct content and preserve auth
   const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   const host = await render(<QuestionDetail />);
   await pressButton(host.getByRole('button', { name: '阅读 合成作者 的回答' }));
+  expect(seedAnswerPreviewEntry).toHaveBeenCalledWith(
+    expect.any(Object),
+    expect.objectContaining({
+      id: mockAnswer.id,
+      content: mockAnswer.content,
+      question: expect.objectContaining({ id: '7', title: '合成问题' }),
+    }),
+  );
   expect(mockPush).toHaveBeenCalledWith({
     pathname: '/answer/[id]',
-    params: { id: '84', questionId: '7', title: '合成问题', sortBy: 'default' },
+    params: {
+      id: '84',
+      questionId: '7',
+      title: '合成问题',
+      sortBy: 'default',
+      answerScene: 'question_feed',
+    },
   });
   await pressButton(host.getByRole('button', { name: '问题更多操作' }));
   expect(host.getByText('menu:question:7')).toBeTruthy();

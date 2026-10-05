@@ -44,6 +44,8 @@ export interface ZhihuStructuredContentProps {
   isLoadingMore?: boolean;
   loadMoreError?: string;
   onLoadMore?: () => void;
+  /** Automatic production paging keeps retry controls and hides normal paging. */
+  showLoadMoreControl?: boolean;
   expandLabel?: string;
   collapseLabel?: string;
   showFallbackNotice?: boolean;
@@ -104,6 +106,7 @@ export const ZhihuStructuredContent = React.memo(
     isLoadingMore = false,
     loadMoreError,
     onLoadMore,
+    showLoadMoreControl = true,
     expandLabel = '展开全部分段',
     collapseLabel = '收起分段',
     showFallbackNotice = true,
@@ -307,6 +310,36 @@ export const ZhihuStructuredContent = React.memo(
                 }}
               />
             );
+          case 'linkCard':
+            return (
+              <Pressable
+                key={block.id}
+                accessibilityRole="link"
+                accessibilityLabel={block.title}
+                disabled={!onLinkPress}
+                onPress={() => onLinkPress?.(block.url)}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: 12,
+                  marginBottom: 12,
+                  borderRadius: 12,
+                  backgroundColor: colors.backgroundSecondary,
+                }}
+              >
+                {block.image ? (
+                  <Image
+                    source={{ uri: block.image.offlineUri ?? block.image.url }}
+                    style={{ width: 48, height: 48, borderRadius: 6 }}
+                    resizeMode="cover"
+                  />
+                ) : null}
+                <Text style={[textStyle, { color: colors.link, flex: 1 }]}>
+                  {block.title}
+                </Text>
+              </Pressable>
+            );
           case 'blockFormula':
             return (
               <Text
@@ -388,14 +421,15 @@ export const ZhihuStructuredContent = React.memo(
         ) : (
           renderBlocks()
         )}
-        {isExpanded && (hasMore || loadMoreError) ? (
+        {(isExpanded || (renderer === 'shared' && loadMoreError)) &&
+        (loadMoreError || isLoadingMore || (hasMore && showLoadMoreControl)) ? (
           <View style={{ marginTop: 12 }}>
             {loadMoreError ? (
               <Text style={{ color: colors.textSecondary, marginBottom: 8 }}>
                 {loadMoreError}
               </Text>
             ) : null}
-            {onLoadMore ? (
+            {onLoadMore && (showLoadMoreControl || loadMoreError) ? (
               <Control
                 accessibilityRole="button"
                 accessibilityState={{ busy: isLoadingMore }}
@@ -411,13 +445,10 @@ export const ZhihuStructuredContent = React.memo(
                   </Text>
                 )}
               </Control>
+            ) : isLoadingMore ? (
+              <ActivityIndicator color={colors.link} />
             ) : null}
           </View>
-        ) : null}
-        {renderer === 'shared' && !isExpanded && loadMoreError ? (
-          <Text style={{ color: colors.textSecondary, marginTop: 12 }}>
-            {loadMoreError}
-          </Text>
         ) : null}
         {content.segments.length > previewCount || hasMore || isExpanded ? (
           <Control

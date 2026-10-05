@@ -15,6 +15,7 @@ import {
 } from '../api/zhihu/member';
 import UserDetailScreen from '../app/user/[id]/index';
 import type { ProfileTabListProps } from '../components/profile/ProfileTabList';
+import type { AnswerReadingContext } from '../utils/answerReadingContext';
 
 interface MockPagerProps extends PropsWithChildren {
   initialPage: number;
@@ -31,6 +32,7 @@ const mockListMount = jest.fn();
 const mockListUnmount = jest.fn();
 const mockListProps = new Map<string, ProfileTabListProps>();
 const mockFeedItems = new Map<string, FeedItem>();
+const mockFeedContexts = new Map<string, AnswerReadingContext | undefined>();
 const member: ZhihuMember = {
   id: 'member-hash-id',
   url_token: 'member-readable-token',
@@ -125,8 +127,15 @@ jest.mock('../components/profile/ProfileHeader', () => ({
       ),
 }));
 jest.mock('../components/FeedCard', () => ({
-  FeedCard: ({ item }: { item: FeedItem }) => {
+  FeedCard: ({
+    item,
+    answerContext,
+  }: {
+    item: FeedItem;
+    answerContext?: AnswerReadingContext;
+  }) => {
     mockFeedItems.set(item.id, item);
+    mockFeedContexts.set(`${item.type}:${item.id}`, answerContext);
     return jest
       .requireActual('react')
       .createElement(jest.requireActual('react-native').Text, null, item.title);
@@ -236,6 +245,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockListProps.clear();
   mockFeedItems.clear();
+  mockFeedContexts.clear();
   mockRoute = { id: 'member-readable-token' };
   mockAuthState = { cookies: 'z_c0=synthetic-session', me: member };
   mockSessionVersion = 1;
@@ -343,8 +353,23 @@ test.each([
 test('a failed profile refresh retains the cached header and native pager', async () => {
   mockRoute.tab = 'answers';
   client.setQueryData(['me'], member);
+  jest.mocked(getMemberRelations).mockResolvedValue({
+    ...emptyPage,
+    // This endpoint can omit author identity even though its owner is known.
+    data: [
+      {
+        ...votedAnswer,
+        author: { ...votedAnswer.author, id: '', url_token: '' },
+      },
+    ],
+  });
   const host = await render(screen());
   await flushQueries();
+  expect(mockFeedContexts.get(`answers:${votedAnswer.id}`)).toEqual({
+    scene: 'profile_answer',
+    memberId: mockRoute.id,
+    memberSort: 'created',
+  });
   const pager = host.getByTestId('native-profile-pager');
   jest.mocked(getMemberWithFallback).mockRejectedValue(new Error('offline'));
   await act(async () => {
@@ -425,6 +450,29 @@ test('switching member routes resets visited tabs and the native pager', async (
 test('creation cards of different types retain distinct list keys when their IDs coincide', async () => {
   mockRoute.tab = 'creations';
   client.setQueryData(['me'], member);
+  jest.mocked(getMemberActivities).mockResolvedValue({
+    ...emptyPage,
+    data: [
+      {
+        id: 'linked-answer-event',
+        target: {
+          type: 'answer',
+          url: 'https://www.zhihu.com/question/123/answer/456',
+          author: { ...member, type: 'people' },
+          question: { id: '123', title: '已知链接中的回答' },
+          content: '<p>链接回答正文</p>',
+        },
+      },
+      {
+        id: 'unsupported-answer-event',
+        target: {
+          type: 'answer',
+          url: 'https://example.test/answer/789',
+          question: { title: '无法确认的回答链接' },
+        },
+      },
+    ],
+  });
   jest.mocked(getRecentMemberActivities).mockResolvedValue({
     ...emptyPage,
     data: [
@@ -433,7 +481,24 @@ test('creation cards of different types retain distinct list keys when their IDs
         target: {
           id: 'shared-content-id',
           type: 'answer',
+          author: { ...member, type: 'people' },
+          content: '<p>本人完整正文</p>',
           question: { title: '相同标识的回答' },
+        },
+      },
+      {
+        id: 'other-answer-event',
+        target: {
+          id: 'other-answer-id',
+          type: 'answer',
+          author: {
+            ...member,
+            id: 'another-author',
+            url_token: 'another-token',
+          },
+          question: { title: '其他作者回答' },
+          content: '<p>付费片段</p>',
+          paid_info: {},
         },
       },
       {
@@ -450,10 +515,31 @@ test('creation cards of different types retain distinct list keys when their IDs
   await flushQueries();
   expect(host.getByText('相同标识的回答')).toBeTruthy();
   expect(host.getByText('相同标识的文章')).toBeTruthy();
+  expect(mockFeedContexts.get('answers:shared-content-id')).toEqual({
+    scene: 'profile_answer',
+    memberId: mockRoute.id,
+    memberSort: 'created',
+  });
   const list = mockListProps.get('创作');
+  expect(mockFeedContexts.get('answers:other-answer-id')).toEqual({
+    scene: 'unknown',
+  });
+  expect(mockFeedItems.get('other-answer-id')?.answerType).toBe('PAID');
   const keys = list?.query.data.map(list.keyExtractor);
-  expect(keys).toHaveLength(2);
-  expect(new Set(keys).size).toBe(2);
+  expect(keys).toHaveLength(3);
+  expect(new Set(keys).size).toBe(3);
+  await fireEvent.press(host.getByRole('tab', { name: '动态' }));
+  await flushQueries();
+  expect(mockFeedItems.get('456')).toMatchObject({
+    id: '456',
+    content: '<p>链接回答正文</p>',
+  });
+  expect(mockFeedContexts.get('answers:456')).toEqual({
+    scene: 'profile_answer',
+    memberId: mockRoute.id,
+    memberSort: 'created',
+  });
+  expect(host.queryByText('无法确认的回答链接')).toBeNull();
   await host.unmount();
 });
 
@@ -550,6 +636,12 @@ test('the votes route counts answers by this profile author that the current acc
       headline: votedAnswer.author.headline,
     },
     voted: 1,
+    content: votedAnswer.content,
+  });
+  expect(mockFeedContexts.get(`answers:${votedAnswer.id}`)).toEqual({
+    scene: 'profile_answer',
+    memberId: mockRoute.id,
+    memberSort: 'created',
   });
   expect(mockFeedItems.get(votedAnswer.id)?.author.id).toBe(member.id);
   expect(mockFeedItems.get(votedAnswer.id)?.author.id).not.toBe(
@@ -592,6 +684,9 @@ test('unknown voted-answer totals stay hidden and missing authors do not become 
     url_token: '',
     name: '匿名用户',
     headline: '',
+  });
+  expect(mockFeedContexts.get(`answers:${votedAnswer.id}`)).toEqual({
+    scene: 'unknown',
   });
   await host.unmount();
 });

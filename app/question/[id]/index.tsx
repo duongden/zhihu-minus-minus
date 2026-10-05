@@ -55,6 +55,7 @@ import { useScrollHeaderAnim } from '@/hooks/useScrollAnimation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useCollectionStore } from '@/store/useCollectionStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import { seedAnswerPreviewEntry } from '@/utils/answerPreviewEntry';
 import { refreshInfiniteQuery } from '@/utils/query';
 import { getZhihuErrorMessage } from '@/utils/zhihuError';
 
@@ -83,6 +84,7 @@ const QuestionAnswerCard = React.memo(function QuestionAnswerCard({
   onMore,
 }: QuestionAnswerCardProps) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const secondaryColor = useThemeColor({}, 'textSecondary');
   const followMutation = useOptimisticToggle<
     InfiniteData<QuestionAnswersResponse, number | string>
@@ -115,16 +117,23 @@ const QuestionAnswerCard = React.memo(function QuestionAnswerCard({
     }),
     successMessage: (isActive) => (isActive ? '已取消关注' : '已关注'),
   });
-  const openAnswer = () =>
+  const openAnswer = () => {
+    seedAnswerPreviewEntry(queryClient, {
+      ...item,
+      type: 'answer',
+      question: { ...item.question, id: questionId, title: questionTitle },
+    });
     router.push({
       pathname: '/answer/[id]',
       params: {
+        answerScene: 'question_feed',
         id: String(item.id),
         questionId,
         title: questionTitle,
         sortBy,
       },
     });
+  };
 
   return (
     <View type="surface" className="p-4 mb-2.5 mx-1.5 rounded-xl">

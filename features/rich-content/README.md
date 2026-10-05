@@ -40,7 +40,7 @@ import { ZhihuContent } from '@/features/rich-content';
 
 `ZhihuContent` 接收 HTML 字符串、想法分段数组或已规范化的 `document`，共用正文后端、排版和互动。`ZhihuContentProps`、`LinkCardProps`、`RichContentObjectType` 从公共入口导出；`contentArray` 复用 `types/zhihu.ts` 的 `ZhihuContentSegment`，知识点元数据复用 `ZhihuSegmentInfo`、`ZhihuSegmentMark` 和 `ZhihuSegmentReaction`。单数 `RichContentObjectType` 表示正文对象，复数 `RichContentEntityType` 表示查询接口类型。
 
-`structured_content` 使用 `types/zhihu.ts` 中的 `ZhihuStructuredContent` 类型，组件 `ZhihuStructuredContent` 直接消费 JSON 分段，覆盖 paragraph、heading、list_node、image、hr，以及 bold、link、entity_word、formula、seg_like。生产预览通过 `renderer="shared"` 把 `ZhihuDocument` 交给统一 `ZhihuContent`；开发对照保留 blocks/native-v2 两种研究模式。格式按范围端点拆分，互动标记保留完整范围；非 BMP 实样已验证 UTF-16 偏移，切开代理对的标记不启用。只有唯一真实 paragraph.pid 与准确 seg_like 范围可生成段落业务信息，不补造标题或列表段落 ID。
+`structured_content` 使用 `types/zhihu.ts` 中的 `ZhihuStructuredContent` 类型，组件 `ZhihuStructuredContent` 直接消费 JSON 分段，覆盖 paragraph、heading、无序/有序 list_node、image、hr、card，以及 bold、link、entity_word、formula、seg_like。生产预览通过 `renderer="shared"` 把 `ZhihuDocument` 交给统一 `ZhihuContent`；开发对照保留 blocks/native-v2 两种研究模式。格式按范围端点拆分，互动标记保留完整范围；非 BMP 实样已验证 UTF-16 偏移，切开代理对的标记不启用。只有唯一真实 paragraph.pid 与准确 seg_like 范围可生成段落业务信息，不补造标题或列表段落 ID。
 
 开发构建从“我的 → 富文本测试案例 → structured_content 渲染对照”进入独立测试页。五个主要案例来自用户附件的真实回答，保留全部 48 个分段、99 个 marks 和分页标志，覆盖列表公式、标题与重叠词条、密集公式与分隔、图片布局、段落与链接。身份文字按原长度替换，ID、业务链接和不透明上下文脱敏；正文图和公式图保留原公开 HTTPS 地址，运行时加载，仓库不新增下载图片。可以切换渲染器、展开收起分段、查看脱敏 JSON；额外合成案例演示本地续页追加。样本放在 `fixtures/inbox/structured-content/`，由 `dev/structuredCases.ts` 显式登记，案例切换不写持久设置、不调用正文或互动接口。
 
@@ -181,6 +181,8 @@ stash 的高度测量优化已被本轮 WebView 修复覆盖，RNRH 专属组件
 
 ## 回答预览列表
 
-回答阅读方式与正文后端分开设置：前者决定点击普通卡片后的入口，后者决定详情及预览展开正文的排版。预览列表直接消费新接口的 `structured_content`，与详情共用 `ZhihuContent` 的后端选择、字号行距、段落互动、选字、图片图库/长按和链接。展开收起按真实 segments 进行，正文续页与外层回答列表分别管理。生产卡片的展开/收起按钮位于右下角、操作栏上方；同一问题的信息集中在列表头，长回答展开阅读时提供赞同、评论、收起与更多的悬浮栏，卡片操作栏可见时隐藏。未知或损坏的附加标记保留原文，未知块有明确文字时保留其文字；真正缺失正文或请求失败提供重试，不把缺失正文标为已完成。正常渲染不显示进入详情按钮，请求失败仍保留详情入口。开发对照保留页面内的渲染与展开设置，不写入生产阅读方式。
+回答阅读方式与正文后端分开设置：前者决定点击普通卡片后的入口，后者决定详情及预览展开正文的排版。预览首卡使用点击列表已有的 `content`，展开走普通 `ZhihuContent`，保留实际段落和卡片元数据；缺正文时复用普通详情缓存或原 `getAnswer`。首卡缓存按会话隔离且只在点击时写入，部分或付费正文不作为完整详情；折叠只展示前 3 个正文块/分段并停用正文触摸和选字，展开恢复完整交互。v2 单回答请求因用户反馈服务端 `40362` 已停用，具体记录见仓库 next-render 文档。首卡固定在第一项，后续流使用 `/next-render` 并按回答 ID 去重。两者分别重试，后续流失败不阻塞首卡阅读，下拉刷新同时刷新两者。后续正文直接消费新接口的 `structured_content`，与详情共用 `ZhihuContent` 的后端选择、字号行距、段落互动、选字、图片图库/长按和链接。展开收起按真实 segments 进行，正文续页与外层回答列表分别管理。展开时读取第一续页，再按可见正文末尾距离自动续取，正常模式不显示加载更多正文按钮。自动续页限制单请求并按帧测量，远离正文末尾或收起时暂停；错误时保留手动重试。生产卡片的展开/收起按钮位于右下角、操作栏上方；只有问题来源把同一问题的信息集中在列表头；其他来源可包含不同问题，每张卡片显示各自问题。初始 next-render 始终使用所选回答 ID 和 `type=answer`，按入口区分 `unknown`、`recommend`、`profile_answer`、`question_feed`，仅后者附带问题流参数。长回答展开阅读时提供赞同、评论、收起与更多的悬浮栏，卡片操作栏可见时隐藏。未知或损坏的附加标记保留原文，未知块有明确文字时保留其文字；真正缺失正文或请求失败提供重试，不把缺失正文标为已完成。正常渲染不显示进入详情按钮，请求失败仍保留详情入口。开发对照保留页面内的渲染与展开设置，不写入生产阅读方式。
 
-用户后续提供的成功响应包含 `seg_like` 段落互动标记。`count` 对应共享 `like_count`，其余点赞/评论状态和片段 ID 按实际字段保留。业务动作要求唯一真实 PID、准确原文范围、有效片段 ID；重复 PID、交叉范围、跨段反应和混合公式保留正文与复制，不猜测业务坐标。完整正文先校验身份再切片，隐藏分段中的重复 PID 也不会被误启用。WebView 精确片段事件携带内部节点 ID，仍通过相同业务校验；选区继续按真实整段计算偏移。互动成功刷新预览来源。脱敏回归 `next-render-seg-like-001` 保留 5 个回答、39 个段落及 UTF-16 范围，开发页不调用互动接口。
+用户后续提供的成功响应包含 `seg_like` 段落互动标记。`count` 对应共享 `like_count`，其余点赞/评论状态和片段 ID 按实际字段保留。业务动作要求唯一真实 PID、准确原文范围、有效片段 ID；重复 PID、交叉范围、跨段反应和混合公式保留正文与复制，不猜测业务坐标。完整正文先校验身份再切片，隐藏分段中的重复 PID 也不会被误启用。WebView 精确片段事件携带内部节点 ID，仍通过相同业务校验；选区继续按真实整段计算偏移。普通首卡互动成功刷新原回答接口；后续卡片刷新当前回答已加载的正文续页和后续流来源。脱敏回归 `next-render-seg-like-001` 保留 5 个回答、39 个段落及 UTF-16 范围，开发页不调用互动接口。
+
+收藏来源的脱敏响应 `next-render-collection-card-ordered-001` 覆盖跨问题的 5 条回答。正文 card 使用共享 linkCard，保留标题、封面及安全链接；有序列表与原生编号、WebView ol 共用相同文档语义。未知卡片业务元数据不影响正文，链接不安全或缺失时保留文字。

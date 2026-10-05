@@ -20,31 +20,43 @@ export {
   validateZhihuRenderUrl,
   type ZhihuAnswerPreviewItem,
   type ZhihuAnswerPreviewPage,
+  type ZhihuPlainPreviewAnswer,
   type ZhihuPreviewAnswer,
+  type ZhihuPreviewAnswerMetadata,
   type ZhihuPreviewLoginPrompt,
   type ZhihuPreviewRequestOptions,
+  type ZhihuReadingPreviewItem,
   type ZhihuRenderContinuation,
 } from './answerPreview';
 
-/**
- * All nine parameters were present in the captured initial request. Whether
- * the server requires each parameter has not been verified. IDs, session IDs
- * and cursors remain strings so large IDs and opaque values are preserved.
- */
-export interface ZhihuNextRenderParams {
+export type ZhihuNextRenderScene =
+  | 'unknown'
+  | 'recommend'
+  | 'profile_answer'
+  | 'question_feed';
+
+interface ZhihuNextRenderBaseParams {
   id: string;
-  /** Only the captured `answer` request type is represented. */
   type: 'answer';
-  /** Only the captured question-feed scene is represented. */
-  scenes: 'question_feed';
-  collection_id: string;
-  /** Only the captured question collection type is represented. */
-  collection_type: 'question';
-  question_feed_session_id: string;
-  question_feed_cursor: string;
   context_expand: 0 | 1;
   is_native: 0 | 1;
 }
+
+/** Question-feed context belongs only to explicitly selected question feeds. */
+export type ZhihuNextRenderParams = ZhihuNextRenderBaseParams &
+  (
+    | { scenes?: 'unknown' }
+    | { scenes: 'recommend' }
+    | { scenes: 'profile_answer' }
+    | {
+        scenes: 'question_feed';
+        collection_id: string;
+        collection_type: 'question';
+        /** Unknown session IDs and cursors remain empty, not invented. */
+        question_feed_session_id: string;
+        question_feed_cursor: string;
+      }
+  );
 
 /**
  * 从 paging.next / previous 的 /next-content-render URL 观测到的查询参数。

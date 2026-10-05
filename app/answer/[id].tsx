@@ -3,7 +3,6 @@ import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator } from 'react-native';
 import PagerView from 'react-native-pager-view';
-import client from '@/api/client';
 import { getAnswer } from '@/api/zhihu';
 import { recordReadHistory } from '@/api/zhihu/history';
 import { AnswerDetailView } from '@/components/AnswerDetailView';
@@ -13,9 +12,10 @@ import { ShareMenu } from '@/components/ShareMenu';
 import { useThemeColor, View } from '@/components/Themed';
 import { RICH_CONTENT_STALE_TIME } from '@/features/rich-content';
 import { useAnswerHeaderState } from '@/hooks/useAnswerHeaderState';
+import { useAnswerPagerSource } from '@/hooks/useAnswerPagerSource';
 import { useNeighborAnswerPrefetch } from '@/hooks/useNeighborAnswerPrefetch';
-import { useZhihuInfiniteQuery } from '@/hooks/useZhihuInfiniteQuery';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import { getAnswerReadingContext } from '@/utils/answerReadingContext';
 import { getZhihuErrorStatus } from '@/utils/zhihuError';
 
 export default function AnswerScreen() {
@@ -25,8 +25,12 @@ export default function AnswerScreen() {
     questionId?: string;
     sortBy?: string;
     readingMode?: string;
+    answerScene?: string;
+    memberId?: string;
+    memberSort?: string;
   }>();
   const mode = useSettingsStore((state) => state.answerReadingMode);
+  const answerContext = getAnswerReadingContext(params);
   if (params.readingMode !== 'detail' && mode === 'preview-list') {
     return (
       <AnswerPreviewList
@@ -34,6 +38,7 @@ export default function AnswerScreen() {
         questionId={params.questionId}
         title={params.title}
         sortBy={params.sortBy}
+        answerContext={answerContext}
       />
     );
   }
@@ -41,22 +46,28 @@ export default function AnswerScreen() {
 }
 
 function AnswerDetailScreen() {
-  const {
-    id,
-    title: initialTitle,
-    questionId: propQuestionId,
-    sortBy = 'default',
-  } = useLocalSearchParams<{
+  const params = useLocalSearchParams<{
     id: string;
     title?: string;
     questionId?: string;
     sortBy?: string;
+    answerScene?: string;
+    memberId?: string;
+    memberSort?: string;
   }>();
+  const { id, questionId: propQuestionId, sortBy = 'default' } = params;
+  const answerContext = getAnswerReadingContext(params);
   const router = useRouter();
   const primaryColor = useThemeColor({}, 'primary');
 
   // 锁定初始 ID，避免滑动时 URL 参数改变导致重新触发 top-level loading
-  const [initialId] = useState(id as string);
+  const [initialEntry] = useState({
+    id,
+    title: params.title,
+    questionId: propQuestionId,
+  });
+  const initialId = initialEntry.id;
+  const initialTitle = initialEntry.title;
 
   const enableBrowseHistory = useSettingsStore((s) => s.enableBrowseHistory);
 
@@ -69,7 +80,7 @@ function AnswerDetailScreen() {
     }
   }, [enableBrowseHistory, initialId]);
 
-  // 1. 获取当前回答的基础信息（主要是为了拿到 questionId）
+  // 先获取选中回答，推荐和问题来源切换同题回答，用户来源切换该用户的回答。
   const { data: initialAnswer, isLoading: loadingInitial } = useQuery({
     queryKey: ['answer-detail', initialId],
     queryFn: ({ signal }) => getAnswer(initialId, undefined, { signal }),
@@ -79,32 +90,36 @@ function AnswerDetailScreen() {
       getZhihuErrorStatus(err) === 404 ? false : failureCount < 2,
   });
 
-  const questionId = propQuestionId || initialAnswer?.question?.id;
+  const questionId =
+    answerContext.scene === 'question_feed'
+      ? propQuestionId || initialAnswer?.question?.id
+      : initialAnswer?.question?.id || initialEntry.questionId;
 
-  // 2. 获取该问题下的所有回答列表
   const {
     data: answersData,
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useZhihuInfiniteQuery({
-    queryKey: ['question-answers', questionId, sortBy],
-    queryFn: async ({ pageParam = 0 }) => {
-      const include = 'data[*].id'; // 我们只需要 ID 来构建 Pager
-      const res = await client.get(
-        `/questions/${questionId}/answers?include=${include}&limit=20&offset=${pageParam}&sort_by=${sortBy}`,
-      );
-      return res.data;
-    },
-    initialPageParam: 0,
-    enabled: !!questionId,
-  });
-
-  // 列表从缓存的单条答案扩展时保持 Pager 和正文实例；真实问题/排序变化才重置。
-  const pagerKey = JSON.stringify([
-    questionId == null ? null : String(questionId),
+    pagerKey,
+  } = useAnswerPagerSource({
+    initialId,
+    questionId,
     sortBy,
-  ]);
+    context: answerContext,
+    initialAnswer,
+  });
+  const questionIdsByAnswer = useMemo(() => {
+    const ids = new Map<string, string>();
+    for (const page of answersData?.pages ?? []) {
+      for (const item of page.data) {
+        if (item.question?.id != null)
+          ids.set(String(item.id), String(item.question.id));
+      }
+    }
+    if (initialAnswer?.question?.id != null)
+      ids.set(initialId, String(initialAnswer.question.id));
+    return ids;
+  }, [answersData, initialAnswer, initialId]);
   const [selection, setSelection] = useState({
     pagerKey,
     answerId: initialId,
@@ -172,7 +187,18 @@ function AnswerDetailScreen() {
     retry: (failureCount, err) =>
       getZhihuErrorStatus(err) === 404 ? false : failureCount < 2,
   });
-  const headerQuestionId = currentAnswer?.question?.id || questionId;
+  const isQuestionSource =
+    answerContext.scene === 'recommend' ||
+    answerContext.scene === 'question_feed';
+  const headerQuestionId =
+    currentAnswer?.question?.id ||
+    questionIdsByAnswer.get(currentId) ||
+    (isQuestionSource || currentId === initialId ? questionId : undefined);
+  const headerTitle =
+    currentAnswer?.question?.title ||
+    (isQuestionSource || currentId === initialId
+      ? initialAnswer?.question?.title || initialTitle
+      : undefined);
   const pageListKey = JSON.stringify(answerIds);
   const currentPager = useRef({ pagerKey, pageListKey });
   currentPager.current = { pagerKey, pageListKey };
@@ -248,7 +274,16 @@ function AnswerDetailScreen() {
     setMenuTarget(null);
     headerState.restore(answerId);
     setSelection({ pagerKey, answerId });
-    if (answerId !== currentId) router.setParams({ id: answerId });
+    if (answerId !== currentId)
+      router.setParams(
+        isQuestionSource
+          ? { id: answerId }
+          : {
+              id: answerId,
+              questionId: questionIdsByAnswer.get(answerId),
+              title: undefined,
+            },
+      );
   };
 
   if (loadingInitial && !initialAnswer) {
@@ -265,17 +300,12 @@ function AnswerDetailScreen() {
       <Stack.Screen options={{ headerShown: false, title: '回答' }} />
 
       <DetailNavigationHeader
-        title={
-          currentAnswer?.question?.title ||
-          initialAnswer?.question?.title ||
-          initialTitle ||
-          '加载中...'
-        }
+        title={headerTitle || '加载中...'}
         collapsed={headerState.collapsed}
         progress={headerState.headerProgress}
         onBack={() => router.back()}
         onTitlePress={() => {
-          const target = currentAnswer?.question?.id || questionId;
+          const target = headerQuestionId;
           if (target) router.push(`/question/${target}`);
         }}
         onMore={
@@ -404,8 +434,13 @@ function AnswerDetailScreen() {
           <View key={aid} className="flex-1">
             <AnswerDetailView
               id={aid}
-              initialTitle={aid === id ? (initialTitle as string) : undefined}
-              questionId={questionId as string}
+              initialTitle={aid === initialId ? initialTitle : undefined}
+              questionId={
+                questionIdsByAnswer.get(aid) ||
+                (isQuestionSource || aid === initialId
+                  ? String(questionId ?? '') || undefined
+                  : undefined)
+              }
               isFocused={index === currentPage}
               isPreloading={Math.abs(index - currentPage) === 1}
               headerProgress={headerState.headerProgress}
@@ -441,10 +476,7 @@ function AnswerDetailScreen() {
           headerQuestionId
             ? {
                 id: headerQuestionId,
-                title:
-                  currentAnswer?.question?.title ||
-                  initialAnswer?.question?.title ||
-                  initialTitle,
+                title: headerTitle,
               }
             : null
         }

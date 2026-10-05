@@ -9,6 +9,7 @@
 | 推荐流 | `GET /topstory/recommend` | `action`、`after_id`、`end_offset`、`page_number`、`session_token`、`start_type`、`refresh_scene`、`device`、`is_feed_first_request` 等 | `3.1.8` / `44` |
 | 问题详情 | `GET /questions/{id}` | `include` | `3.0.93` / `172` |
 | 问题回答流 | `GET /questions/{id}/feeds` | `include`、`order`、`show_detail`、`limit`、`offset`、`cursor`、`session_id` | `3.0.89` / `172` |
+| 单回答 v2（已停用） | `GET /answers/v2/{id}` | 曾用于预览首卡；用户反馈 `40362` 服务端限制，首卡改用列表普通正文 | 捕获 `3.0.93` / `42`，未确认成功返回 |
 | 原生回答渲染流 | `GET /next-render` | `id`、`type`、`scenes`、`collection_id`、`collection_type`、`question_feed_session_id`、`question_feed_cursor`、`context_expand`、`is_native` | `3.0.93` / `172`，预览模式 |
 | 单回答正文续页 | `GET /next-content-render` | 服务端续页 URL 中的 `offset`、`url_token`、`content_type`、`version_id` | `3.0.93` / `172`，响应按运行时校验 |
 | 相关内容 | `GET /questions/{id}/related-objects` | `is_search` | `3.0.93` / `172` |

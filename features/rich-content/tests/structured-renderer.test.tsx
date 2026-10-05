@@ -447,6 +447,20 @@ describe('isolated structured-content renderer', () => {
     await fireEvent.press(screen.getByText('加载更多正文'));
     expect(onLoadMore).toHaveBeenCalledTimes(1);
     await host.rerender(
+      <StructuredRenderer {...props} expanded showLoadMoreControl={false} />,
+    );
+    expect(screen.queryByText('加载更多正文')).toBeNull();
+    await host.rerender(
+      <StructuredRenderer
+        {...props}
+        expanded
+        showLoadMoreControl={false}
+        loadMoreError="正文续页请求失败"
+      />,
+    );
+    await fireEvent.press(screen.getByText('重新加载正文'));
+    expect(onLoadMore).toHaveBeenCalledTimes(2);
+    await host.rerender(
       <StructuredRenderer
         {...props}
         expanded
@@ -457,6 +471,17 @@ describe('isolated structured-content renderer', () => {
     );
     expect(screen.getByText('正文尚未完整，请进入详情继续阅读')).toBeVisible();
     expect(screen.queryByText('加载更多正文')).toBeNull();
+    await host.rerender(
+      <StructuredRenderer
+        {...props}
+        renderer="shared"
+        hasMore={false}
+        showLoadMoreControl={false}
+        loadMoreError="正文续页请求失败"
+      />,
+    );
+    await fireEvent.press(screen.getByText('重新加载正文'));
+    expect(onLoadMore).toHaveBeenCalledTimes(3);
     await host.rerender(
       <StructuredRenderer {...props} documentId="answer:two" />,
     );

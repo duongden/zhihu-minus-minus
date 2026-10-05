@@ -350,6 +350,11 @@ export function analyzeStructuredContentPages(pages) {
         case 'hr':
           stats.horizontalRules += 1;
           break;
+        case 'card':
+          stats.linkCards += 1;
+          if (!isRecord(segment.card))
+            errors.push(`${segmentLocation} must contain a card payload`);
+          break;
         default:
           errors.push(`${segmentLocation} contains an unsupported segment`);
       }

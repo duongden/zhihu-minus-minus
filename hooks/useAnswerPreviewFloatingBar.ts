@@ -7,22 +7,23 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type {
-  ZhihuAnswerPreviewItem,
-  ZhihuPreviewAnswer,
+  ZhihuPreviewLoginPrompt,
+  ZhihuReadingPreviewItem,
 } from '@/api/zhihu/nextRender';
 
 type FooterView = Pick<NativeView, 'measureInWindow'>;
+type PreviewAnswer = Exclude<ZhihuReadingPreviewItem, ZhihuPreviewLoginPrompt>;
 
 interface FloatingBarOptions {
   scope: string;
-  items: readonly ZhihuAnswerPreviewItem[];
+  items: readonly ZhihuReadingPreviewItem[];
   expandedIds: ReadonlySet<string>;
   navigationHeight: number;
 }
 
 interface ViewableItems {
   viewableItems: Array<{
-    item: ZhihuAnswerPreviewItem;
+    item: ZhihuReadingPreviewItem;
     isViewable?: boolean;
   }>;
 }
@@ -91,7 +92,7 @@ export function useAnswerPreviewFloatingBar({
         return;
       const snapshot = inputs;
       const activeAnswer = snapshot.items.find(
-        (item): item is ZhihuPreviewAnswer =>
+        (item): item is PreviewAnswer =>
           item.type === 'answer' && item.id === epoch.activeId,
       );
       const views = epoch.viewableIds.map((id) => ({
@@ -155,7 +156,7 @@ export function useAnswerPreviewFloatingBar({
       const answers = viewableItems
         .filter((entry) => entry.isViewable !== false)
         .map((entry) => entry.item)
-        .filter((item): item is ZhihuPreviewAnswer => item.type === 'answer');
+        .filter((item): item is PreviewAnswer => item.type === 'answer');
       epoch.viewableIds = [...new Set(answers.map((answer) => answer.id))];
       epoch.activeId = answers[0]?.id ?? null;
       setActive((previous) =>
@@ -222,7 +223,7 @@ export function useAnswerPreviewFloatingBar({
   const activeAnswer =
     active.epoch === epoch
       ? (items.find(
-          (item): item is ZhihuPreviewAnswer =>
+          (item): item is PreviewAnswer =>
             item.type === 'answer' && item.id === active.id,
         ) ?? null)
       : null;

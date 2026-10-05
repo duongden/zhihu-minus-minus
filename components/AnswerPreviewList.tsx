@@ -1,14 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   type NativeScrollEvent,
@@ -18,16 +12,17 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { recordReadHistory } from '@/api/zhihu/history';
-import {
-  getNextContentRender,
-  getStructuredContentContinuation,
-  type ZhihuPreviewAnswer,
-  type ZhihuPreviewLoginPrompt,
+import type {
+  ZhihuPreviewAnswer,
+  ZhihuPreviewAnswerMetadata,
+  ZhihuPreviewLoginPrompt,
+  ZhihuReadingPreviewItem,
 } from '@/api/zhihu/nextRender';
 import {
   AnswerPreviewFloatingBar,
   FLOATING_BAR_HEIGHT,
 } from '@/components/AnswerPreviewFloatingBar';
+import { AnswerPreviewPlainBody } from '@/components/AnswerPreviewPlainBody';
 import { AnswerPreviewQuestionHeader } from '@/components/AnswerPreviewQuestionHeader';
 import { ContentActionButton } from '@/components/ContentActionButton';
 import {
@@ -40,24 +35,29 @@ import { QueryErrorView } from '@/components/QueryErrorView';
 import { ShareMenu } from '@/components/ShareMenu';
 import { StableAvatar } from '@/components/StableAvatar';
 import { Text, useRuntimeThemeColors, View } from '@/components/Themed';
-import {
-  mergeStructuredContentPages,
-  ZhihuStructuredContent,
-} from '@/features/rich-content';
+import { ZhihuStructuredContent } from '@/features/rich-content';
+import { useAnswerPreviewAutoLoad } from '@/hooks/useAnswerPreviewAutoLoad';
+import { useAnswerPreviewBody } from '@/hooks/useAnswerPreviewBody';
 import { useAnswerPreviewFloatingBar } from '@/hooks/useAnswerPreviewFloatingBar';
 import { useAnswerPreviewQuery } from '@/hooks/useAnswerPreviewQuery';
 import { useDetailHeaderState } from '@/hooks/useDetailHeaderState';
 import { getAuthSessionVersion } from '@/store/useAuthStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import type { ZhihuStructuredContent as StructuredContent } from '@/types/zhihu';
-import { refreshInfiniteQuery, shouldRetryQuery } from '@/utils/query';
+import {
+  type AnswerReadingContext,
+  getAnswerReadingRouteParams,
+} from '@/utils/answerReadingContext';
+import { refreshInfiniteQuery } from '@/utils/query';
 import { getZhihuErrorMessage } from '@/utils/zhihuError';
 import { BouncyButton } from './BouncyButton';
 
-type PreviewItem = ZhihuPreviewAnswer | ZhihuPreviewLoginPrompt;
+type PreviewItem = ZhihuReadingPreviewItem;
+type PreviewAnswer = Exclude<PreviewItem, ZhihuPreviewLoginPrompt>;
 const initialContentIds = new WeakMap<StructuredContent, number>();
 let initialContentSequence = 0;
 const EMPTY_EXPANDED_IDS: ReadonlySet<string> = new Set();
+const DEFAULT_ANSWER_CONTEXT: AnswerReadingContext = { scene: 'unknown' };
 
 /** Cache identity is local; neither prose nor opaque continuation URLs become keys. */
 function initialContentId(content: StructuredContent): number {
@@ -69,77 +69,97 @@ function initialContentId(content: StructuredContent): number {
 }
 
 interface AnswerPreviewCardProps {
-  item: ZhihuPreviewAnswer;
+  item: PreviewAnswer;
+  scope: string;
   sessionVersion: number;
   expanded: boolean;
   onExpandedChange: (expanded: boolean) => void;
   onMore: () => void;
   onRefresh: () => void;
   showQuestion: boolean;
+  onQuestionTitleLayout?: (bottom: number) => void;
   onFooterRef: (
     id: string,
     view: Pick<NativeView, 'measureInWindow'> | null,
   ) => void;
   onFooterLayout: () => void;
+  onBodyLoader: (id: string, loader: (() => Promise<unknown>) | null) => void;
+}
+
+function AnswerPreviewStructuredBody({
+  item,
+  scope,
+  sessionVersion,
+  expanded,
+  onExpandedChange,
+  onRefresh,
+  onBodyLoader,
+}: Pick<
+  AnswerPreviewCardProps,
+  | 'scope'
+  | 'sessionVersion'
+  | 'expanded'
+  | 'onExpandedChange'
+  | 'onRefresh'
+  | 'onBodyLoader'
+> & { item: ZhihuPreviewAnswer }) {
+  const initialContent = item.structuredContent;
+  const sourceId = initialContentId(initialContent);
+  const body = useAnswerPreviewBody({
+    scope,
+    answerId: item.id,
+    sessionVersion,
+    sourceId,
+    initialContent,
+    onRefresh,
+  });
+  const bodyLoader =
+    expanded && !body.isLoadingMore ? body.autoLoadMore : undefined;
+  useEffect(() => {
+    onBodyLoader(item.id, bodyLoader ?? null);
+    return () => onBodyLoader(item.id, null);
+  }, [item.id, bodyLoader, onBodyLoader]);
+  return (
+    <ZhihuStructuredContent
+      content={body.content}
+      documentId={`answer-preview:${sessionVersion}:${item.id}:${sourceId}`}
+      objectId={item.id}
+      renderer="shared"
+      onRefresh={() => void body.refresh()}
+      previewSegmentCount={3}
+      expanded={expanded}
+      onExpandedChange={(nextExpanded) => {
+        onExpandedChange(nextExpanded);
+        body.onExpandedChange(nextExpanded);
+      }}
+      hasMore={body.hasMore}
+      isLoadingMore={body.isLoadingMore}
+      loadMoreError={body.loadMoreError}
+      onLoadMore={body.loadMore}
+      showLoadMoreControl={false}
+      expandLabel="展开回答"
+      collapseLabel="收起回答"
+      showFallbackNotice={false}
+    />
+  );
 }
 
 const AnswerPreviewCard = React.memo(function AnswerPreviewCard({
   item,
+  scope,
   sessionVersion,
   expanded,
   onExpandedChange,
   onMore,
   onRefresh,
   showQuestion,
+  onQuestionTitleLayout,
   onFooterRef,
   onFooterLayout,
+  onBodyLoader,
 }: AnswerPreviewCardProps) {
   const router = useRouter();
   const colors = useRuntimeThemeColors();
-  const initialContent = item.structuredContent;
-  const sourceId = initialContentId(initialContent);
-  const body = useInfiniteQuery({
-    queryKey: ['answer-preview-content', sessionVersion, item.id, sourceId],
-    initialPageParam: undefined as string | undefined,
-    initialData: { pages: [initialContent], pageParams: [undefined] },
-    enabled: false,
-    staleTime: Infinity,
-    queryFn: async ({ pageParam, signal }) => {
-      if (getAuthSessionVersion() !== sessionVersion)
-        throw new Error('会话已变化');
-      if (!pageParam) return initialContent;
-      return getNextContentRender(pageParam, { signal, sessionVersion });
-    },
-    getNextPageParam: (_lastPage, pages, _lastParam, pageParams) =>
-      getStructuredContentContinuation(pages, pageParams).next,
-    retry: shouldRetryQuery,
-  });
-  const content = useMemo(
-    () =>
-      body.data?.pages.length
-        ? mergeStructuredContentPages(body.data.pages)
-        : initialContent,
-    [body.data?.pages, initialContent],
-  );
-  const continuation = useMemo(
-    () =>
-      body.data
-        ? getStructuredContentContinuation(
-            body.data.pages,
-            body.data.pageParams,
-          )
-        : {},
-    [body.data],
-  );
-  const loadError = body.isFetchNextPageError
-    ? getZhihuErrorMessage(body.error)
-    : continuation.error;
-  const loadMore = continuation.next
-    ? () => {
-        if (!body.isFetchingNextPage)
-          void body.fetchNextPage({ cancelRefetch: false });
-      }
-    : undefined;
   const footerRef = useCallback(
     (view: NativeView | null) => onFooterRef(item.id, view),
     [item.id, onFooterRef],
@@ -155,7 +175,26 @@ const AnswerPreviewCard = React.memo(function AnswerPreviewCard({
       }}
     >
       {showQuestion ? (
-        <Text className="text-lg font-bold mb-3">{item.question.title}</Text>
+        <BouncyButton
+          accessibilityRole="link"
+          disabled={!item.question.id}
+          style={{ borderRadius: 12 }}
+          onPress={() =>
+            router.push({
+              pathname: '/question/[id]',
+              params: { id: item.question.id },
+            })
+          }
+        >
+          <Text
+            className="text-lg font-bold mb-3"
+            onLayout={({ nativeEvent: { layout } }) =>
+              onQuestionTitleLayout?.(12 + layout.y + layout.height)
+            }
+          >
+            {item.question.title}
+          </Text>
+        </BouncyButton>
       ) : null}
       <BouncyButton
         className="flex-row items-center mb-3"
@@ -179,31 +218,25 @@ const AnswerPreviewCard = React.memo(function AnswerPreviewCard({
           ) : null}
         </View>
       </BouncyButton>
-      <ZhihuStructuredContent
-        content={content}
-        documentId={`answer-preview:${sessionVersion}:${item.id}:${sourceId}`}
-        objectId={item.id}
-        renderer="shared"
-        onRefresh={onRefresh}
-        previewSegmentCount={3}
-        expanded={expanded}
-        onExpandedChange={(nextExpanded) => {
-          onExpandedChange(nextExpanded);
-          if (
-            nextExpanded &&
-            body.data?.pages.length === 1 &&
-            !body.isFetchNextPageError
-          )
-            loadMore?.();
-        }}
-        hasMore={Boolean(continuation.next)}
-        isLoadingMore={body.isFetchingNextPage}
-        loadMoreError={loadError}
-        onLoadMore={loadMore}
-        expandLabel="展开回答"
-        collapseLabel="收起回答"
-        showFallbackNotice={false}
-      />
+      {'structuredContent' in item ? (
+        <AnswerPreviewStructuredBody
+          item={item}
+          scope={scope}
+          sessionVersion={sessionVersion}
+          expanded={expanded}
+          onExpandedChange={onExpandedChange}
+          onRefresh={onRefresh}
+          onBodyLoader={onBodyLoader}
+        />
+      ) : (
+        <AnswerPreviewPlainBody
+          item={item}
+          scope={scope}
+          expanded={expanded}
+          onExpandedChange={onExpandedChange}
+          onRefresh={onRefresh}
+        />
+      )}
       <NativeView
         ref={footerRef}
         collapsable={false}
@@ -242,6 +275,7 @@ export interface AnswerPreviewListProps {
   questionId?: string;
   title?: string;
   sortBy?: string;
+  answerContext?: AnswerReadingContext;
 }
 
 /** Entered after a normal answer card; list and each body page independently. */
@@ -250,17 +284,36 @@ export function AnswerPreviewList({
   questionId,
   title,
   sortBy,
+  answerContext = DEFAULT_ANSWER_CONTEXT,
 }: AnswerPreviewListProps) {
   const router = useRouter();
   const colors = useRuntimeThemeColors();
   const insets = useSafeAreaInsets();
   const navigationHeight = useDetailNavigationHeight();
   const queryClient = useQueryClient();
-  const query = useAnswerPreviewQuery({ answerId, questionId });
+  const query = useAnswerPreviewQuery({
+    answerId,
+    questionId,
+    scene: answerContext.scene,
+  });
   const listRef = useRef<FlashListRef<PreviewItem>>(null);
-  const scope = `${query.sessionVersion}:${answerId}:${questionId ?? ''}`;
+  const scope = JSON.stringify([
+    query.sessionVersion,
+    answerId,
+    answerContext.scene,
+    answerContext.scene === 'question_feed' ? questionId : null,
+    answerContext.scene === 'profile_answer' ? answerContext.memberId : null,
+    answerContext.scene === 'profile_answer' ? answerContext.memberSort : null,
+  ]);
   const currentScope = useRef(scope);
   currentScope.current = scope;
+  const selectedSettledScope = useRef<string | null>(null);
+  useEffect(() => {
+    if (!query.selectedIsPending) selectedSettledScope.current = scope;
+  }, [scope, query.selectedIsPending]);
+  const waitingForFirstAnswer =
+    query.selectedIsPending && selectedSettledScope.current !== scope;
+  const [refreshingScope, setRefreshingScope] = useState<string | null>(null);
   const enableBrowseHistory = useSettingsStore(
     (state) => state.enableBrowseHistory,
   );
@@ -293,20 +346,45 @@ export function AnswerPreviewList({
     expandedIds,
     navigationHeight: insets.top + navigationHeight,
   });
+  const autoLoad = useAnswerPreviewAutoLoad({
+    scope,
+    expandedIds,
+    navigationHeight: insets.top + navigationHeight,
+  });
+  const handleViewableItemsChanged = useCallback(
+    (info: Parameters<typeof floatingBar.onViewableItemsChanged>[0]) => {
+      floatingBar.onViewableItemsChanged(info);
+      autoLoad.onViewableItemsChanged(info);
+    },
+    [floatingBar.onViewableItemsChanged, autoLoad.onViewableItemsChanged],
+  );
+  const handleFooterRef = useCallback(
+    (id: string, view: Pick<NativeView, 'measureInWindow'> | null) => {
+      floatingBar.registerFooter(id, view);
+      autoLoad.registerFooter(id, view);
+    },
+    [floatingBar.registerFooter, autoLoad.registerFooter],
+  );
+  const handleFooterLayout = useCallback(() => {
+    floatingBar.onFooterLayout();
+    autoLoad.onFooterLayout();
+  }, [floatingBar.onFooterLayout, autoLoad.onFooterLayout]);
   const headerState = useDetailHeaderState(scope);
   const handleScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       headerState.onScrollOffset(event.nativeEvent.contentOffset.y);
       floatingBar.onScroll(event);
+      autoLoad.onScroll(event);
     },
-    [headerState.onScrollOffset, floatingBar.onScroll],
+    [headerState.onScrollOffset, floatingBar.onScroll, autoLoad.onScroll],
   );
   const handleScrollEnd = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       headerState.onScrollOffset(event.nativeEvent.contentOffset.y);
       floatingBar.onScrollEnd(event);
+      autoLoad.onScrollEnd(event);
     },
-    [headerState.onScrollOffset, floatingBar.onScrollEnd],
+    [headerState.onScrollOffset, floatingBar.onScrollEnd, autoLoad.onScrollEnd],
   );
   const handleTitleLayout = useCallback(
     (bottom: number) => {
@@ -317,12 +395,9 @@ export function AnswerPreviewList({
   );
   const [menuState, setMenuState] = useState<{
     scope: string;
-    item: ZhihuPreviewAnswer;
+    item: ZhihuPreviewAnswerMetadata;
   } | null>(null);
   const activeMenu = menuState?.scope === scope ? menuState.item : null;
-  const anchorIndex = query.items.findIndex(
-    (item) => item.type === 'answer' && item.id === answerId,
-  );
   const openDetail = useCallback(
     (id: string, itemQuestionId?: string, itemTitle?: string) => {
       router.push({
@@ -330,17 +405,34 @@ export function AnswerPreviewList({
         params: {
           id,
           readingMode: 'detail',
+          ...getAnswerReadingRouteParams(answerContext),
           ...(itemQuestionId ? { questionId: itemQuestionId } : {}),
           ...(itemTitle ? { title: itemTitle } : {}),
           ...(sortBy ? { sortBy } : {}),
         },
       });
     },
-    [router, sortBy],
+    [router, sortBy, answerContext],
   );
-  const refreshBody = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: query.queryKey });
-  }, [queryClient, query.queryKey]);
+  const refreshBody = useCallback(
+    (id: string) => {
+      if (id === answerId) void query.refetchSelected();
+      else
+        void queryClient.invalidateQueries({
+          queryKey: query.queryKey,
+          exact: true,
+        });
+    },
+    [queryClient, answerId, query.refetchSelected, query.queryKey],
+  );
+  const refreshPreview = useCallback(
+    () =>
+      Promise.all([
+        refreshInfiniteQuery(queryClient, query.queryKey),
+        query.refetchSelected(),
+      ]),
+    [queryClient, query.queryKey, query.refetchSelected],
+  );
   const changeExpanded = useCallback(
     (id: string, expanded: boolean) => {
       if (currentScope.current !== scope) return;
@@ -368,14 +460,21 @@ export function AnswerPreviewList({
   );
   const selectedQuestion =
     query.items.find(
-      (item): item is ZhihuPreviewAnswer =>
+      (item): item is PreviewAnswer =>
         item.type === 'answer' && item.id === answerId,
     )?.question ??
-    query.items.find(
-      (item): item is ZhihuPreviewAnswer => item.type === 'answer',
-    )?.question;
-  const contextQuestionId = questionId || selectedQuestion?.id;
-  const screenTitle = title || selectedQuestion?.title || '回答预览';
+    query.items.find((item): item is PreviewAnswer => item.type === 'answer')
+      ?.question;
+  const contextQuestionId =
+    answerContext.scene === 'question_feed'
+      ? questionId || selectedQuestion?.id
+      : undefined;
+  const screenTitle = contextQuestionId
+    ? title || selectedQuestion?.title || '回答预览'
+    : floatingBar.activeAnswer?.question.title ||
+      selectedQuestion?.title ||
+      title ||
+      '回答预览';
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background }}>
@@ -388,16 +487,16 @@ export function AnswerPreviewList({
           listRef.current?.scrollToOffset({ offset: 0, animated: true })
         }
       />
-      {query.isPending ? (
+      {waitingForFirstAnswer ? (
         <ActivityIndicator
           style={{ marginTop: insets.top + navigationHeight + 40 }}
           color={colors.link}
         />
-      ) : query.isError && query.items.length === 0 ? (
+      ) : query.selectedIsError && query.isError && query.items.length === 0 ? (
         <View style={{ marginTop: insets.top + navigationHeight }}>
           <QueryErrorView
-            message={getZhihuErrorMessage(query.error)}
-            onRetry={() => void query.refetch()}
+            message={getZhihuErrorMessage(query.selectedError)}
+            onRetry={() => void refreshPreview()}
           />
           <BouncyButton
             onPress={() => openDetail(answerId, questionId, title)}
@@ -411,15 +510,7 @@ export function AnswerPreviewList({
           key={scope}
           ref={listRef}
           data={query.items}
-          onLoad={() => {
-            if (currentScope.current === scope && anchorIndex > 0)
-              void listRef.current?.scrollToIndex({
-                index: anchorIndex,
-                animated: false,
-                viewOffset: -(insets.top + navigationHeight),
-              });
-          }}
-          onViewableItemsChanged={floatingBar.onViewableItemsChanged}
+          onViewableItemsChanged={handleViewableItemsChanged}
           viewabilityConfig={floatingBar.viewabilityConfig}
           onScroll={handleScroll}
           onScrollEndDrag={handleScrollEnd}
@@ -432,7 +523,7 @@ export function AnswerPreviewList({
             paddingTop: insets.top + navigationHeight + 4,
             paddingBottom: insets.bottom + FLOATING_BAR_HEIGHT + 20,
           }}
-          renderItem={({ item }) =>
+          renderItem={({ item, index }) =>
             item.type === 'login_prompt' ? (
               <View
                 className="items-center p-3 rounded-2xl mb-2"
@@ -448,67 +539,99 @@ export function AnswerPreviewList({
             ) : (
               <AnswerPreviewCard
                 item={item}
+                scope={scope}
                 sessionVersion={query.sessionVersion}
                 expanded={expandedIds.has(item.id)}
                 onExpandedChange={(expanded) =>
                   changeExpanded(item.id, expanded)
                 }
                 onMore={() => setMenuState({ scope, item })}
-                onRefresh={refreshBody}
+                onRefresh={() => refreshBody(item.id)}
                 showQuestion={
                   !contextQuestionId || item.question.id !== contextQuestionId
                 }
-                onFooterRef={floatingBar.registerFooter}
-                onFooterLayout={floatingBar.onFooterLayout}
+                onQuestionTitleLayout={
+                  !contextQuestionId && index === 0
+                    ? handleTitleLayout
+                    : undefined
+                }
+                onFooterRef={handleFooterRef}
+                onFooterLayout={handleFooterLayout}
+                onBodyLoader={autoLoad.registerLoader}
               />
             )
           }
           onEndReached={() => {
-            if (
-              query.hasNextPage &&
-              !query.isFetchingNextPage &&
-              !query.isFetchNextPageError
-            )
+            if (query.hasNextPage && !query.isFetching && !query.isError)
               void query.fetchNextPage({ cancelRefetch: false });
           }}
           onEndReachedThreshold={0.5}
           refreshControl={
             <RefreshControl
-              refreshing={query.isRefetching}
+              refreshing={refreshingScope === scope}
               onRefresh={() => {
                 setExpandedState({ scope, ids: new Set() });
-                void refreshInfiniteQuery(queryClient, query.queryKey);
+                setRefreshingScope(scope);
+                const finishRefresh = () =>
+                  setRefreshingScope((current) =>
+                    current === scope ? null : current,
+                  );
+                void refreshPreview().then(finishRefresh, finishRefresh);
               }}
               tintColor={colors.link}
               colors={[colors.link]}
             />
           }
           ListHeaderComponent={
-            contextQuestionId ? (
-              <AnswerPreviewQuestionHeader
-                key={contextQuestionId}
-                id={contextQuestionId}
-                title={screenTitle}
-                onTitleLayout={handleTitleLayout}
-              />
+            contextQuestionId ||
+            query.selectedIsError ||
+            query.selectedIsPending ? (
+              <>
+                {contextQuestionId ? (
+                  <AnswerPreviewQuestionHeader
+                    key={contextQuestionId}
+                    id={contextQuestionId}
+                    title={screenTitle}
+                    onTitleLayout={handleTitleLayout}
+                  />
+                ) : null}
+                {query.selectedIsPending ? (
+                  <ActivityIndicator
+                    style={{ paddingVertical: 20 }}
+                    color={colors.link}
+                  />
+                ) : query.selectedIsError ? (
+                  <QueryErrorView
+                    compact
+                    message={`所选回答加载失败：${getZhihuErrorMessage(query.selectedError)}`}
+                    onRetry={() => void query.refetchSelected()}
+                  />
+                ) : null}
+              </>
             ) : null
           }
           ListEmptyComponent={
-            <Text type="secondary" className="text-center py-10">
-              暂无可预览的回答
-            </Text>
+            !query.selectedIsError && !query.selectedIsPending ? (
+              <Text type="secondary" className="text-center py-10">
+                暂无可预览的回答
+              </Text>
+            ) : null
           }
           ListFooterComponent={
-            query.isFetchingNextPage ? (
+            query.isPending || query.isFetchingNextPage ? (
               <ActivityIndicator
                 style={{ paddingVertical: 20 }}
                 color={colors.link}
               />
-            ) : query.isFetchNextPageError ? (
+            ) : query.isError ? (
               <QueryErrorView
                 compact
-                message={getZhihuErrorMessage(query.error)}
-                onRetry={() => void query.fetchNextPage()}
+                message={`后续回答加载失败：${getZhihuErrorMessage(query.error)}`}
+                onRetry={() =>
+                  void (query.isFetchNextPageError
+                    ? query.fetchNextPage()
+                    : query.refetch())
+                }
               />
             ) : query.paginationError ? (
               <Text type="secondary" className="text-center py-5">

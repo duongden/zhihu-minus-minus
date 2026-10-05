@@ -746,9 +746,16 @@ export interface ZhihuStructuredContentListItemPayload
 }
 
 export interface ZhihuStructuredContentListPayload {
-  /** unordered 仅为已观测列表类型，完整服务器枚举未知。 */
-  type: 'unordered';
+  /** 已观测无序和有序列表；缩进项沿用所属列表的编号方式。 */
+  type: 'unordered' | 'ordered';
   items: ZhihuStructuredContentListItemPayload[];
+}
+
+/** 正文 card 的显示字段；不透明业务元数据不参与正文解析。 */
+export interface ZhihuStructuredContentCardPayload {
+  title: string;
+  url: string;
+  cover: string;
 }
 
 export interface ZhihuStructuredContentImagePayload {
@@ -792,6 +799,12 @@ export interface ZhihuStructuredContentImageSegment
   image: ZhihuStructuredContentImagePayload;
 }
 
+export interface ZhihuStructuredContentCardSegment
+  extends ZhihuStructuredContentSegmentIdentity {
+  type: 'card';
+  card: ZhihuStructuredContentCardPayload;
+}
+
 /** 样本中的分隔线没有额外 payload。 */
 export interface ZhihuStructuredContentHorizontalRuleSegment
   extends ZhihuStructuredContentSegmentIdentity {
@@ -811,6 +824,7 @@ export type ZhihuStructuredContentSegment =
   | ZhihuStructuredContentHeadingSegment
   | ZhihuStructuredContentListSegment
   | ZhihuStructuredContentImageSegment
+  | ZhihuStructuredContentCardSegment
   | ZhihuStructuredContentHorizontalRuleSegment
   | ZhihuStructuredContentUnsupportedSegment;
 

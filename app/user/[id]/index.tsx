@@ -5,7 +5,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -49,6 +49,7 @@ import {
   ProfileTabList,
   type ProfileTabListHandle,
 } from '@/components/profile/ProfileTabList';
+import { getProfileFeedBody } from '@/components/profile/profileSearchResults';
 import {
   getInitialProfileTab,
   PROFILE_TABS,
@@ -64,14 +65,17 @@ import { useUserCreations } from '@/hooks/useUserCreations';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
 import type { ZhihuAuthor } from '@/types/zhihu';
+import { getProfileAnswerReadingContext } from '@/utils/answerReadingContext';
 import {
   getProfileCoverState,
   getProfileHeaderOffset,
   getProfileSyncedOffset,
 } from '@/utils/profileScroll';
 import { refreshInfiniteQuery } from '@/utils/query';
+import { parseZhihuUrl } from '@/utils/url';
 import {
   getNextPageOffset,
+  getRecentActivityTargetId,
   isOwnMemberProfile,
   normalizeUserFeedType,
   type UserFeedType,
@@ -90,6 +94,9 @@ interface ProfileContentItem {
   title?: string;
   excerpt?: string;
   content?: string | ProfileContentSegment[];
+  answer_type?: unknown;
+  paid_info?: unknown;
+  content_need_truncated?: unknown;
   image_url?: string;
   thumbnail?: string;
   voteup_count?: number;
@@ -391,6 +398,20 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
   const creationsQuery = useUserCreations(
     user,
     Boolean(visitedTabs.creations || activeTab === 'creations'),
+  );
+  const creationTargets = useMemo(
+    () =>
+      new Map(
+        creationsQuery.activities.flatMap((activity) => {
+          const target = activity.target;
+          const targetId = target && getRecentActivityTargetId(target);
+          const type = normalizeUserFeedType(target?.type);
+          return target && targetId !== undefined && type
+            ? [[`${type}:${targetId}`, target] as const]
+            : [];
+        }),
+      ),
+    [creationsQuery.activities],
   );
 
   const answersVotedByMeQuery = useUserAnswersVotedByMe(
@@ -804,7 +825,20 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
   };
 
   const renderItemContent = (item: unknown, tabKey: ProfileTabKey) => {
-    if (tabKey === 'creations') return <FeedCard item={item as FeedItem} />;
+    if (tabKey === 'creations') {
+      const feedItem = item as FeedItem;
+      const target = creationTargets.get(`${feedItem.type}:${feedItem.id}`);
+      return (
+        <FeedCard
+          item={{ ...feedItem, ...getProfileFeedBody(target) }}
+          answerContext={getProfileAnswerReadingContext(
+            target?.author ?? {},
+            user ?? {},
+            id,
+          )}
+        />
+      );
+    }
     const displayItem = getProfileContentItem(item, tabKey);
     if (!displayItem) return null;
 
@@ -814,6 +848,20 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
         ? 'answers'
         : normalizeUserFeedType(rawType) || 'answers';
     const fallbackAuthor = tabKey === 'votes' ? undefined : user;
+    const itemId =
+      typeof displayItem.id === 'string'
+        ? displayItem.id.trim()
+        : typeof displayItem.id === 'number' &&
+            Number.isSafeInteger(displayItem.id) &&
+            displayItem.id >= 0
+          ? String(displayItem.id)
+          : undefined;
+    const answerIdFromUrl =
+      mappedType === 'answers' && typeof displayItem.url === 'string'
+        ? parseZhihuUrl(displayItem.url)?.match(/^\/answer\/(\d+)$/)?.[1]
+        : undefined;
+    const contentId = itemId || answerIdFromUrl;
+    if (mappedType === 'answers' && !contentId) return null;
 
     const getExcerptText = () => {
       if (rawType === 'pin') {
@@ -846,7 +894,7 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
       null;
 
     const feedItem: FeedItem = {
-      id: displayItem.id?.toString() || String(displayItem.url),
+      id: contentId || String(displayItem.url),
       title: displayItem.question?.title || displayItem.title || '',
       questionId:
         displayItem.question?.id?.toString() ||
@@ -864,6 +912,7 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
           displayItem.author?.headline || fallbackAuthor?.headline || '',
       },
       excerpt: getExcerptText(),
+      ...getProfileFeedBody(displayItem),
       image: imageUrl,
       voteCount:
         mappedType === 'videos'
@@ -885,7 +934,25 @@ function UserProfileScreen({ params }: { params: ProfileRouteParams }) {
       type: mappedType,
     };
 
-    return <FeedCard item={feedItem} />;
+    return (
+      <FeedCard
+        item={feedItem}
+        answerContext={
+          // The member's answers endpoint itself identifies the owner even
+          // when an item omits author identity; activity/vote tabs do not.
+          tabKey === 'answers' &&
+          !displayItem.author?.id &&
+          !displayItem.author?.url_token
+            ? { scene: 'profile_answer', memberId: id, memberSort: sortBy }
+            : getProfileAnswerReadingContext(
+                displayItem.author ?? {},
+                user ?? {},
+                id,
+                tabKey === 'answers' ? sortBy : 'created',
+              )
+        }
+      />
+    );
   };
 
   const activeMeta = PROFILE_TABS.find((tab) => tab.key === activeTab);

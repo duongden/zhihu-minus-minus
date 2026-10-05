@@ -8,12 +8,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { type FeedItem, getMemberWithFallback } from '@/api/zhihu';
 import { BouncyButton } from '@/components/BouncyButton';
 import { FeedCard } from '@/components/FeedCard';
+import { getProfileFeedBody } from '@/components/profile/profileSearchResults';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { StableAvatar } from '@/components/StableAvatar';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useUserCreations } from '@/hooks/useUserCreations';
+import {
+  type AnswerReadingContext,
+  getProfileAnswerReadingContext,
+} from '@/utils/answerReadingContext';
 import { toUserCreationFeedItem } from '@/utils/userCreations';
 import { getRecentActivityReadBoundary } from '@/utils/userProfile';
 
@@ -22,6 +27,7 @@ type PublishedStreamRow =
       key: string;
       kind: 'content';
       item: FeedItem;
+      answerContext: AnswerReadingContext;
     }
   | {
       key: 'read-boundary';
@@ -98,7 +104,12 @@ export default function UserStreamScreen() {
         rows.push({
           key: `published-${item.type}-${item.id}`,
           kind: 'content',
-          item,
+          item: { ...item, ...getProfileFeedBody(activity.target) },
+          answerContext: getProfileAnswerReadingContext(
+            activity.target?.author ?? {},
+            member,
+            id,
+          ),
         });
       }
       if (index + 1 === readBoundary) {
@@ -158,7 +169,7 @@ export default function UserStreamScreen() {
           keyExtractor={(row) => row.key}
           renderItem={({ item: row }) =>
             row.kind === 'content' ? (
-              <FeedCard item={row.item} />
+              <FeedCard item={row.item} answerContext={row.answerContext} />
             ) : (
               <View className="flex-row items-center mx-4 my-5 bg-transparent">
                 <View className="flex-1 h-px bg-black/10 dark:bg-white/10" />

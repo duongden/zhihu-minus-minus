@@ -7,7 +7,7 @@ import {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import type { ZhihuPreviewAnswer } from '@/api/zhihu/nextRender';
+import type { ZhihuPreviewAnswerMetadata } from '@/api/zhihu/nextRender';
 import { ContentActionBar } from '@/components/ContentActionBar';
 import { ContentActionButton } from '@/components/ContentActionButton';
 import { LikeButton } from '@/components/LikeButton';
@@ -17,11 +17,11 @@ import { Text, useRuntimeThemeColors, View } from '@/components/Themed';
 export const FLOATING_BAR_HEIGHT = 54;
 
 interface AnswerPreviewFloatingBarProps {
-  answer: ZhihuPreviewAnswer | null;
+  answer: ZhihuPreviewAnswerMetadata | null;
   visible: boolean;
   bottomInset: number;
   onCollapse: (answerId: string) => void;
-  onMore: (answer: ZhihuPreviewAnswer) => void;
+  onMore: (answer: ZhihuPreviewAnswerMetadata) => void;
 }
 
 export function AnswerPreviewFloatingBar({

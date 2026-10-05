@@ -12,6 +12,11 @@ import Colors from '@/constants/Colors';
 import { useContentActions } from '@/hooks/useContentActions';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useCollectionStore } from '@/store/useCollectionStore';
+import { seedAnswerPreviewEntry } from '@/utils/answerPreviewEntry';
+import {
+  type AnswerReadingContext,
+  getAnswerReadingRouteParams,
+} from '@/utils/answerReadingContext';
 import {
   seedRichContentFromFeedItem,
   updateContentInteractionCaches,
@@ -32,6 +37,7 @@ const slowTransition = SharedTransition.duration(600);
 interface FeedCardProps {
   item: FeedItem;
   tab?: string;
+  answerContext?: AnswerReadingContext;
 }
 
 function areFeedContentEqual(
@@ -72,7 +78,13 @@ function areFeedCardPropsEqual(
   previous: Readonly<FeedCardProps>,
   next: Readonly<FeedCardProps>,
 ): boolean {
-  if (previous.tab !== next.tab) return false;
+  if (
+    previous.tab !== next.tab ||
+    previous.answerContext?.scene !== next.answerContext?.scene ||
+    previous.answerContext?.memberId !== next.answerContext?.memberId ||
+    previous.answerContext?.memberSort !== next.answerContext?.memberSort
+  )
+    return false;
   const previousItem = previous.item;
   const nextItem = next.item;
   if (previousItem === nextItem) return true;
@@ -102,7 +114,7 @@ function areFeedCardPropsEqual(
   );
 }
 
-const FeedCardComponent = ({ item, tab }: FeedCardProps) => {
+const FeedCardComponent = ({ item, tab, answerContext }: FeedCardProps) => {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { cookies } = useAuthStore();
@@ -191,7 +203,19 @@ const FeedCardComponent = ({ item, tab }: FeedCardProps) => {
       ...(tab ? { source: 'feed', tab } : {}),
     };
     if (item.type === 'answers') {
-      router.push({ pathname: '/answer/[id]', params });
+      seedAnswerPreviewEntry(queryClient, item);
+      router.push({
+        pathname: '/answer/[id]',
+        params: {
+          ...params,
+          ...getAnswerReadingRouteParams(
+            answerContext ||
+              (tab === 'recommend' || tab === 'local'
+                ? { scene: 'recommend' }
+                : undefined),
+          ),
+        },
+      });
     } else if (item.type === 'articles') {
       router.push({ pathname: '/article/[id]', params });
     } else if (item.type === 'pins') {

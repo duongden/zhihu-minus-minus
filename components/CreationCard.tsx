@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import React from 'react';
 import { View as NativeView } from 'react-native';
@@ -14,6 +15,8 @@ import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useCollectionStore } from '@/store/useCollectionStore';
 import type { ZhihuContentSegment } from '@/types/zhihu';
+import { seedAnswerPreviewEntry } from '@/utils/answerPreviewEntry';
+import { getAnswerReadingRouteParams } from '@/utils/answerReadingContext';
 import { BouncyButton } from './BouncyButton';
 import { LikeButton } from './LikeButton';
 import { type ShareContentType, ShareMenu } from './ShareMenu';
@@ -85,6 +88,7 @@ export const CreationCard = React.forwardRef<
     ref,
   ) => {
     const router = useRouter();
+    const queryClient = useQueryClient();
     const colorScheme = useColorScheme();
     const cardBackground = useThemeColor({}, 'backgroundSecondary');
     const [menuVisible, setMenuVisible] = React.useState(false);
@@ -115,6 +119,9 @@ export const CreationCard = React.forwardRef<
     }));
 
     const handlePress = () => {
+      if (type === 'answer') {
+        seedAnswerPreviewEntry(queryClient, { ...item, type });
+      }
       if (onPress) {
         onPress();
         return;
@@ -137,6 +144,7 @@ export const CreationCard = React.forwardRef<
             id: item.id,
             title: cleanTitle(item.title || item.question?.title),
             questionId: item.question?.id,
+            ...(type === 'answer' ? getAnswerReadingRouteParams() : {}),
           },
         });
       }

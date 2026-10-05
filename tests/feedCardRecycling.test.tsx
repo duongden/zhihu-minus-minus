@@ -3,6 +3,11 @@ import type React from 'react';
 import { type FeedItem, voteContent } from '../api/zhihu';
 import { CreationCard } from '../components/CreationCard';
 import { FeedCard } from '../components/FeedCard';
+import { seedAnswerPreviewEntry } from '../utils/answerPreviewEntry';
+import type {
+  AnswerReadingContext,
+  AnswerReadingRouteParams,
+} from '../utils/answerReadingContext';
 import { updateContentInteractionCaches } from '../utils/contentCache';
 
 interface MenuProps {
@@ -159,6 +164,9 @@ jest.mock('../utils/contentCache', () => ({
   seedRichContentFromFeedItem: jest.fn(),
   updateContentInteractionCaches: jest.fn(),
 }));
+jest.mock('../utils/answerPreviewEntry', () => ({
+  seedAnswerPreviewEntry: jest.fn(),
+}));
 jest.mock('../utils/haptics', () => ({
   impactAsync: jest.fn(),
   ImpactFeedbackStyle: { Medium: 'medium' },
@@ -299,6 +307,105 @@ test('feed previews use the shared action builder with the current content ident
   expect(mockCopy).toHaveBeenCalledTimes(1);
 });
 
+test('recycled card navigation updates answer context with the same item reference and leaves article routes alone', async () => {
+  const host = await render(<FeedCard item={baseItem} />);
+  await fireEvent.press(host.getByText('合成原卡片'));
+  expect(seedAnswerPreviewEntry).toHaveBeenLastCalledWith(
+    expect.any(Object),
+    baseItem,
+  );
+  expect(mockPush).toHaveBeenLastCalledWith({
+    pathname: '/answer/[id]',
+    params: {
+      id: baseItem.id,
+      title: baseItem.title,
+      questionId: undefined,
+      answerScene: 'unknown',
+    },
+  });
+  for (const tab of ['recommend', 'local', 'following']) {
+    await host.rerender(<FeedCard item={baseItem} tab={tab} />);
+    await fireEvent.press(host.getByText('合成原卡片'));
+    expect(mockPush).toHaveBeenLastCalledWith({
+      pathname: '/answer/[id]',
+      params: expect.objectContaining({
+        id: baseItem.id,
+        source: 'feed',
+        tab,
+        answerScene: tab === 'following' ? 'unknown' : 'recommend',
+      }),
+    });
+  }
+  const contexts: Array<{
+    context: AnswerReadingContext;
+    route: AnswerReadingRouteParams;
+  }> = [
+    {
+      context: {
+        scene: 'profile_answer',
+        memberId: 'owner-a',
+        memberSort: 'created',
+      },
+      route: {
+        answerScene: 'profile_answer',
+        memberId: 'owner-a',
+        memberSort: 'created',
+      },
+    },
+    {
+      context: {
+        scene: 'profile_answer',
+        memberId: 'owner-a',
+        memberSort: 'voteups',
+      },
+      route: {
+        answerScene: 'profile_answer',
+        memberId: 'owner-a',
+        memberSort: 'voteups',
+      },
+    },
+    {
+      context: {
+        scene: 'profile_answer',
+        memberId: 'owner-b',
+        memberSort: 'voteups',
+      },
+      route: {
+        answerScene: 'profile_answer',
+        memberId: 'owner-b',
+        memberSort: 'voteups',
+      },
+    },
+    {
+      context: { scene: 'question_feed' },
+      route: { answerScene: 'question_feed' },
+    },
+  ];
+  for (const { context, route } of contexts) {
+    await host.rerender(<FeedCard item={baseItem} answerContext={context} />);
+    await fireEvent.press(host.getByText('合成原卡片'));
+    expect(mockPush).toHaveBeenLastCalledWith({
+      pathname: '/answer/[id]',
+      params: {
+        id: baseItem.id,
+        title: baseItem.title,
+        questionId: undefined,
+        ...route,
+      },
+    });
+  }
+  const article: FeedItem = { ...baseItem, type: 'articles' };
+  for (const { context } of contexts.slice(0, 2)) {
+    await host.rerender(<FeedCard item={article} answerContext={context} />);
+    await fireEvent.press(host.getByText('合成原卡片'));
+    expect(mockPush).toHaveBeenLastCalledWith({
+      pathname: '/article/[id]',
+      params: { id: article.id, title: article.title, questionId: undefined },
+    });
+  }
+  await host.unmount();
+});
+
 test('ordinary creation cards navigate to answers and reset their more menu after identity recycling', async () => {
   const item = {
     id: 'original',
@@ -310,9 +417,18 @@ test('ordinary creation cards navigate to answers and reset their more menu afte
   expect(host.queryByText('独立收藏按钮')).toBeNull();
   expect(host.queryByText('展开全文')).toBeNull();
   await fireEvent.press(host.getByText('合成原创作'));
+  expect(seedAnswerPreviewEntry).toHaveBeenCalledWith(expect.any(Object), {
+    ...item,
+    type: 'answer',
+  });
   expect(mockPush).toHaveBeenCalledWith({
     pathname: '/answer/[id]',
-    params: { id: 'original', title: '合成原创作', questionId: 'question' },
+    params: {
+      id: 'original',
+      title: '合成原创作',
+      questionId: 'question',
+      answerScene: 'unknown',
+    },
   });
   mockPush.mockClear();
   const stopPropagation = jest.fn();
