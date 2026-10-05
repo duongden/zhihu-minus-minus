@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { BouncyButton } from '@/components/BouncyButton';
 
 import { Text, useThemeColor, View } from '@/components/Themed';

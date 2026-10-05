@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import type { ComponentProps } from 'react';
 import { Platform, View as RNView, StyleSheet, Switch } from 'react-native';
 import { BouncyButton } from '@/components/BouncyButton';

@@ -7,39 +7,47 @@ const assets = [
     browser_download_url: 'https://example.com/checksums',
   },
   {
-    name: 'zhihu-minus-minus-v0.6.2-preview-arm64-v8a.apk',
+    name: 'zhihu-minus-minus-v0.8.0-arm64-v8a.apk',
     browser_download_url: 'https://example.com/arm64',
   },
   {
-    name: 'zhihu-minus-minus-v0.6.2-preview-compat-armeabi-v7a.apk',
+    name: 'zhihu-minus-minus-v0.8.0-compat-armeabi-v7a.apk',
     browser_download_url: 'https://example.com/armv7',
   },
   {
-    name: 'zhihu-minus-minus-v0.6.2-preview-compat-x86.apk',
+    name: 'zhihu-minus-minus-v0.8.0-compat-x86.apk',
     browser_download_url: 'https://example.com/x86',
   },
   {
-    name: 'zhihu-minus-minus-v0.6.2-preview-compat-x86_64.apk',
+    name: 'zhihu-minus-minus-v0.8.0-compat-x86_64.apk',
     browser_download_url: 'https://example.com/x86_64',
   },
 ];
+const historicalAssets = assets.map((asset) => ({
+  ...asset,
+  name: asset.name.replace('-v0.8.0-', '-v0.6.2-preview-'),
+}));
 
-test('selects the first supported ABI rather than the first APK asset', () => {
+test.each([
+  ['current', assets],
+  ['historical', historicalAssets],
+] as const)('selects the first supported ABI from %s APK names', (_format, releaseAssets) => {
   assert.equal(
-    selectAndroidApk(assets, ['x86_64', 'x86'])?.browser_download_url,
+    selectAndroidApk(releaseAssets, ['x86_64', 'x86'])?.browser_download_url,
     'https://example.com/x86_64',
   );
   assert.equal(
-    selectAndroidApk(assets, ['armeabi-v7a'])?.browser_download_url,
+    selectAndroidApk(releaseAssets, ['armeabi-v7a'])?.browser_download_url,
     'https://example.com/armv7',
   );
-});
-
-test('keeps the verified arm64 asset compatible with its historical name', () => {
   assert.equal(
-    selectAndroidApk(assets, ['arm64-v8a', 'armeabi-v7a'])
+    selectAndroidApk(releaseAssets, ['arm64-v8a', 'armeabi-v7a'])
       ?.browser_download_url,
     'https://example.com/arm64',
+  );
+  assert.equal(
+    selectAndroidApk(releaseAssets, ['x86'])?.browser_download_url,
+    'https://example.com/x86',
   );
 });
 
@@ -59,9 +67,12 @@ test('does not guess when the device ABI or asset name is unknown', () => {
   );
 });
 
-test('uses a universal APK only as a safe fallback', () => {
+test.each([
+  'universal',
+  'preview-universal',
+])('uses a %s APK only as a safe fallback', (suffix) => {
   const universal = {
-    name: 'zhihu-minus-minus-v0.6.2-preview-universal.apk',
+    name: `zhihu-minus-minus-v0.8.0-${suffix}.apk`,
     browser_download_url: 'https://example.com/universal',
   };
 

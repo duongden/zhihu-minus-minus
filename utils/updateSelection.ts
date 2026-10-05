@@ -14,8 +14,8 @@ export interface ReleaseAsset {
 
 const KNOWN_ABIS = new Set<string>(ANDROID_ABIS);
 const ABI_APK_SUFFIX =
-  /-preview-(?:compat-)?(arm64-v8a|armeabi-v7a|x86_64|x86)\.apk$/i;
-const UNIVERSAL_APK_SUFFIX = /-preview-universal\.apk$/i;
+  /-(?:preview-)?(?:compat-)?(arm64-v8a|armeabi-v7a|x86_64|x86)\.apk$/i;
+const UNIVERSAL_APK_SUFFIX = /-(?:preview-)?universal\.apk$/i;
 
 function normalizeAbi(value: string): AndroidAbi | null {
   const normalized = value.trim().toLowerCase();

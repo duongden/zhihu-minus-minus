@@ -31,7 +31,7 @@ Android job 需要全部 5 个 Secret：`EXPO_TOKEN` 加上 4 个 telemetry Secr
 ## 工作流做什么
 
 1. `quality` job 使用 Node.js 22 执行 `npm ci` 和 `npm run check`，包括 TypeScript、Biome、全部测试和富文本 fixture 分析。
-2. `build-android` 使用 EAS CLI 23 和 `preview` profile，在 Ubuntu 上生成四个单 ABI APK，并检查每个 APK 实际包含的 ABI。
+2. `build-android` 使用 EAS CLI 23 和 `preview` profile，在 Ubuntu 上执行 `assembleRelease` 生成四个单 ABI APK，并检查每个 APK 实际包含的 ABI。`preview` 是 EAS 构建配置名称，不再写入 APK 文件名。
 3. `build-ios` 在 macOS 26 上执行 iOS prebuild、CocoaPods 安装和无签名 `xcodebuild`，再把 `.app` 打包为 IPA。
 4. 两个平台分别上传 artifact，临时 artifact 默认保留 7 天。
 5. `release` 模式下载全部产物，生成 `SHA256SUMS.txt`，先用 arm64-v8a APK 创建 Release，再上传其余附件，确保旧版一键更新仍将 arm64-v8a 识别为第一个 APK。
@@ -43,14 +43,16 @@ Android job 需要全部 5 个 Secret：`EXPO_TOKEN` 加上 4 个 telemetry Secr
 
 | 文件 | 说明 |
 | --- | --- |
-| `zhihu-minus-minus-v<version>-preview-arm64-v8a.apk` | Android arm64-v8a 主包，默认验证包 |
-| `zhihu-minus-minus-v<version>-preview-compat-armeabi-v7a.apk` | Android 32 位 ARM 兼容包，未完成完整实机验证 |
-| `zhihu-minus-minus-v<version>-preview-compat-x86.apk` | Android 32 位 x86 兼容包，未完成完整实机验证 |
-| `zhihu-minus-minus-v<version>-preview-compat-x86_64.apk` | Android 64 位 x86 兼容包，未完成完整实机验证 |
+| `zhihu-minus-minus-v<version>-arm64-v8a.apk` | Android arm64-v8a 主包，默认验证包 |
+| `zhihu-minus-minus-v<version>-compat-armeabi-v7a.apk` | Android 32 位 ARM 兼容包，未完成完整实机验证 |
+| `zhihu-minus-minus-v<version>-compat-x86.apk` | Android 32 位 x86 兼容包，未完成完整实机验证 |
+| `zhihu-minus-minus-v<version>-compat-x86_64.apk` | Android 64 位 x86 兼容包，未完成完整实机验证 |
 | `zhihu-minus-minus-v<version>-unsigned.ipa` | 未签名 iOS 包，需要用户自行签名和安装 |
 | `SHA256SUMS.txt` | 全部 APK/IPA 的 SHA-256 校验值 |
 
 从 v0.6.2 起，客户端会根据设备支持的 ABI 精确选择更新 APK。无法识别设备 ABI 或找不到匹配附件时，不会盲目下载错误架构，只保留 GitHub Release 下载入口。arm64-v8a 仍需作为第一个附件创建，以兼容 v0.6.1 及更早客户端的更新逻辑。
+
+更新选择器同时兼容上述新文件名和历史带 `-preview-` 的文件名。尚未包含此兼容修改的 v0.6.2 及后续旧客户端只识别历史文件名；首次升级到采用新文件名的版本时，需要通过 GitHub Release 下载入口手动选择设备对应的 APK。发布工作流只生成上述四个 APK，不额外上传旧名称副本。
 
 ## Pull Request 检查
 

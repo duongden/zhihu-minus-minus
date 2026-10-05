@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import React from 'react';
 import { View as RNView, StyleSheet } from 'react-native';
 import { Text, useThemeColor } from '@/components/Themed';

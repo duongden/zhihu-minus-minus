@@ -48,9 +48,10 @@ jest.mock('../api/zhihu', () => ({
 jest.mock('../api/client', () => ({ hasAuthenticationCookie: () => true }));
 jest.mock('@tanstack/react-query', () => ({ useQueryClient: () => ({}) }));
 jest.mock('expo-router', () => ({ useRouter: () => ({ push: mockPush }) }));
-jest.mock('@expo/vector-icons', () => ({
-  Ionicons: () => null,
-  FontAwesome6: () =>
+jest.mock('@expo/vector-icons/Ionicons', () => () => null);
+jest.mock(
+  '@expo/vector-icons/FontAwesome6',
+  () => () =>
     jest
       .requireActual('react')
       .createElement(
@@ -58,7 +59,7 @@ jest.mock('@expo/vector-icons', () => ({
         null,
         '独立收藏按钮',
       ),
-}));
+);
 jest.mock('react-native-reanimated', () => ({
   __esModule: true,
   default: {

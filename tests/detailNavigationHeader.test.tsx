@@ -12,7 +12,7 @@ jest.mock('../store/useSettingsStore', () => ({
     }) => unknown,
   ) => selector(mockReadingSettings),
 }));
-jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
+jest.mock('@expo/vector-icons/Ionicons', () => () => null);
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 24, right: 0, bottom: 0, left: 0 }),
 }));

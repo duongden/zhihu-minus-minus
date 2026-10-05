@@ -1,4 +1,5 @@
-import { FontAwesome6, Ionicons } from '@expo/vector-icons';
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { BlurView } from 'expo-blur';
 import type { ComponentProps } from 'react';
 import React, { useEffect, useRef, useState } from 'react';

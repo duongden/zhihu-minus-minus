@@ -4,7 +4,7 @@ import { ProfileHeader } from '../components/profile/ProfileHeader';
 import { resolveThemeColors } from '../constants/theme';
 import { useSettingsStore } from '../store/useSettingsStore';
 
-jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
+jest.mock('@expo/vector-icons/Ionicons', () => () => null);
 jest.mock('expo-linear-gradient', () => ({
   LinearGradient: jest.requireActual('react-native').View,
 }));

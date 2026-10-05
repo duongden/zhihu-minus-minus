@@ -6,7 +6,7 @@ import { useSettingsStore } from '../store/useSettingsStore';
 
 let mockColorScheme: 'light' | 'dark' = 'light';
 
-jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
+jest.mock('@expo/vector-icons/Ionicons', () => () => null);
 jest.mock('../components/BouncyButton', () => ({
   BouncyButton: jest.requireActual('react-native').Pressable,
 }));

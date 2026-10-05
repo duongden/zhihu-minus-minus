@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useState } from 'react';
 import { Modal, SafeAreaView, StyleSheet, View } from 'react-native';
 import ImageViewer from 'react-native-image-zoom-viewer';

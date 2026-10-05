@@ -44,7 +44,7 @@ jest.mock('../api/zhihu', () => ({
   getContentVoteCount: () => 0,
   getContentVoteState: () => 0,
 }));
-jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
+jest.mock('@expo/vector-icons/Ionicons', () => () => null);
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 44, bottom: 24, left: 0, right: 0 }),
 }));

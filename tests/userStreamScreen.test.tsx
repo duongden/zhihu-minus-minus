@@ -19,7 +19,7 @@ const mockQuery = {
   refetch: jest.fn(),
 };
 
-jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
+jest.mock('@expo/vector-icons/Ionicons', () => () => null);
 jest.mock('@shopify/flash-list', () => ({
   FlashList: ({
     data,

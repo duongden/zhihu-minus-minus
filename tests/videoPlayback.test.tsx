@@ -60,7 +60,7 @@ jest.mock('../components/Themed', () => {
 jest.mock('../components/BouncyButton', () => ({
   BouncyButton: jest.requireActual('react-native').Pressable,
 }));
-jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
+jest.mock('@expo/vector-icons/Ionicons', () => () => null);
 jest.mock('react-native-webview', () => ({
   __esModule: true,
   default: () => mockWebView(),

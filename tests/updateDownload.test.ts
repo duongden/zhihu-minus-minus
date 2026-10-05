@@ -32,7 +32,7 @@ jest.mock('expo-sharing', () => ({
 jest.mock('../modules/zhihu-persistence', () => ({ inspectApk: jest.fn() }));
 jest.mock('../api/githubReleases', () => ({ fetchUpdateText: jest.fn() }));
 
-const name = 'zhihu-minus-minus-v0.8.0-preview-arm64-v8a.apk';
+const name = 'zhihu-minus-minus-v0.8.0-arm64-v8a.apk';
 const sha = 'a'.repeat(64);
 const update: ApkUpdate = {
   tag: 'v0.8.0',
@@ -77,8 +77,21 @@ beforeEach(() => {
 });
 afterEach(() => jest.useRealTimers());
 
-test('inspects a private partial file and launches installation only after moving the verified APK', async () => {
-  await downloadAndInstallVerifiedApk(update);
+test.each([
+  name,
+  name.replace('-arm64-', '-preview-arm64-'),
+])('verifies %s before moving the private partial file and launching installation', async (assetName) => {
+  await downloadAndInstallVerifiedApk({
+    ...update,
+    asset: {
+      ...update.asset,
+      name: assetName,
+      browser_download_url: update.asset.browser_download_url.replace(
+        name,
+        assetName,
+      ),
+    },
+  });
   expect(inspectApk).toHaveBeenCalledWith(expect.stringMatching(/\.part$/));
   expect(FileSystem.moveAsync).toHaveBeenCalledWith({
     from: targetUri,

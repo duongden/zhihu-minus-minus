@@ -20,7 +20,7 @@ jest.mock('expo-image-picker', () => ({
   requestMediaLibraryPermissionsAsync: jest.fn(),
   launchImageLibraryAsync: jest.fn(),
 }));
-jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
+jest.mock('@expo/vector-icons/Ionicons', () => () => null);
 jest.mock('../features/rich-content', () => ({ ZhihuContent: () => null }));
 jest.mock('../components/useColorScheme', () => ({
   useColorScheme: () => 'light',

@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import type { GestureResponderEvent, StyleProp, ViewStyle } from 'react-native';
 import { StyleSheet } from 'react-native';
 import { BouncyButton } from '@/components/BouncyButton';

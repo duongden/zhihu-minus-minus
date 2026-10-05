@@ -38,17 +38,15 @@ jest.mock('expo-blur', () => ({
   BlurView:
     jest.requireActual<typeof import('react-native')>('react-native').View,
 }));
-jest.mock('@expo/vector-icons', () => {
+jest.mock('@expo/vector-icons/Ionicons', () => {
   const react = jest.requireActual<typeof import('react')>('react');
   const native =
     jest.requireActual<typeof import('react-native')>('react-native');
-  return {
-    Ionicons: ({ name, size }: { name: string; size: number }) =>
-      react.createElement(native.Text, {
-        testID: `icon:${name}`,
-        style: { fontSize: size },
-      }),
-  };
+  return ({ name, size }: { name: string; size: number }) =>
+    react.createElement(native.Text, {
+      testID: `icon:${name}`,
+      style: { fontSize: size },
+    });
 });
 jest.mock('../components/VoteTriangle', () => {
   const react = jest.requireActual<typeof import('react')>('react');

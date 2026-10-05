@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useEffect } from 'react';
 import { ActivityIndicator, Image, StyleSheet } from 'react-native';
 import type { UploadedImage } from '@/api/zhihu/image';

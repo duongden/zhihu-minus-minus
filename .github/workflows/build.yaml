@@ -27,7 +27,6 @@ concurrency:
 env:
   NODE_VERSION: 22.x
   EAS_CLI_VERSION: 23.0.0
-  BUILD_TYPE: preview
   EAS_PROFILE: preview
 
 jobs:
@@ -189,7 +188,7 @@ jobs:
                 ;;
             esac
 
-            cp "$APK_PATH" "$ANDROID_OUTPUT_DIR/zhihu-minus-minus-v${APP_VERSION}-${BUILD_TYPE}-${ASSET_ARCH}.apk"
+            cp "$APK_PATH" "$ANDROID_OUTPUT_DIR/zhihu-minus-minus-v${APP_VERSION}-${ASSET_ARCH}.apk"
           done
 
           mapfile -t NAMED_APKS < <(find "$ANDROID_OUTPUT_DIR" -maxdepth 1 -type f -name "*.apk" | sort)
@@ -360,7 +359,7 @@ jobs:
         run: |
           APP_VERSION=$(node -p "require('./package.json').version")
           RELEASE_TAG="v${APP_VERSION}"
-          PRIMARY_APK="dist/zhihu-minus-minus-v${APP_VERSION}-${BUILD_TYPE}-arm64-v8a.apk"
+          PRIMARY_APK="dist/zhihu-minus-minus-v${APP_VERSION}-arm64-v8a.apk"
           mapfile -t APKS < <(find dist -maxdepth 1 -type f -name "*.apk" | sort)
           mapfile -t IPAS < <(find dist -maxdepth 1 -type f -name "*.ipa" | sort)
 
@@ -404,7 +403,7 @@ jobs:
             --target "$GITHUB_SHA"
             --generate-notes
             --fail-on-no-commits
-            --notes "Android 默认提供已验证的 arm64-v8a preview APK；其余 compat APK 未经实机验证，供对应架构设备手动安装。iOS 为未签名 IPA。SHA256SUMS.txt 可用于校验下载文件。"
+            --notes "Android 默认提供已验证的 arm64-v8a APK；其余 compat APK 未经实机验证，供对应架构设备手动安装。iOS 为未签名 IPA。SHA256SUMS.txt 可用于校验下载文件。"
             --draft
           )
 

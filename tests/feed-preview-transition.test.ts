@@ -58,10 +58,8 @@ jest.mock('../components/BouncyButton', () => ({
   BouncyButton:
     jest.requireActual<typeof import('react-native')>('react-native').Pressable,
 }));
-jest.mock('@expo/vector-icons', () => ({
-  FontAwesome6: () => null,
-  Ionicons: () => null,
-}));
+jest.mock('@expo/vector-icons/FontAwesome6', () => () => null);
+jest.mock('@expo/vector-icons/Ionicons', () => () => null);
 jest.mock('expo-blur', () => ({
   BlurView:
     jest.requireActual<typeof import('react-native')>('react-native').View,

@@ -1,4 +1,5 @@
-import { FontAwesome6, Ionicons } from '@expo/vector-icons';
+import FontAwesome6 from '@expo/vector-icons/FontAwesome6';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import React, { useEffect, useMemo, useRef } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 import { BouncyButton } from '@/components/BouncyButton';

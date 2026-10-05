@@ -14,9 +14,10 @@ import { useThemeStore } from '../store/useThemeStore';
 let mockColorScheme: 'light' | 'dark' = 'light';
 const mockGestureUpdates: Array<(event: { x: number }) => void> = [];
 
-jest.mock('@expo/vector-icons', () => ({
-  Ionicons: jest.requireActual('react-native').View,
-}));
+jest.mock(
+  '@expo/vector-icons/Ionicons',
+  () => jest.requireActual('react-native').View,
+);
 jest.mock('expo-router', () => ({
   Stack: { Screen: () => null },
   useRouter: () => ({ push: jest.fn() }),

@@ -243,7 +243,7 @@ jest.mock('../features/rich-content', () => ({
   getNeighborAnswerIds: () => [],
   RICH_CONTENT_STALE_TIME: 300_000,
 }));
-jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
+jest.mock('@expo/vector-icons/Ionicons', () => () => null);
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0 }),
 }));

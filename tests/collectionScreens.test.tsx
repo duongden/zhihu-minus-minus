@@ -14,7 +14,7 @@ let mockCookies: string | null = 'z_c0=synthetic';
 const mockNavigation = { setOptions: jest.fn() };
 const mockRouter = { push: jest.fn() };
 const mockVideoTypes = new Map<string, string | undefined>();
-jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
+jest.mock('@expo/vector-icons/Ionicons', () => () => null);
 jest.mock('../api/client', () => ({
   hasAuthenticationCookie: (cookies: string | null) => Boolean(cookies),
 }));

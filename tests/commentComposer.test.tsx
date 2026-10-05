@@ -13,9 +13,10 @@ jest.mock('expo-image-picker', () => ({
   requestMediaLibraryPermissionsAsync: jest.fn(),
   launchImageLibraryAsync: jest.fn(),
 }));
-jest.mock('@expo/vector-icons', () => ({
-  Ionicons: jest.requireActual('react-native').View,
-}));
+jest.mock(
+  '@expo/vector-icons/Ionicons',
+  () => jest.requireActual('react-native').View,
+);
 jest.mock('../components/BouncyButton', () => ({
   BouncyButton: jest.requireActual('react-native').View,
 }));

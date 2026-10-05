@@ -8,7 +8,7 @@
  * New components can use plain RN <Text>/<View> with className directly.
  */
 
-import { Ionicons } from '@expo/vector-icons';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { useMemo } from 'react';
 import {
   Text as DefaultText,

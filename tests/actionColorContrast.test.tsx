@@ -21,7 +21,7 @@ jest.mock('../api/zhihu/voters', () => ({
 jest.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({}),
 }));
-jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
+jest.mock('@expo/vector-icons/Ionicons', () => () => null);
 jest.mock('react-native-reanimated', () => ({
   __esModule: true,
   default: { View: jest.requireActual('react-native').View },

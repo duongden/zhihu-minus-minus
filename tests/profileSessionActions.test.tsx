@@ -21,7 +21,7 @@ const mockAuthState = {
   removeAccount: jest.fn(),
   logout: jest.fn(),
 };
-jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
+jest.mock('@expo/vector-icons/Ionicons', () => () => null);
 jest.mock('../store/useAuthStore', () => ({
   getAuthSessionVersion: () => mockSession,
   useAuthStore: Object.assign(() => mockAuthState, {

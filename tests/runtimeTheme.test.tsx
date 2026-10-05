@@ -19,9 +19,10 @@ import { themeVariables } from '../utils/themeVariables';
 
 let mockColorScheme: 'light' | 'dark' = 'light';
 
-jest.mock('@expo/vector-icons', () => ({
-  Ionicons: jest.requireActual('react-native').View,
-}));
+jest.mock(
+  '@expo/vector-icons/Ionicons',
+  () => jest.requireActual('react-native').View,
+);
 jest.mock('../store/useSettingsStore', () => ({
   useSettingsStore: jest.requireActual('zustand').create(() => ({
     primaryColor: null,

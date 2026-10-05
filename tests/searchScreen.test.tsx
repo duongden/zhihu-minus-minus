@@ -18,7 +18,7 @@ jest.mock('expo-router', () => ({
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 58, bottom: 34, left: 0, right: 0 }),
 }));
-jest.mock('@expo/vector-icons', () => ({ Ionicons: () => null }));
+jest.mock('@expo/vector-icons/Ionicons', () => () => null);
 jest.mock('../components/useColorScheme', () => ({
   useColorScheme: () => 'light',
 }));

@@ -84,6 +84,14 @@ Web 适合检查路由和不依赖原生模块的页面，不代表 Android/iOS 
 
 只改 `app/`、`components/`、`features/`、`hooks/`、`api/`、`store/`、`storage/`、`utils/` 中的 TypeScript/样式时，通常只需要 Fast Refresh。不要直接把生成目录中的修补提交回仓库；如果配置需要长期保留，应写入 `app.config.ts` 或 config plugin。
 
+### 字体打包体积
+
+图标按家族路径导入，例如 `import Ionicons from '@expo/vector-icons/Ionicons'`，避免包根入口把其他家族的字体和 glyph map 一起带入 Metro 依赖图。当前使用 Ionicons 和 FontAwesome6；FontAwesome6 的默认入口仍包含 regular、solid、brands 三份字体，不能按界面实际使用的样式数量推断包内字体数。
+
+Expo Router 的共享布局还会间接导入 `expo-symbols`。其 [补丁](../patches/expo-symbols+55.0.9.patch) 将 `SymbolView` 的 `useFonts` 导入收窄到同包子模块，保留原 hook 和默认 Regular 字体，避免无条件打入七种字重；业务显式引用其他字重时仍会正常打包。现有 `postinstall` 自动应用补丁，升级 `expo-symbols` 时需复核上游是否已修复并重新验证导出。
+
+可用 `npx expo export --platform android --dump-assetmap --output-dir /tmp/zhihu-android-export` 检查生产资源清单：当前应包含 Ionicons、FontAwesome6 的三份字体和 MaterialSymbols Regular。字体清单验证后仍需在真机检查菜单、收藏和导航图标；最终 APK 大小以同一构建环境的 Release 产物为准。
+
 ## 验证命令
 
 提交前运行聚合检查：
