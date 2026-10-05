@@ -16,7 +16,7 @@
 | InlineCode / KeyboardInput | `inlineCode` / `keyboardInput` | 代码文本、键盘输入语义 |
 | Strikethrough / Highlight / Subscript / Superscript | 对应格式容器 run | 嵌套行内格式；另外补充 `underline` |
 | SegmentHighlight | `segmentHighlight` | 虚线划线、片段 IDs、跨段文本、反应、来源和交互位置 |
-| NativeBlock 视频 | `video` + 可选 `videoId/resource` | 知乎业务 ID、页面地址、封面与可播放资源 |
+| NativeBlock 视频 | `video` + 可选 `lensId/videoId/resource` | Lens 播放 ID 与 zvideo 页面 ID 分开保存，可直接传媒体资源 |
 | InlineMath / MathBlock | `inlineFormula` / `blockFormula` | 原始 LaTeX、图片资源以及行内/块级排版语义 |
 
 视频等业务节点保留数据结构，平台加载和交互由 renderer 承担。资源模型只存 URL、尺寸、媒体类型和离线 URI；Cookie、请求头或认证数据属于资源加载器，不进入文档模型。
@@ -35,7 +35,7 @@
 | --- | --- |
 | `MdAst.kt:101–110`递归收集整篇Figure/Image并去重；`RenderMarkdown.kt:100–114`从整篇画廊定位当前图 | 本仓已有文档图片收集能力；Native宿主已从单图预览扩展为整篇正文画廊，并按当前图传入initialIndex；不属于画廊的资源仍单独预览 |
 | `RenderMarkdown.kt:139–184`长按提供查看、浏览器打开、保存、分享；菜单从选择宿主中隔离 | 本仓复用既有图片预览及保存/复制链接面板；分享和浏览器入口属于共享图片交互的后续增强，不能视作仅V2的回归 |
-| `RenderMarkdown.kt:191–236`视频为16:9封面和中心播放按钮，跳转本地视频页面 | 本仓已有知乎zvideo WebView播放页；V2应保留正确业务路由和视频封面，并区分页面播放与独立原生播放器 |
+| `RenderMarkdown.kt:191–236`视频为16:9封面和中心播放按钮，跳转本地视频页面 | 本仓保留封面和中心播放提示，按 Lens ID 或 zvideo 页面详情解析实际媒体，由原生播放器播放；旧视频网页入口已删除 |
 | `TiqianMarkdownRenderer.kt:265–332`按URL保留图片自然尺寸及最终Success/Error，重进视口时不退回Loading | 本仓的文字流首载包含JS估算高度、native精确测量与SVG附件几何更新；图片结果缓存可减少重复进入后的高度翻转，不能单独证明首次测量已稳定 |
 | `TiqianMarkdownRenderer.kt:213–228`行内图片具有明确占位尺寸与底边基线；`:167–172`配置数学字体和display滚动宿主 | 本仓有ReplacementSpan/SVG图源与基线，未知图源尺寸仍需异步校准；尚无参考实现的本地LaTeX排版与数学字体工具链 |
 
@@ -47,7 +47,7 @@
 
 普通文本需要保留两个行内格式节点之间的有效空白，避免合并成连写单词。代码块和行内代码需要保留原始换行与缩进，不能共用普通文本的空白折叠规则。
 
-同一文档中的节点 ID 应唯一；重复解析相同输入应稳定。`paragraphId` 保留知乎 `data-pid`，`videoId` 保留业务 ID，脚注 `label` 保留展示编号，三者与节点 ID 分开。遍历顺序号不能当作原始 HTML 行号或全文选择偏移。
+同一文档中的节点 ID 应唯一；重复解析相同输入应稳定。`paragraphId` 保留知乎 `data-pid`，`videoId` 保留页面业务 ID，`lensId` 保留播放身份，脚注 `label` 保留展示编号；这些标识与节点 ID 分开。遍历顺序号不能当作原始 HTML 行号或全文选择偏移。
 
 脚注定义只存一份。多次引用同一定义时保留不同的引用节点 ID，共用 `definitionId`。编号缺失、定义冲突或引用悬空时应产生规范化诊断与可见 fallback，不能直接数值转换后抛错或丢正文。
 

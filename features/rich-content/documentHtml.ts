@@ -1,3 +1,4 @@
+import { getZhihuVideoRoute } from '@/utils/zhihuVideoRoute';
 import type {
   ZhihuBlock,
   ZhihuDocument,
@@ -8,6 +9,7 @@ import type {
   ZhihuTableRow,
 } from './document';
 import { walkZhihuDocument } from './documentTraversal';
+import { videoPlaybackHtml } from './videoHtml';
 import { getSafeRichContentUrl } from './webviewSecurity';
 
 function escapeHtml(value: string): string {
@@ -235,9 +237,17 @@ function blockHtml(
     case 'code':
       return `<pre><code>${escapeHtml(block.text)}</code></pre>`;
     case 'video': {
-      const href = getSafeRichContentUrl(block.url);
-      const title = literalHtml(block.title || '视频');
-      return `<p>${href ? `<a${attribute('href', href)}>${title}</a>` : title}</p>`;
+      const href = getZhihuVideoRoute({
+        ...block,
+        resourceUrl: block.resource?.url,
+      });
+      return videoPlaybackHtml({
+        route: href,
+        posterUrl: block.poster
+          ? getSafeRichContentUrl(block.poster.url, true)
+          : undefined,
+        title: block.title,
+      });
     }
     case 'linkCard': {
       const href = getSafeRichContentUrl(block.url);

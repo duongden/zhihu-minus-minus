@@ -25,4 +25,5 @@ export * from './question';
 export * from './questionFeed';
 export * from './search';
 export * from './topic';
+export * from './video';
 export * from './voters';

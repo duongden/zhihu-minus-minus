@@ -179,6 +179,10 @@ xcrun simctl openurl booted 'zhihu--:///dev/rich-content/prototype?caseId=attach
 
 ## 路由、缓存和原生变更
 
+视频使用 SDK 55 对应的 `expo-video`，正文保留视频封面和播放按钮，`data-lens-id` 和 `/video/` 链接经 Lens 获取实时资源，独立 `/zvideo/` 链接先读取 `/zvideos/{id}` 的媒体信息。两种 ID 不能混用；播放地址仅保存在运行时，打开或重试时重新获取，优先尝试 AVC playlist，再切换备用资源。原 WebView 视频页已移除，网页正文排版也通过应用内入口进入原生播放器；视频封面不进入图片预览和画廊。页面失焦或进入后台会暂停，播放器卸载时释放。
+
+新增播放器依赖后运行 `npm ci`，分别运行 `npx expo prebuild --platform android --no-install` 和 `npx expo prebuild --platform ios --no-install`，再重新编译安装；Fast Refresh 无法添加原生模块。平台验收需覆盖回答、文章、想法及独立视频入口、横竖视频、暂停/进度/全屏、后台/返回，以及过期资源重试和备用资源切换。请求和播放器失败提示不输出底层异常或签名播放 URL。
+
 - 新增深链接时同时检查 `app/+native-intent.tsx`、`utils/url.ts` 和 `app.json` 的 intent filters，并覆盖冷启动和热启动路径。
 - TanStack Query key 必须包含所有影响结果的参数；精确失效和 `utils/query.ts` 的 reset 语义要保持一致。
 - 修改 SQLite schema 时递增 `storage/localDatabase.ts` 的数据库版本并新增事务 migration；不要重写已发布 migration。

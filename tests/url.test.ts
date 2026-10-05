@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { redirectSystemPath } from '../app/+native-intent';
 import {
   getSafeExternalUrl,
   parseRichContentDevelopmentUrl,
@@ -71,6 +72,42 @@ test.each([
   ['javascript://question/42', null],
 ])('normalizes supported links (%s)', (input, expected) => {
   expect(parseZhihuUrl(input)).toBe(expected);
+});
+
+test.each([
+  ['https://www.zhihu.com/video/42', '/video/42?source=lens'],
+  ['https://www.zhihu.com/zvideo/84', '/video/84?source=zvideo'],
+  ['zhihu://video/42', '/video/42?source=lens'],
+  ['zhihu://zvideo/84', '/video/84?source=zvideo'],
+  ['zhihu--:///video/84', '/video/84?source=zvideo'],
+  ['/video/84', '/video/84?source=zvideo'],
+  ['zhihu--:///video/42?source=lens&ignored=1', '/video/42?source=lens'],
+  [
+    'zhihu--:///video/84?source=zvideo&title=%E8%A7%86%E9%A2%91',
+    '/video/84?source=zvideo&title=%E8%A7%86%E9%A2%91',
+  ],
+])('keeps Lens and zvideo identities separate (%s)', (input, expected) => {
+  expect(parseZhihuUrl(input)).toBe(expected);
+  expect(redirectSystemPath({ path: input, initial: true })).toBe(expected);
+  expect(redirectSystemPath({ path: input, initial: false })).toBe(expected);
+});
+
+test('direct playback routes retain only safe media resources', () => {
+  const media = 'https://example.invalid/video.mp4?version=synthetic';
+  const path = `/video/direct?source=direct&uri=${encodeURIComponent(media)}`;
+  expect(parseZhihuUrl(`zhihu--://${path}&ignored=1`)).toBe(path);
+  expect(parseZhihuUrl(path)).toBe(path);
+  expect(
+    parseZhihuUrl(
+      'zhihu--:///video/direct?source=direct&uri=file%3A%2F%2F%2Fprivate%2Fvideo.mp4',
+    ),
+  ).toBeNull();
+  expect(
+    parseZhihuUrl(
+      'zhihu--:///video/direct?source=direct&uri=https%3A%2F%2Fexample.invalid%2Fpage',
+    ),
+  ).toBeNull();
+  expect(parseZhihuUrl(`https://www.zhihu.com${path}`)).toBeNull();
 });
 
 test('only the dev parser accepts the isolated native validation route', () => {

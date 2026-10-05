@@ -16,6 +16,114 @@ function elements(nodes: readonly Node[]) {
   );
 }
 
+test('stored video markup retains its cover and uses native player links or an unavailable label', () => {
+  const fixture = JSON.parse(
+    readFileSync(
+      path.join(__dirname, '../fixtures/cases/video-playback-001.json'),
+      'utf8',
+    ),
+  ) as { content: string };
+  const sanitized = sanitizeRichContentHtml(fixture.content);
+  const nodes = elements(parseDocument(sanitized).children).filter(isTag);
+  expect(
+    nodes.some((node) => ['video', 'source', 'iframe'].includes(node.name)),
+  ).toBe(false);
+  expect(
+    nodes.filter((node) => node.name === 'a').map((node) => node.attribs.href),
+  ).toEqual([
+    'zhihu--:///video/101?source=lens',
+    'zhihu--:///video/303?source=lens',
+    'zhihu--:///video/direct?source=direct&uri=https%3A%2F%2Fexample.com%2Fsynthetic.mp4',
+  ]);
+  expect(sanitized.match(/播放视频/g)).toHaveLength(3);
+  expect(sanitized.match(/视频不可用/g)).toHaveLength(2);
+  expect(
+    nodes.filter((node) => node.name === 'img').map((node) => node.attribs),
+  ).toEqual([
+    {
+      class: 'zhihu-video-cover',
+      src: 'https://example.com/poster.png',
+      alt: '视频封面',
+    },
+  ]);
+});
+
+test('video covers prefer poster and lazy thumbnail resources without retaining image actions or unsafe markup', () => {
+  const sanitized = sanitizeRichContentHtml(
+    '<video data-lens-id="101" poster="//example.com/poster.png" title="封面&lt;测试&gt;" onplay="throw 1"><img src="https://example.com/ignored.png"></video>' +
+      '<a class="video-box" data-lens-id="102"><span><img src="https://example.com/placeholder.png" data-actualsrc="https://example.com/actual.png" data-preview-src="https://example.com/preview.png" onerror="throw 1"></span></a>' +
+      '<a class="video-box" data-lens-id="103"><img data-original="https://example.com/original.png"></a>' +
+      '<video data-lens-id="104" poster="javascript:throw 1"></video>' +
+      '<a class="video-box" href="https://example.com/page"><img src="https://example.com/unavailable.png"></a>',
+  );
+  const nodes = elements(parseDocument(sanitized).children).filter(isTag);
+  const images = nodes.filter((node) => node.name === 'img');
+  expect(images.map((node) => node.attribs.src)).toEqual([
+    'https://example.com/poster.png',
+    'https://example.com/actual.png',
+    'https://example.com/original.png',
+    'https://example.com/unavailable.png',
+  ]);
+  expect(images[0].attribs.alt).toBe('封面<测试>');
+  expect(
+    images.every((image) =>
+      Object.keys(image.attribs).every((name) =>
+        ['class', 'src', 'alt'].includes(name),
+      ),
+    ),
+  ).toBe(true);
+  expect(sanitized).not.toContain('javascript:');
+  expect(sanitized).not.toContain('onerror');
+  expect(sanitized).not.toContain('onplay');
+  expect(nodes.at(-3)?.name).toBe('div');
+  expect(nodes.at(-3)?.attribs.href).toBeUndefined();
+});
+
+test('serialized videos share native playback routing and never link an unsupported webpage', () => {
+  const document: ZhihuDocument = {
+    id: 'video-document',
+    blocks: [
+      {
+        id: 'lens',
+        type: 'video',
+        lensId: '101',
+        videoId: '202',
+        url: 'https://www.zhihu.com/zvideo/202',
+        poster: { mediaType: 'image', url: 'https://example.com/cover.png' },
+        title: '示例视频',
+      },
+      {
+        id: 'direct',
+        type: 'video',
+        url: '',
+        resource: {
+          mediaType: 'video',
+          url: 'https://example.com/synthetic.mp4',
+        },
+      },
+      { id: 'unavailable', type: 'video', url: 'https://example.com/page' },
+    ],
+  };
+  const html = sanitizeRichContentHtml(serializeZhihuDocumentHtml(document));
+  const links = elements(parseDocument(html).children).filter(
+    (node) => isTag(node) && node.name === 'a',
+  );
+  expect(links.filter(isTag).map((node) => node.attribs.href)).toEqual([
+    'zhihu--:///video/101?source=lens&title=%E7%A4%BA%E4%BE%8B%E8%A7%86%E9%A2%91',
+    'zhihu--:///video/direct?source=direct&uri=https%3A%2F%2Fexample.com%2Fsynthetic.mp4',
+  ]);
+  expect(html).toContain('视频不可用');
+  const images = elements(parseDocument(html).children)
+    .filter((node) => isTag(node) && node.name === 'img')
+    .filter(isTag);
+  expect(images).toHaveLength(1);
+  expect(images[0].attribs).toEqual({
+    class: 'zhihu-video-cover',
+    src: 'https://example.com/cover.png',
+    alt: '示例视频',
+  });
+});
+
 test('script serialization preserves content without exposing HTML delimiters', () => {
   const value = '</script><script>throw 1</script><!--&\u2028\u2029';
   const serialized = serializeInlineScriptValue(value);

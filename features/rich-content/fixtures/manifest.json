@@ -2,6 +2,27 @@
   "version": 2,
   "cases": [
     {
+      "id": "video-playback-001",
+      "file": "./cases/video-playback-001.json",
+      "contentPath": "content",
+      "sourceType": "answer",
+      "collectedAt": "2026-10-05",
+      "traits": [
+        "synthetic",
+        "video-box",
+        "lens-id",
+        "video-source",
+        "unsafe-url"
+      ],
+      "expected": {
+        "paragraphs": 1,
+        "activeImages": 1,
+        "videoBoxes": 3,
+        "linkCards": 0
+      },
+      "expectedMetadata": { "type": "answer", "id": "synthetic-video-playback" }
+    },
+    {
       "id": "daily-author-avatar-001",
       "file": "./cases/daily-author-avatar-001.json",
       "contentPath": "body",

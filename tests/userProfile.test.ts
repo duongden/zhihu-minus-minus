@@ -99,10 +99,10 @@ test('places the read boundary using the entry-time unread snapshot', () => {
 test('normalizes public Zhihu video links to the internal video route', () => {
   assert.equal(
     parseZhihuUrl('https://www.zhihu.com/zvideo/123456789'),
-    '/video/123456789',
+    '/video/123456789?source=zvideo',
   );
   assert.equal(
     parseZhihuUrl('https://oia.zhihu.com/zvideos/987654321'),
-    '/video/987654321',
+    '/video/987654321?source=zvideo',
   );
 });

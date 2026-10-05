@@ -1,6 +1,8 @@
 import { type Element, isTag, isText, type Node } from 'domhandler';
-import { parseDocument } from 'htmlparser2';
+import { DomUtils, parseDocument } from 'htmlparser2';
 import type { ZhihuContentSegment, ZhihuSegmentInfo } from '@/types/zhihu';
+import { parseZhihuVideoReference } from '@/utils/zhihuVideo';
+import { getDirectZhihuVideoUrl } from '@/utils/zhihuVideoRoute';
 import type {
   ZhihuBlock,
   ZhihuDocument,
@@ -187,13 +189,9 @@ export function normalizeZhihuContentSegments(
         return `<a data-draft-type="link-card"${attribute('href', segment.url)}${attribute('data-draft-title', title)}${attribute('data-draft-cover', segment.data_draft_cover)}>${escapeHtml(title)}</a>`;
       }
       if (segment.type === 'video') {
-        const url = safeUrl(nonempty(segment.url), true);
-        const pageId = url
-          ? /^https?:\/\/(?:www\.)?zhihu\.com\/zvideo\/(\d+)(?:[/?#]|$)/i.exec(
-              url,
-            )?.[1]
-          : undefined;
-        return `<video${attribute(pageId ? 'href' : 'src', segment.url)}${attribute('data-lens-id', nonempty(segment.video_id) ?? nonempty(segment.video_bo_id) ?? pageId)}${attribute('poster', segment.thumbnail)}${attribute('title', segment.title)}${sizeAttribute('width', segment.width)}${sizeAttribute('height', segment.height)}>视频</video>`;
+        const url = safeUrl(nonempty(segment.url));
+        const pageId = url ? parseZhihuVideoReference(url)?.id : undefined;
+        return `<video${attribute(pageId ? 'href' : 'src', segment.url)}${attribute('data-lens-id', nonempty(segment.video_id) ?? nonempty(segment.video_bo_id))}${attribute('poster', segment.thumbnail)}${attribute('title', segment.title)}${sizeAttribute('width', segment.width)}${sizeAttribute('height', segment.height)}>视频</video>`;
       }
       unsupported.push({
         kind: 'unsupported-node',
@@ -270,6 +268,7 @@ function resolveImageUrl(element: Element): string | undefined {
   const sources = [
     element.attribs['data-actualsrc'],
     element.attribs['data-original'],
+    element.attribs['data-original-src'],
     element.attribs['data-default-watermark-src'],
     element.attribs['data-thumbnail'],
     element.attribs.src,
@@ -1217,31 +1216,32 @@ export function normalizeZhihuDocument(
       );
       const rawResourceUrl = node.attribs.src ?? source?.attribs.src;
       const safeResourceUrl = safeUrl(rawResourceUrl, true);
-      const resourceUrl =
-        safeResourceUrl && /^https?:\/\//i.test(safeResourceUrl)
-          ? safeResourceUrl
-          : undefined;
+      const resourceUrl = getDirectZhihuVideoUrl(safeResourceUrl);
       if (rawResourceUrl && !resourceUrl)
         diagnostic('unsafe-url', 'video-resource');
       const href = safeUrl(node.attribs.href);
-      const pageVideoId = href
-        ? /^https?:\/\/(?:www\.)?zhihu\.com\/(?:zvideo|video)\/(\d+)(?:[/?#]|$)/i.exec(
-            href,
-          )?.[1]
-        : undefined;
-      const videoId = pageVideoId ?? nonempty(node.attribs['data-lens-id']);
+      const page = href ? parseZhihuVideoReference(href) : null;
+      const attributeLensId = nonempty(node.attribs['data-lens-id']);
+      const lensId =
+        (attributeLensId && /^\d+$/.test(attributeLensId)
+          ? attributeLensId
+          : undefined) ?? (page?.kind === 'lens' ? page.id : undefined);
+      const videoId = page?.id ?? attributeLensId;
       const url =
         href ??
         (videoId && /^\d+$/.test(videoId)
           ? `https://www.zhihu.com/zvideo/${videoId}`
           : undefined) ??
         resourceUrl;
-      const posterImage = node.children.find(
-        (child): child is Element => isTag(child) && child.name === 'img',
+      const posterImage = DomUtils.findOne(
+        (child) => child.name === 'img',
+        node.children,
+        true,
       );
       const poster =
         safeUrl(node.attribs.poster, true) ??
-        (posterImage ? imageResource(posterImage)?.url : undefined);
+        safeUrl(node.attribs['data-thumbnail'], true) ??
+        (posterImage ? resolveImageUrl(posterImage) : undefined);
       if (url)
         return [
           {
@@ -1249,6 +1249,7 @@ export function normalizeZhihuDocument(
             type: 'video',
             url,
             ...(videoId && { videoId }),
+            ...(lensId && { lensId }),
             ...(resourceUrl && {
               resource: {
                 mediaType: 'video',

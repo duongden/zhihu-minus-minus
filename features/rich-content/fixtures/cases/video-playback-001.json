@@ -1,0 +1,6 @@
+{
+  "type": "answer",
+  "id": "synthetic-video-playback",
+  "title": "合成视频入口：Lens、页面 ID 与直接资源（结构已确认）",
+  "content": "<p>所有数字、文字和资源地址均为合成测试数据。</p><a class=\"video-box\" href=\"https://www.zhihu.com/zvideo/202\" data-lens-id=\"101\"><img src=\"https://example.com/poster.png\"></a><a class=\"video-box\" href=\"https://www.zhihu.com/video/303\">Lens 页面</a><video controls><source src=\"https://example.com/synthetic.mp4\" type=\"video/mp4\"></video><video src=\"javascript:alert(1)\">危险资源</video><a class=\"video-box\" href=\"https://example.com/page\">未提供资源的外部页面</a>"
+}

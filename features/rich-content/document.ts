@@ -276,8 +276,10 @@ export interface ZhihuCodeBlock extends ZhihuDocumentNode {
 
 export interface ZhihuVideoBlock extends ZhihuDocumentNode {
   readonly type: 'video';
-  /** 知乎 data-lens-id 或视频链接中的业务 ID，与文档节点 ID 分开。 */
+  /** 视频页面业务 ID，与文档节点 ID 分开。 */
   readonly videoId?: string;
+  /** Lens 播放资源 ID，优先于可能不同的 zvideo 页面 ID。 */
+  readonly lensId?: string;
   /** 视频页面链接；可播放资源存在时单独提供。 */
   readonly url: string;
   readonly resource?: ZhihuVideoResource;

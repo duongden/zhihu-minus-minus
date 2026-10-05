@@ -97,6 +97,36 @@ beforeEach(() => {
 });
 
 describe('Native V2 renderer staging transitions', () => {
+  it('keeps the video cover while opening its native playback route', async () => {
+    const onLinkPress = jest.fn();
+    const onImagePress = jest.fn();
+    const onImageLongPress = jest.fn();
+    await render(
+      <ZhihuNativeContent
+        content='<a class="video-box" data-lens-id="101" href="https://www.zhihu.com/zvideo/202"><span><img data-actualsrc="https://example.com/poster.png"></span></a>'
+        objectId="native-video-playback"
+        type="answer"
+        renderFallback={() => null}
+        onLinkPress={onLinkPress}
+        onImagePress={onImagePress}
+        onImageLongPress={onImageLongPress}
+      />,
+    );
+    await containerLayout(320);
+    const cover = screen.getByTestId('rich-content-video-cover');
+    expect(cover.props.source).toEqual({
+      uri: 'https://example.com/poster.png',
+    });
+    await fireEvent.press(cover);
+    expect(onLinkPress).toHaveBeenCalledWith(
+      'zhihu--:///video/101?source=lens',
+    );
+    expect(onImagePress).not.toHaveBeenCalled();
+    await fireEvent(cover, 'longPress');
+    expect(onImageLongPress).not.toHaveBeenCalled();
+    expect(screen.queryByText('打开视频页面')).toBeNull();
+  });
+
   it('keeps source mapping in JS while sending only layout fields to native', async () => {
     const onSelectionChange = jest.fn();
     await render(

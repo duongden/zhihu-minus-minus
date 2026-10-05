@@ -511,6 +511,134 @@ test('prevents content navigation from replacing the rendering document', async 
   expect(onLinkPress).not.toHaveBeenCalled();
 });
 
+test('pin video segments open the native player through the existing link bridge', async () => {
+  const { html, onLinkPress } = await renderPage({
+    contentArray: [
+      {
+        type: 'video',
+        video_id: '101',
+        url: 'https://www.zhihu.com/zvideo/202',
+        thumbnail: 'https://example.com/pin-cover.png',
+        title: '想法视频',
+      },
+      { type: 'video', url: 'https://example.com/synthetic.mp4' },
+      { type: 'video', url: 'https://example.com/page' },
+    ],
+  });
+  const script = inlineScript(html);
+  expect(script).toContain('zhihu--:///video/101?source=lens');
+  expect(script).toContain('zhihu--:///video/direct?source=direct');
+  expect(script).toContain('视频不可用');
+  const container = {
+    innerHTML: '',
+    querySelectorAll: () => [],
+    addEventListener: jest.fn(),
+  };
+  vm.runInNewContext(script, {
+    document: {
+      getElementById: () => container,
+      addEventListener: jest.fn(),
+    },
+    window: { addEventListener: jest.fn() },
+    setTimeout: jest.fn(),
+  });
+  const firstVideo = parseDocument(container.innerHTML).children.find(isTag);
+  if (!firstVideo) throw new Error('Expected video cover');
+  const videoRoute =
+    'zhihu--:///video/101?source=lens&title=%E6%83%B3%E6%B3%95%E8%A7%86%E9%A2%91';
+  expect(firstVideo.attribs.href).toBe(videoRoute);
+  const cover = firstVideo.children.find(
+    (node) => isTag(node) && node.name === 'img',
+  );
+  expect(cover && isTag(cover) && cover.attribs).toEqual({
+    class: 'zhihu-video-cover',
+    src: 'https://example.com/pin-cover.png',
+    alt: '想法视频',
+  });
+  const event = {
+    nativeEvent: {
+      data: bridgeMessage(html, {
+        type: 'link',
+        href: videoRoute,
+      }),
+    },
+  } as Parameters<NonNullable<WebViewProps['onMessage']>>[0];
+  await act(() => mockWebViewProps.onMessage?.(event));
+  expect(onLinkPress).toHaveBeenCalledWith(videoRoute);
+});
+
+test('clicking the video cover or play label opens native playback and long presses skip image actions', async () => {
+  const { html } = await renderPage({
+    htmlContent:
+      '<video data-lens-id="101" poster="https://example.com/cover.png"></video>',
+  });
+  const postMessage = jest.fn();
+  type TouchEvent = {
+    target: unknown;
+    touches: { identifier: number; clientX: number; clientY: number }[];
+  };
+  type ClickEvent = {
+    target: unknown;
+    preventDefault: () => void;
+    stopPropagation: () => void;
+  };
+  const listeners = new Map<string, (event: TouchEvent & ClickEvent) => void>();
+  const container = {
+    innerHTML: '',
+    querySelectorAll: () => [],
+    addEventListener: (
+      name: string,
+      callback: (event: TouchEvent & ClickEvent) => void,
+    ) => listeners.set(name, callback),
+  };
+  const setTimeout = jest.fn();
+  vm.runInNewContext(inlineScript(html), {
+    document: {
+      getElementById: () => container,
+      addEventListener: jest.fn(),
+    },
+    window: {
+      ReactNativeWebView: { postMessage },
+      addEventListener: jest.fn(),
+    },
+    setTimeout,
+    clearTimeout: jest.fn(),
+  });
+  setTimeout.mockClear();
+  const video = {
+    tagName: 'A',
+    classList: { contains: (name: string) => name === 'zhihu-video' },
+    getAttribute: (name: string) =>
+      name === 'href' ? 'zhihu--:///video/101?source=lens' : null,
+    parentElement: container,
+  };
+  for (const tagName of ['IMG', 'SPAN']) {
+    const target = {
+      tagName,
+      classList: { contains: () => false },
+      getAttribute: () => 'https://example.com/cover.png',
+      parentElement: video,
+    };
+    const event = {
+      target,
+      touches: [{ identifier: 1, clientX: 20, clientY: 20 }],
+      preventDefault: jest.fn(),
+      stopPropagation: jest.fn(),
+    };
+    listeners.get('touchstart')?.(event);
+    expect(setTimeout).not.toHaveBeenCalled();
+    listeners.get('click')?.(event);
+    expect(event.preventDefault).toHaveBeenCalled();
+    expect(postMessage).toHaveBeenLastCalledWith(
+      bridgeMessage(html, {
+        type: 'link',
+        href: 'zhihu--:///video/101?source=lens',
+      }),
+    );
+  }
+  expect(postMessage).toHaveBeenCalledTimes(2);
+});
+
 test('formula scripts and fonts are inline with no CDN dependency', async () => {
   const { html } = await renderPage();
   expect(html).not.toContain('cdn.jsdelivr.net');
