@@ -11,6 +11,7 @@ import type {
   ZhihuSearchResultObject,
 } from '@/types/zhihu';
 import { normalizeUserFeedType } from '@/utils/userProfile';
+import { getZhihuVideoSource } from '@/utils/zhihuVideo';
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value)
@@ -140,6 +141,7 @@ export function toProfileSearchFeedItem(
   return {
     id: String(content.id),
     type,
+    videoSource: getZhihuVideoSource(content.type),
     title: result.highlight?.title
       ? highlightText(result.highlight.title, highlightColor)
       : title,

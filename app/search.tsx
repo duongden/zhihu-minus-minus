@@ -29,6 +29,7 @@ import type {
   ZhihuSearchResultItem,
   ZhihuSearchSuggestItem,
 } from '@/types/zhihu';
+import { getZhihuVideoSource } from '@/utils/zhihuVideo';
 
 type ParsedPeople = Omit<UserCardMember, 'id' | 'name' | 'headline'> & {
   id: string;
@@ -258,6 +259,7 @@ export default function SearchScreen() {
               : obj.type === 'question'
                 ? 'questions'
                 : 'videos',
+      videoSource: getZhihuVideoSource(obj.type),
       title: highlight.title
         ? HighlightText(highlight.title)
         : obj.question?.title || obj.question?.name || obj.title || '无标题',

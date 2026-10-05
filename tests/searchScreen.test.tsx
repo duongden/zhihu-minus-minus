@@ -2,7 +2,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render } from '@testing-library/react-native';
 import type React from 'react';
 import { getSearchSuggest, searchContent } from '../api/zhihu';
+import type { FeedItem } from '../api/zhihu/feed';
 import SearchScreen from '../app/search';
+
+const mockFeedItems = new Map<string, FeedItem>();
 
 jest.mock('../api/zhihu', () => ({
   getSearchSuggest: jest.fn(),
@@ -34,10 +37,12 @@ jest.mock('../components/overlays/BottomSheet', () => ({
   BottomSheet: () => null,
 }));
 jest.mock('../components/FeedCard', () => ({
-  FeedCard: ({ item }: { item: { title: string } }) =>
-    jest
+  FeedCard: ({ item }: { item: FeedItem }) => {
+    mockFeedItems.set(item.id, item);
+    return jest
       .requireActual('react')
-      .createElement(jest.requireActual('react-native').Text, null, item.title),
+      .createElement(jest.requireActual('react-native').Text, null, item.title);
+  },
 }));
 jest.mock('../components/UserCard', () => ({ UserCard: () => null }));
 jest.mock('../store/useSearchStore', () => ({
@@ -86,6 +91,7 @@ let client: QueryClient;
 beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
+  mockFeedItems.clear();
   client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: Infinity } },
   });
@@ -195,4 +201,39 @@ test('duplicate content and unsupported search cards are excluded while question
   expect(host.getAllByText('回答所属问题')).toHaveLength(1);
   expect(host.queryByText('无效视频卡片')).toBeNull();
   expect(host.getByText('已加载 1 条')).toBeTruthy();
+});
+
+test('search preserves the API namespace of Lens and zvideo results', async () => {
+  jest.mocked(searchContent).mockResolvedValue({
+    data: [
+      {
+        type: 'search_result',
+        index: 0,
+        highlight: {},
+        object: { id: '2088306465639604943', type: 'video', title: 'Lens视频' },
+      },
+      {
+        type: 'search_result',
+        index: 1,
+        highlight: {},
+        object: {
+          id: '2088306465639604944',
+          type: 'zvideo',
+          title: '独立视频',
+        },
+      },
+    ],
+    paging: { is_end: true, next: '' },
+  });
+  const host = await renderSearch();
+  await fireEvent.press(host.getByText('历史关键词'));
+  await flushQueries();
+  expect(mockFeedItems.get('2088306465639604943')).toMatchObject({
+    type: 'videos',
+    videoSource: 'lens',
+  });
+  expect(mockFeedItems.get('2088306465639604944')).toMatchObject({
+    type: 'videos',
+    videoSource: 'zvideo',
+  });
 });

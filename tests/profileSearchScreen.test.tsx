@@ -8,7 +8,10 @@ import {
 } from '../api/zhihu';
 import type { ZhihuMember } from '../api/zhihu/member';
 import UserSearchScreen from '../app/user/[id]/search';
-import { getProfileFeedBody } from '../components/profile/profileSearchResults';
+import {
+  getProfileFeedBody,
+  toProfileSearchFeedItem,
+} from '../components/profile/profileSearchResults';
 import type { ZhihuSearchResponse } from '../types/zhihu';
 import type { AnswerReadingContext } from '../utils/answerReadingContext';
 
@@ -304,4 +307,24 @@ test('switching profiles clears the term and direct-entry back returns to that p
   await fireEvent.press(host.getByLabelText('返回个人主页'));
   expect(mockBack).toHaveBeenCalledTimes(1);
   await host.unmount();
+});
+
+test.each([
+  ['video', 'lens'],
+  ['videos', 'lens'],
+  ['zvideo', 'zvideo'],
+  ['zvideos', 'zvideo'],
+] as const)('profile search preserves raw video type %s as source %s', (type, videoSource) => {
+  expect(
+    toProfileSearchFeedItem(
+      {
+        type: 'search_result',
+        index: 0,
+        highlight: {},
+        object: { id: '2088306465639604943', type, title: '用户视频' },
+      },
+      member,
+      '#00f',
+    ),
+  ).toMatchObject({ id: '2088306465639604943', type: 'videos', videoSource });
 });

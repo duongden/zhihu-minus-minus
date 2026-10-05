@@ -14,6 +14,7 @@ import {
   normalizeUserFeedType,
   type RecentActivityCursor,
 } from './userProfile';
+import { getZhihuVideoSource } from './zhihuVideo';
 
 export type UserCreationsPage = ZhihuListResponse<ZhihuMemberActivity>;
 // null means "now", resolved when the request starts, including after refresh.
@@ -122,5 +123,6 @@ export function toUserCreationFeedItem(
       0,
     voted: type === 'videos' ? 0 : (getContentVoteState(type, target) ?? 0),
     type,
+    videoSource: getZhihuVideoSource(target.type),
   };
 }

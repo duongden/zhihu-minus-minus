@@ -2,6 +2,7 @@ import axios, { type AxiosResponse } from 'axios';
 import type { ReactNode } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useSettingsStore } from '@/store/useSettingsStore';
+import type { ZhihuVideoSourceKind } from '@/types/zhihu';
 import apiClient, { type ApiRequestOptions } from '../client';
 import {
   buildZhihuAppMomentsUrl,
@@ -337,6 +338,8 @@ export interface FeedItem {
   favlistsCount?: number;
   voted: number;
   type: 'answers' | 'articles' | 'pins' | 'questions' | 'videos';
+  /** Preserve Lens media IDs separately from zvideo content IDs. */
+  videoSource?: ZhihuVideoSourceKind;
   topics?: FeedTopic[];
   rank?: number;
   hotValue?: string;

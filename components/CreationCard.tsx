@@ -17,6 +17,7 @@ import { useCollectionStore } from '@/store/useCollectionStore';
 import type { ZhihuContentSegment } from '@/types/zhihu';
 import { seedAnswerPreviewEntry } from '@/utils/answerPreviewEntry';
 import { getAnswerReadingRouteParams } from '@/utils/answerReadingContext';
+import { getZhihuVideoSource } from '@/utils/zhihuVideo';
 import { BouncyButton } from './BouncyButton';
 import { LikeButton } from './LikeButton';
 import { type ShareContentType, ShareMenu } from './ShareMenu';
@@ -135,7 +136,11 @@ export const CreationCard = React.forwardRef<
       if (type === 'video') {
         router.push({
           pathname: '/video/[id]',
-          params: { id: item.id, title: cleanTitle(item.title) },
+          params: {
+            id: item.id,
+            title: cleanTitle(item.title),
+            source: getZhihuVideoSource(item.type) || 'zvideo',
+          },
         });
       } else {
         router.push({

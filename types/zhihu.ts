@@ -252,6 +252,9 @@ export interface ZhihuPinPollOption {
   is_selected?: boolean;
 }
 
+/** Identifies the API namespace of a video ID before resolving playback. */
+export type ZhihuVideoSourceKind = 'lens' | 'zvideo';
+
 export interface ZhihuVideo {
   id: string | number;
   title: string;

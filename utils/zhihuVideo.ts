@@ -1,9 +1,27 @@
+import type { ZhihuVideoSourceKind } from '@/types/zhihu';
+
 const VIDEO_ID = /^\d+$/;
 const VIDEO_PATH = /^\/(?:api\/v4\/)?(zvideos?|videos?)\/(\d+)\/?$/i;
 
 export interface ZhihuVideoReference {
   id: string;
-  kind: 'lens' | 'zvideo';
+  kind: ZhihuVideoSourceKind;
+}
+
+// Normalize API object types before cards collapse them into the videos group.
+export function getZhihuVideoSource(
+  type: string | null | undefined,
+): ZhihuVideoSourceKind | undefined {
+  switch (type?.toLowerCase()) {
+    case 'video':
+    case 'videos':
+      return 'lens';
+    case 'zvideo':
+    case 'zvideos':
+      return 'zvideo';
+    default:
+      return undefined;
+  }
 }
 
 function reference(type: string, id: string): ZhihuVideoReference {
