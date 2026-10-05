@@ -141,6 +141,9 @@ export default function CommentScreen() {
 
   const inputBarAnimatedStyle = useAnimatedStyle(() => ({
     bottom: keyboardHeight.value,
+    // 键盘展开后不再叠加设备安全区，输入框与键盘保持 12px 间距。
+    paddingBottom:
+      keyboardHeight.value > 0 ? 12 : insets.bottom > 0 ? insets.bottom : 12,
   }));
 
   const [inputBarHeight, setInputBarHeight] = useState(80 + insets.bottom);
@@ -531,7 +534,6 @@ export default function CommentScreen() {
             left: 0,
             right: 0,
             paddingHorizontal: 15,
-            paddingBottom: insets.bottom > 0 ? insets.bottom : 12,
             paddingTop: 8,
           },
           inputBarAnimatedStyle,

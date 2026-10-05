@@ -580,28 +580,14 @@ export const createPinComment = async (
   id: string | number,
   content: string,
 ): Promise<CreateCommentResponse> => {
-  const res = await apiClient.post<CreateCommentResponse>(
-    `/pins/${id}/comments`,
-    {
-      content,
-      type: 'comment',
-    },
-  );
-  return res.data;
+  return createCommentV5('pins', id, content);
 };
 
 export const createArticleComment = async (
   id: string | number,
   content: string,
 ): Promise<CreateCommentResponse> => {
-  const res = await apiClient.post<CreateCommentResponse>(
-    `/articles/${id}/comments`,
-    {
-      content,
-      type: 'comment',
-    },
-  );
-  return res.data;
+  return createCommentV5('articles', id, content);
 };
 
 export const getChildCommentsV5 = async (
