@@ -3,21 +3,16 @@ import { FlashList } from '@shopify/flash-list';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { BlurView } from 'expo-blur';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Keyboard,
-  Platform,
+  View as NativeView,
   StyleSheet,
   type TextInput,
   useWindowDimensions,
 } from 'react-native';
-import Reanimated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
+import Reanimated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   type CommentItem,
@@ -45,6 +40,7 @@ import { StableAvatar } from '@/components/StableAvatar';
 import { Text, useThemeColor, View } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
+import { useCommentKeyboardLayout } from '@/hooks/useCommentKeyboardLayout';
 import { useCommentListQuery } from '@/hooks/useCommentQueries';
 import { formatDate } from '@/utils/date';
 import { buildZhihuContent, buildZhihuImageHtml } from '@/utils/zhihuContent';
@@ -114,37 +110,8 @@ export default function CommentScreen() {
     ? '这个知识点链接缺少完整的原文位置。可以查看评论，请返回正文重新选择知识点后发布。'
     : '这个知识点链接暂不支持评论。请返回正文重新选择知识点。';
 
-  // 键盘高度动画：解决键盘收起后输入框无法回到底部的 bug
-  const keyboardHeight = useSharedValue(0);
-  useEffect(() => {
-    const show = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (e) => {
-        keyboardHeight.value = withTiming(e.endCoordinates.height, {
-          duration: Platform.OS === 'ios' ? e.duration || 250 : 200,
-        });
-      },
-    );
-    const hide = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      (e) => {
-        keyboardHeight.value = withTiming(0, {
-          duration: Platform.OS === 'ios' ? e.duration || 250 : 200,
-        });
-      },
-    );
-    return () => {
-      show.remove();
-      hide.remove();
-    };
-  }, [keyboardHeight]);
-
-  const inputBarAnimatedStyle = useAnimatedStyle(() => ({
-    bottom: keyboardHeight.value,
-    // 键盘展开后不再叠加设备安全区，输入框与键盘保持 12px 间距。
-    paddingBottom:
-      keyboardHeight.value > 0 ? 12 : insets.bottom > 0 ? insets.bottom : 12,
-  }));
+  const { containerRef, onContainerLayout, inputBarAnimatedStyle } =
+    useCommentKeyboardLayout(insets.bottom);
 
   const [inputBarHeight, setInputBarHeight] = useState(80 + insets.bottom);
   const [orderBy, setOrderBy] = useState<'score' | 'ts'>('score');
@@ -396,7 +363,13 @@ export default function CommentScreen() {
   };
 
   return (
-    <View className="flex-1" style={{ backgroundColor: surfaceColor }}>
+    <NativeView
+      ref={containerRef}
+      collapsable={false}
+      onLayout={onContainerLayout}
+      className="flex-1"
+      style={{ backgroundColor: surfaceColor }}
+    >
       <Stack.Screen
         options={{
           title: `评论${count ? ` (${count})` : ''}`,
@@ -525,7 +498,7 @@ export default function CommentScreen() {
         />
       </View>
 
-      {/* 输入框：绝对定位 + 随键盘动画移动，避免 KAV 全屏占位导致收起后不归位的 bug */}
+      {/* 输入框：按页面与键盘的实际重叠定位，兼容 Android 窗口缩放。 */}
       <Reanimated.View
         onLayout={(event) => setInputBarHeight(event.nativeEvent.layout.height)}
         style={[
@@ -593,6 +566,6 @@ export default function CommentScreen() {
         }}
         onClose={() => setCommentAction(null)}
       />
-    </View>
+    </NativeView>
   );
 }
