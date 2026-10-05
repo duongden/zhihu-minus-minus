@@ -5,10 +5,12 @@ import {
   getQuestionAnswerPagerPage,
   normalizeAnswerPagerPage,
 } from '@/api/zhihu/answerPager';
-import { getMemberRelations, MEMBER_ANSWERS_INCLUDE } from '@/api/zhihu/member';
+import { getMemberRelations } from '@/api/zhihu/member';
 import { getAuthSessionVersion, useAuthStore } from '@/store/useAuthStore';
 import type { AnswerReadingContext } from '@/utils/answerReadingContext';
 import { useZhihuInfiniteQuery } from './useZhihuInfiniteQuery';
+
+const PROFILE_ANSWER_PAGER_INCLUDE = 'data[*].id,question.id';
 
 export interface AnswerPagerSourceOptions {
   initialId: string;
@@ -71,13 +73,18 @@ export function useAnswerPagerSource({
       const page =
         scene === 'profile_answer'
           ? normalizeAnswerPagerPage(
-              await getMemberRelations(sourceId, 'answers', {
-                include: MEMBER_ANSWERS_INCLUDE,
-                limit: 20,
-                offset: pageParam,
-                sort_by: sourceSort,
-                ws_qiangzhisafe: 0,
-              }),
+              await getMemberRelations(
+                sourceId,
+                'answers',
+                {
+                  include: PROFILE_ANSWER_PAGER_INCLUDE,
+                  limit: 20,
+                  offset: pageParam,
+                  sort_by: sourceSort,
+                  ws_qiangzhisafe: 0,
+                },
+                { signal },
+              ),
             )
           : await getQuestionAnswerPagerPage(sourceId, sourceSort, pageParam, {
               signal,

@@ -142,18 +142,23 @@ beforeEach(() => {
   useAuthStore.setState({ cookies: null });
 });
 
-test('normalizes metadata and login prompts while retaining text from unknown source blocks', () => {
+test('normalizes usable answers and login prompts while skipping broken bodies and retaining unknown block text', () => {
   const page = normalizeZhihuAnswerPreviewPage(
-    response([
-      answer(),
-      { id: 'login-prompt', type: 'login_prompt', description: '登录后继续' },
-      answer('unsupported', {
-        ...content([]),
-        segments: [
-          { id: 'unknown', type: 'unobserved-node', text: '保留正文' },
-        ],
-      }),
-    ]),
+    response(
+      [
+        answer('missing', null),
+        answer(),
+        answer('invalid-paging', { ...content(['bad']), paging: 'not-json' }),
+        { id: 'login-prompt', type: 'login_prompt', description: '登录后继续' },
+        answer('unsupported', {
+          ...content([]),
+          segments: [
+            { id: 'unknown', type: 'unobserved-node', text: '保留正文' },
+          ],
+        }),
+      ],
+      OUTER_NEXT,
+    ),
   );
   expect(page.data[0]).toMatchObject({
     id: params.id,
@@ -179,9 +184,21 @@ test('normalizes metadata and login prompts while retaining text from unknown so
       ],
     },
   });
+  expect(getAnswerPreviewContinuation([page], [])).toEqual({
+    next: OUTER_NEXT,
+  });
+  const emptyPage = normalizeZhihuAnswerPreviewPage(
+    response([answer('missing', null)], OUTER_NEXT),
+  );
+  expect(emptyPage.data).toEqual([]);
+  expect(emptyPage.paging.next).toBe(OUTER_NEXT);
+  // Preserve the no-progress guard rather than repeatedly fetching unusable pages.
+  expect(getAnswerPreviewContinuation([emptyPage], [])).toEqual({
+    error: '回答分页没有新增回答，已停止继续加载',
+  });
   expect(() =>
-    normalizeZhihuAnswerPreviewPage(response([answer('missing', null)])),
-  ).toThrow();
+    normalizeZhihuAnswerPreviewPage({ ...response([answer()]), paging: null }),
+  ).toThrow('回答预览返回结构无效');
 });
 
 test('renders all captured answers with seg_like annotations without losing prose, bold marks or paging boundaries', () => {

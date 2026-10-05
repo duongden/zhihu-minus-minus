@@ -618,7 +618,10 @@ export function getStructuredContentTextRuns(
     }
     runs.push({ run, start, end });
   }
-  if (!paragraphId) return runs.map(({ run }) => run);
+  // Formula paragraphs have no shared business metadata, even outside the
+  // attachment range, so keep their visual runs without segment click targets.
+  if (!paragraphId || formulaCandidates.length)
+    return runs.map(({ run }) => run);
   const unambiguous = unambiguousReactions(marks);
   const result: ZhihuInlineRun[] = [];
   for (let index = 0; index < runs.length; index += 1) {

@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { CanceledError } from 'axios';
 import type { PropsWithChildren } from 'react';
 import apiClient from '../api/client';
-import { MEMBER_ANSWERS_INCLUDE } from '../api/zhihu/member';
 import {
   type AnswerPagerSourceOptions,
   useAnswerPagerSource,
@@ -186,8 +186,9 @@ test('pages recommendations within their question, keeps unknown origins single,
   expect(get.mock.calls[profileStart]).toEqual([
     '/members/member-a/answers',
     {
+      signal: expect.any(AbortSignal),
       params: {
-        include: MEMBER_ANSWERS_INCLUDE,
+        include: 'data[*].id,question.id',
         limit: 20,
         offset: 0,
         sort_by: 'voteups',
@@ -217,11 +218,26 @@ test('pages recommendations within their question, keeps unknown origins single,
   let resolveOldRequest:
     | ((value: { data: ReturnType<typeof page> }) => void)
     | undefined;
+  let oldRequestSignal: AbortSignal | undefined;
+  let transportAborted = false;
   get
-    .mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveOldRequest = resolve;
-      }),
+    .mockImplementationOnce(
+      (_url, requestOptions) =>
+        new Promise((resolve, reject) => {
+          resolveOldRequest = resolve;
+          const signal = requestOptions?.signal;
+          if (!(signal instanceof AbortSignal))
+            throw new Error('Profile pager must forward its abort signal');
+          oldRequestSignal = signal;
+          signal.addEventListener(
+            'abort',
+            () => {
+              transportAborted = true;
+              reject(new CanceledError('synthetic request aborted'));
+            },
+            { once: true },
+          );
+        }),
     )
     .mockResolvedValueOnce({ data: page(['new-session-answer']) });
   await host.rerender({
@@ -232,6 +248,7 @@ test('pages recommendations within their question, keeps unknown origins single,
   expect(host.result.current.data).toBeUndefined();
   expect(host.result.current.pagerKey).not.toBe(profileKey);
   const oldSessionKey = host.result.current.queryKey;
+  expect(oldRequestSignal?.aborted).toBe(false);
   await act(async () => {
     mockSessionVersion = 2;
     useAuthStore.setState({ cookies: 'synthetic-new-session' });
@@ -241,6 +258,8 @@ test('pages recommendations within their question, keeps unknown origins single,
       'new-session-answer',
     ),
   );
+  expect(oldRequestSignal?.aborted).toBe(true);
+  expect(transportAborted).toBe(true);
   expect(host.result.current.queryKey).toEqual([
     'answer-pager-source',
     2,

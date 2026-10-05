@@ -191,7 +191,14 @@ export function normalizeZhihuAnswerPreviewPage(
   const data = response.data.flatMap((entry): ZhihuAnswerPreviewItem[] => {
     const item = record(entry);
     if (!item) throw new Error(INVALID_RESPONSE);
-    if (item.type === 'answer') return [normalizeAnswer(item)];
+    if (item.type === 'answer') {
+      try {
+        return [normalizeAnswer(item)];
+      } catch {
+        // An unusable answer must not discard valid cards from the same page.
+        return [];
+      }
+    }
     if (item.type === 'login_prompt')
       return [
         {

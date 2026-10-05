@@ -944,7 +944,7 @@ test('keeps prose through bad annotations and textual unknown blocks without ena
       paragraph('甲乙丙', [reactionMark(0, 3)], 'duplicate-one'),
       paragraph('丁戊己', [reactionMark(0, 3)], 'duplicate-two'),
     ]),
-    content([paragraph('甲[公式]乙', [formulaMark(), reactionMark(0, 6)])]),
+    content([paragraph('甲[公式]乙', [formulaMark(), reactionMark(0, 1)])]),
   ];
   for (const source of ambiguous)
     expect(getStructuredContentSegmentInfos(source)).toEqual([]);
@@ -963,4 +963,22 @@ test('keeps prose through bad annotations and textual unknown blocks without ena
       (block) => !('paragraphId' in block),
     ),
   ).toBe(true);
+  const formulaDocument = normalizeZhihuStructuredContent(ambiguous[3]);
+  expect(
+    [...walkZhihuDocument(formulaDocument)].some(
+      (node) => node.type === 'segment',
+    ),
+  ).toBe(false);
+  const formulaFlow = flow(formulaDocument);
+  expect(formulaFlow.text).toBe('甲\uFFFC乙');
+  expect(formulaFlow.attachments).toEqual([
+    expect.objectContaining({
+      kind: 'formula',
+      start: 1,
+      end: 2,
+      latex: 'E = mc^2',
+      copyText: 'E = mc^2',
+      url: FORMULA_URL,
+    }),
+  ]);
 });

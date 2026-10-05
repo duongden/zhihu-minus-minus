@@ -4,11 +4,13 @@
 
 2026-09-30开始。本轮先实现各项能力的最小可见版本，随后按用户要求开放真实正文的可选入口；性能门槛、长文本基准与全量默认迁移暂不展开。排版策略依据 [Tiqian 评估](./tiqian-typography-strategies.md)，架构依据 [V2 计划](./renderer-v2-plan.md)。首先使用Android系统TextView/Spannable，2026-10-01开始增加iOS UIKit/TextKit adapter；两者均未接入Tiqian排版引擎。Android阶段的已验证结果与新增iOS验证分别记录。
 
+本文按时间保留早期实验和验证记录；下文历史阶段的 RNRH 默认值与 fallback 描述不代表当前实现。现行入口、后端与设置迁移以本节说明为准。
+
 ## 入口与数据链路
 
 开发构建：“我的 → 富文本测试案例（开发）→ tiqian-super-mini 原型”，路由 `/dev/rich-content/prototype`。六组本地合成内容覆盖跨段选择、装饰线、行内附件、知识点、媒体与表格、中西混排。案例不包含真实账号或对象，不提交点赞等业务操作。
 
-真实内容入口为“设置 → 外观与阅读 → 正文排版 → tiqian-super-mini”；“功能开关 → 正文排版”也会进入同一页面。该选项在正常业务页面使用，不需要开发案例入口；经典与网页排版仍可随时切回。原型和稳定fixture的后端切换仅保留在当前页面，不写入生产偏好。
+真实内容入口为“设置 → 外观与阅读 → 正文排版 → tiqian-super-mini”；“功能开关 → 正文排版”也会进入同一页面。该选项在正常业务页面使用，不需要开发案例入口；网页排版仍可随时切回。原型和稳定fixture的后端切换仅保留在当前页面，不写入生产偏好。
 
 ```text
 HTML + segment_infos / 想法 content 分段数组
@@ -20,11 +22,11 @@ HTML + segment_infos / 想法 content 分段数组
   + React Native 独立媒体 block
 ```
 
-公开能力从 `@/features/rich-content` 导入。原生实现位于 [`modules/zhihu-rich-text`](../../../modules/zhihu-rich-text/README.md)。业务默认读取 `richContentRenderer`，也可显式传 `renderer="native-v2"` 覆盖；新安装默认仍为RNRH。未包含新模块或Android/iOS以外的平台使用完整RNRH fallback，保留保存的偏好；原型页标明可用性。开发对照只保留Native V2 / RNRH / WebView。
+公开能力从 `@/features/rich-content` 导入。原生实现位于 [`modules/zhihu-rich-text`](../../../modules/zhihu-rich-text/README.md)。业务默认读取 `richContentRenderer`，也可显式传 `renderer="native-v2"` 覆盖；当前新安装默认采用 tiqian-super-mini（`native-v2`）。未包含新模块或Android/iOS以外的平台使用完整 WebView fallback，保留保存的偏好；原型页标明可用性。RNRH 已删除，开发对照只保留 tiqian-super-mini / WebView。
 
-推荐通过 `ZhihuContent` 使用该能力，默认采用正文设置，其交互外壳已经提供完整RNRH fallback；需要固定后端时显式传 `renderer="native-v2"`。直接挂载 `ZhihuNativeContent` 必须传入 `renderFallback: () => React.ReactNode`；功能原型宿主同样提供现有RNRH adapter，复用图片预览和链接分流。模块不反向导入外壳，避免fallback循环依赖。V2源选区和知识点事件仅在native可用时运行。
+推荐通过 `ZhihuContent` 使用该能力，默认采用正文设置，其交互外壳已经提供完整 WebView fallback；需要固定后端时显式传 `renderer="native-v2"`。直接挂载 `ZhihuNativeContent` 必须传入 `renderFallback: () => React.ReactNode`；功能原型宿主同样提供 WebView adapter，复用图片预览和链接分流。模块不反向导入外壳，避免fallback循环依赖。V2源选区和知识点事件仅在native可用时运行。
 
-正文偏好持久化使用settings version 13：旧 `useWebView=true` 迁移为 `webview`，其他旧值为 `rnrh`。Native V2只能由用户选择，不在升级迁移时静默开启。
+实验初期的 settings version 13 将旧 `useWebView=true` 迁移为 `webview`，其他旧值为 `rnrh`，当时 Native V2 仅由用户选择。当前 settings version 为 16；version 15 移除 RNRH，将旧 `rnrh` 或未设置偏好迁移为 `native-v2`，保留显式 WebView 选择及旧 `useWebView=true`；version 16 另为回答阅读方式补齐默认 `detail`，不改变正文后端选择。
 
 信息流外层 `FeedExcerpt` 按用户最终决定保留原有React Native `Text`摘要，单独回退，不跟随Native正文后端。预览弹层加载及首测阶段仍可保留已有摘要placeholder，最终正文按所选后端显示。本轮未保留独立NativeRichTextExcerpt或模块maxLines/ellipsis扩展。
 
