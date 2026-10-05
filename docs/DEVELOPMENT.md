@@ -183,7 +183,8 @@ xcrun simctl openurl booted 'zhihu--:///dev/rich-content/prototype?caseId=attach
 
 - 登录态主存于应用沙箱的 `auth-storage.json`，用于容纳多账号 Cookie；旧版本的 SecureStore Cookie 只在首次缺少文件时用于兼容导入。主文件与当前备份使用 AES-GCM，密钥另存 SecureStore，原子读取负责 Android `.bak` 恢复；旧明文与旧 store 均保留兼容迁移，详见 [账号保存与恢复](./AUTH_STORAGE.md)。
 - 设置和 telemetry 开关使用 SecureStore；阅读进度迁移到最多 100 条的双快照文件，两个快照提交后才清理旧 SecureStore。推荐流缓存、曝光与创作草稿使用 Expo SQLite；缓存 24 小时过期、曝光 30 天保留并定期限量，草稿规则见 [发布编辑器](../features/publishing/README.md)。
-- 内容过滤仅作用于推荐流，默认开启广告/营销等现有规则，升级保留已保存的总开关。设置 v17 新增 `filterRegexPatterns`，迁移与更新时移除空白、重复、非法正则；新规则默认留空。`utils/feedRegex.ts` 使用已有 htmlparser2 提取完整正文纯文本，只读取 Pin 的文字段落，忽略摘要、截断正文与纯媒体内容；规则采用固定 `su` flags，按数组身份缓存编译结果、按不可变 FeedItem 身份缓存纯文本。关注豁免先于广告、正则与质量规则；正则与质量开关独立，折叠/隐藏和设置页统计共用 `evaluateFeedItem`。相关回归运行 `npm test -- tests/feedFilter.test.ts tests/FeedRegexSettings.test.tsx tests/settings-renderer-migration.test.ts --runInBand`。
+- 内容过滤仅作用于推荐流，默认开启广告/营销等现有规则，升级保留已保存的总开关。设置 v17 新增 `filterRegexPatterns`，迁移与更新时移除空白、重复、非法正则；新规则默认留空，修改其他设置或保存归一后相同的规则时保留数组引用，避免重复过滤和重编译。`utils/feedRegex.ts` 使用已有 htmlparser2 提取完整正文纯文本，只读取 Pin 的文字段落，忽略摘要、截断正文与纯媒体内容；规则采用固定 `su` flags，按数组身份缓存编译结果、按不可变 FeedItem 身份缓存纯文本。关注豁免先于广告、正则与质量规则；正则与质量开关独立，折叠/隐藏和设置页统计共用 `evaluateFeedItem`。相关回归运行 `npm test -- tests/feedFilter.test.ts tests/FeedRegexSettings.test.tsx tests/settings-renderer-migration.test.ts --runInBand`。
+- 自定义正则目前在 JavaScript 线程同步执行，语法校验不保证匹配开销。用户保存的复杂回溯表达式遇到特定正文时可能阻塞界面；编译缓存、字符数限制和普通定时器不能提供执行超时保证。需要可终止的隔离执行或受限语法的非回溯引擎才能消除此风险，当前尚未实现。
 - Cookie、`z_c0`、`d_c0`、`_xsrf`、X-ZSE 请求头、完整 Axios config、真实登录 URL 和未脱敏正文都不能进入日志、fixture、截图或测试快照。
 - API 调试日志只允许记录 method、脱敏后的 path、status 和独立 request id。新增日志前检查成功、失败和异常对象分支。
 - 真机正文样本先脱敏，放入 `features/rich-content/fixtures/inbox/`，确认结构后再登记到 `cases/` 和 manifest。

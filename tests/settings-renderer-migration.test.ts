@@ -284,3 +284,79 @@ test('sanitizes invalid custom regex payloads on migration and updates', async (
   expect(useSettingsStore.getState().filterRegexPatterns).toEqual([]);
   expect(useSettingsStore.getState().enableLocalFeedFilter).toBe(true);
 });
+
+test.each([
+  { patterns: [] },
+  { patterns: ['广告\\s*推广', '^(?:优惠|福利)'] },
+])('retains regex rule references across unrelated updates for %j', ({
+  patterns,
+}) => {
+  const { updateSettings } = useSettingsStore.getState();
+  updateSettings({ filterRegexPatterns: patterns });
+  const savedPatterns = useSettingsStore.getState().filterRegexPatterns;
+
+  updateSettings({ fontSizeScale: 1.4 });
+  expect(useSettingsStore.getState().filterRegexPatterns).toBe(savedPatterns);
+  updateSettings({ enableLocalFeedFilter: false });
+  expect(useSettingsStore.getState().filterRegexPatterns).toBe(savedPatterns);
+  updateSettings({ enableLocalFeedFilter: true });
+  expect(useSettingsStore.getState().filterRegexPatterns).toBe(savedPatterns);
+  expect(savedPatterns).toEqual(patterns);
+});
+
+test('reuses regex rules when an explicit update normalizes to the saved rules', () => {
+  const { updateSettings } = useSettingsStore.getState();
+  updateSettings({ filterRegexPatterns: ['广告\\s*推广', '^(?:优惠|福利)'] });
+  const savedPatterns = useSettingsStore.getState().filterRegexPatterns;
+  const suppliedPatterns = [
+    ' 广告\\s*推广 ',
+    '^(?:优惠|福利)',
+    '广告\\s*推广',
+    '',
+  ];
+
+  updateSettings({ filterRegexPatterns: suppliedPatterns });
+  expect(useSettingsStore.getState().filterRegexPatterns).toBe(savedPatterns);
+  expect(savedPatterns).toEqual(['广告\\s*推广', '^(?:优惠|福利)']);
+  expect(suppliedPatterns).toEqual([
+    ' 广告\\s*推广 ',
+    '^(?:优惠|福利)',
+    '广告\\s*推广',
+    '',
+  ]);
+});
+
+test('replaces changed and cleared regex rules without mutating prior rules', () => {
+  const { updateSettings } = useSettingsStore.getState();
+  updateSettings({ filterRegexPatterns: ['广告\\s*推广', '^(?:优惠|福利)'] });
+  const originalPatterns = useSettingsStore.getState().filterRegexPatterns;
+
+  updateSettings({ filterRegexPatterns: ['盐选'] });
+  const changedPatterns = useSettingsStore.getState().filterRegexPatterns;
+  expect(changedPatterns).not.toBe(originalPatterns);
+  expect(changedPatterns).toEqual(['盐选']);
+  expect(originalPatterns).toEqual(['广告\\s*推广', '^(?:优惠|福利)']);
+
+  updateSettings({ filterRegexPatterns: [] });
+  const clearedPatterns = useSettingsStore.getState().filterRegexPatterns;
+  expect(clearedPatterns).not.toBe(changedPatterns);
+  expect(clearedPatterns).toEqual([]);
+  expect(changedPatterns).toEqual(['盐选']);
+  expect(originalPatterns).toEqual(['广告\\s*推广', '^(?:优惠|福利)']);
+});
+
+test('preserves an explicit new regex rule order without mutating saved rules', () => {
+  const { updateSettings } = useSettingsStore.getState();
+  updateSettings({ filterRegexPatterns: ['广告\\s*推广', '^(?:优惠|福利)'] });
+  const savedPatterns = useSettingsStore.getState().filterRegexPatterns;
+
+  updateSettings({ filterRegexPatterns: ['^(?:优惠|福利)', '广告\\s*推广'] });
+  expect(useSettingsStore.getState().filterRegexPatterns).not.toBe(
+    savedPatterns,
+  );
+  expect(useSettingsStore.getState().filterRegexPatterns).toEqual([
+    '^(?:优惠|福利)',
+    '广告\\s*推广',
+  ]);
+  expect(savedPatterns).toEqual(['广告\\s*推广', '^(?:优惠|福利)']);
+});

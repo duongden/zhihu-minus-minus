@@ -291,9 +291,20 @@ export const useSettingsStore = create<SettingsState>()(
           if (typeof nextSettings.enableLocalFeedFilter !== 'boolean') {
             nextSettings.enableLocalFeedFilter = true;
           }
-          nextSettings.filterRegexPatterns = normalizeFeedRegexPatterns(
-            nextSettings.filterRegexPatterns,
-          );
+          if ('filterRegexPatterns' in newSettings) {
+            const patterns = normalizeFeedRegexPatterns(
+              newSettings.filterRegexPatterns,
+            );
+            const previousPatterns = state.filterRegexPatterns;
+            // Feed memoization and the compiled-regex cache use array identity.
+            nextSettings.filterRegexPatterns =
+              patterns.length === previousPatterns.length &&
+              patterns.every(
+                (pattern, index) => pattern === previousPatterns[index],
+              )
+                ? previousPatterns
+                : patterns;
+          }
           if (!isValidFilterMode(nextSettings.filterMode)) {
             nextSettings.filterMode = 'collapse';
           }
