@@ -8,10 +8,13 @@ import {
   withTiming,
 } from 'react-native-reanimated';
 import type { ZhihuPreviewAnswerMetadata } from '@/api/zhihu/nextRender';
-import { ContentActionBar } from '@/components/ContentActionBar';
+import {
+  CONTENT_ACTION_BAR_HEIGHT,
+  ContentActionBar,
+} from '@/components/ContentActionBar';
 import { ContentActionButton } from '@/components/ContentActionButton';
-import { LikeButton } from '@/components/LikeButton';
 import { MoreActionsButton } from '@/components/MoreActionsButton';
+import { SegmentedVoteCapsule } from '@/components/SegmentedVoteCapsule';
 import { Text, useRuntimeThemeColors, View } from '@/components/Themed';
 
 interface AnswerPreviewFloatingBarProps {
@@ -48,80 +51,94 @@ export function AnswerPreviewFloatingBar({
       bottomInset={bottomInset}
       visible={shown}
       style={animatedStyle}
-    >
-      {answer ? (
-        <View style={styles.row}>
-          <LikeButton
+      variant="islands"
+      leading={
+        answer ? (
+          <SegmentedVoteCapsule
             id={answer.id}
             count={answer.voteup_count}
             voted={answer.relationship.voting}
             type="answers"
-            variant="ghost"
           />
-          <ContentActionButton
-            accessibilityRole="button"
-            accessibilityLabel={`${answer.comment_count} 条回答评论`}
-            style={styles.action}
-            onPress={() => {
-              if (!shown) return;
-              router.push({
-                pathname: '/comments/[id]',
-                params: {
-                  id: answer.id,
-                  type: 'answer',
-                  count: answer.comment_count,
-                },
-              });
-            }}
-          >
-            <Ionicons
-              name="chatbubble-outline"
-              size={20}
-              color={colors.textSecondary}
-            />
-            <Text type="secondary" style={styles.label}>
-              {answer.comment_count}
-            </Text>
-          </ContentActionButton>
-          {canCollapse ? (
+        ) : null
+      }
+      trailing={
+        answer ? (
+          <View style={styles.trailingGroup}>
             <ContentActionButton
               accessibilityRole="button"
-              accessibilityLabel="收起当前回答"
+              accessibilityLabel={`${answer.comment_count} 条回答评论`}
               style={styles.action}
               onPress={() => {
-                if (shown) onCollapse(answer.id);
+                if (!shown) return;
+                router.push({
+                  pathname: '/comments/[id]',
+                  params: {
+                    id: answer.id,
+                    type: 'answer',
+                    count: answer.comment_count,
+                  },
+                });
               }}
             >
               <Ionicons
-                name="chevron-up-circle-outline"
-                size={20}
-                color={colors.link}
+                name="chatbubble-outline"
+                size={19}
+                color={colors.textSecondary}
               />
-              <Text style={[styles.label, { color: colors.link }]}>收起</Text>
+              <Text type="secondary" style={styles.label}>
+                {answer.comment_count}
+              </Text>
             </ContentActionButton>
-          ) : null}
-          <MoreActionsButton
-            accessibilityLabel="回答更多操作"
-            style={styles.more}
+            <MoreActionsButton
+              accessibilityLabel="回答更多操作"
+              style={styles.more}
+              onPress={() => {
+                if (shown) onMore(answer);
+              }}
+            />
+          </View>
+        ) : null
+      }
+      accessory={
+        shown && answer && canCollapse ? (
+          <ContentActionButton
+            accessibilityRole="button"
+            accessibilityLabel="收起当前回答"
+            style={styles.collapseCircle}
             onPress={() => {
-              if (shown) onMore(answer);
+              if (shown) onCollapse(answer.id);
             }}
-          />
-        </View>
-      ) : null}
-    </ContentActionBar>
+          >
+            <Ionicons name="chevron-up" size={22} color={colors.link} />
+          </ContentActionButton>
+        ) : null
+      }
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  row: {
-    flex: 1,
+  trailingGroup: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 15,
     backgroundColor: 'transparent',
   },
-  action: { gap: 4 },
+  action: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
   label: { fontSize: 13, lineHeight: 20, fontWeight: '600' },
-  more: { marginLeft: 'auto' },
+  more: { marginLeft: 4 },
+  collapseCircle: {
+    width: CONTENT_ACTION_BAR_HEIGHT,
+    height: CONTENT_ACTION_BAR_HEIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
 });

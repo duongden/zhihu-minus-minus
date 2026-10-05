@@ -34,7 +34,7 @@ export const LikeButton = ({
   count: number | string;
   voted?: number;
   type?: VoteContentType;
-  variant?: 'default' | 'ghost' | 'minimal';
+  variant?: 'default' | 'ghost' | 'minimal' | 'segmented';
   onVoteChange?: (voted: number, count: number) => void;
 }) => {
   const [voted, setVoted] = useState(initialVoted);
@@ -149,13 +149,17 @@ export const LikeButton = ({
           ? 'flex-row items-center px-2 py-1.5 rounded-md'
           : variant === 'ghost'
             ? 'flex-row items-center bg-transparent py-1 px-1 rounded-full'
-            : 'flex-row items-center justify-center bg-transparent px-1.5 py-1 rounded-full'
+            : variant === 'segmented'
+              ? 'flex-row items-center justify-center bg-transparent py-1.5 px-3'
+              : 'flex-row items-center justify-center bg-transparent px-1.5 py-1 rounded-full'
       }
       style={[
         variant === 'default' && {
           backgroundColor: isUpvoted ? primaryColor : borderColor,
         },
-        (variant === 'ghost' || variant === 'minimal') && {
+        (variant === 'ghost' ||
+          variant === 'minimal' ||
+          variant === 'segmented') && {
           borderRadius: 99,
         },
       ]}
@@ -177,8 +181,26 @@ export const LikeButton = ({
             active={isUpvoted}
             color={foregroundColor}
             direction="up"
-            size={variant === 'default' ? 18 : variant === 'minimal' ? 24 : 16}
+            size={
+              variant === 'default'
+                ? 18
+                : variant === 'minimal'
+                  ? 24
+                  : variant === 'segmented'
+                    ? 15
+                    : 16
+            }
           />
+          {variant === 'segmented' && (
+            <Text
+              className="text-xs ml-1 font-semibold"
+              style={{
+                color: foregroundColor,
+              }}
+            >
+              {typeof count === 'number' ? count : count || 0}
+            </Text>
+          )}
           {variant === 'minimal' && (
             <Text
               className="text-sm ml-0.5 font-bold"
@@ -191,7 +213,7 @@ export const LikeButton = ({
           )}
         </Animated.View>
       )}
-      {variant !== 'minimal' && (
+      {variant !== 'minimal' && variant !== 'segmented' && (
         <Text
           className={`ml-1 text-[13px] font-semibold ${variant === 'ghost' ? 'text-xs ml-0.5' : ''}`}
           style={{

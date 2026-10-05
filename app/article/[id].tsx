@@ -28,12 +28,11 @@ import {
   getContentActionBarBottom,
 } from '@/components/ContentActionBar';
 import { ContentActionButton } from '@/components/ContentActionButton';
-import { DownvoteButton } from '@/components/DownvoteButton';
 import { FollowButton } from '@/components/FollowButton';
-import { LikeButton } from '@/components/LikeButton';
 import { MoreActionsButton } from '@/components/MoreActionsButton';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { ReadingProgressNotice } from '@/components/ReadingProgressNotice';
+import { SegmentedVoteCapsule } from '@/components/SegmentedVoteCapsule';
 import { ShareMenu } from '@/components/ShareMenu';
 import { StableAvatar } from '@/components/StableAvatar';
 import { Text, ThemedIcon, useThemeColor, View } from '@/components/Themed';
@@ -510,50 +509,43 @@ export default function ArticleDetail() {
         <ContentActionBar
           bottomInset={insets.bottom}
           bottomOffset={ARTICLE_ACTION_BAR_OFFSET}
-        >
-          <View className="flex-row items-center px-5 h-full bg-transparent">
+          leading={
+            <SegmentedVoteCapsule
+              id={id as string}
+              count={data.voteup_count ?? 0}
+              voted={data.relationship?.voting ?? 0}
+              type="articles"
+            />
+          }
+          trailing={
             <View className="flex-row items-center bg-transparent">
-              <LikeButton
-                id={id as string}
-                count={data.voteup_count ?? 0}
-                voted={data.relationship?.voting === 1 ? 1 : 0}
-                type="articles"
-                variant="minimal"
-              />
-              <View className="w-2.5 bg-transparent" />
-              <DownvoteButton
-                id={id as string}
-                voted={data.relationship?.voting}
-                type="articles"
-                variant="minimal"
-              />
-            </View>
-            <View className="flex-1 flex-row justify-end items-center bg-transparent">
               <ContentActionButton
-                className="items-center justify-center ml-3 p-2 flex-row rounded-full bg-transparent"
+                accessibilityRole="button"
+                accessibilityLabel="评论"
+                className="items-center justify-center ml-2 px-2.5 py-1.5 flex-row bg-transparent"
                 onPress={() => router.push(`/comments/${id}?type=article`)}
               >
                 <ThemedIcon
                   name="chatbubble-outline"
-                  size={24}
+                  size={20}
                   colorType="secondary"
                 />
                 {data.comment_count > 0 && (
                   <Text
                     type="secondary"
-                    className="ml-1 text-[13px] font-medium"
+                    className="ml-1 text-[13px] font-semibold"
                   >
                     {data.comment_count}
                   </Text>
                 )}
               </ContentActionButton>
               <MoreActionsButton
-                style={{ marginLeft: 12 }}
+                style={{ marginLeft: 4 }}
                 onPress={() => setOpenMenuIdentity(contentIdentity)}
               />
             </View>
-          </View>
-        </ContentActionBar>
+          }
+        />
       )}
 
       <ShareMenu

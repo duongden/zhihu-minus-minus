@@ -227,12 +227,12 @@ test('floating bar keeps later answer collapse while a fixed first answer has on
 });
 
 test.each([
-  [0, 0, 12],
-  [8, 0, 12],
-  [12, 0, 12],
-  [34, 0, 34],
-  [8, 10, 18],
-  [34, 10, 44],
+  [0, 0, 32],
+  [8, 0, 32],
+  [12, 0, 32],
+  [34, 0, 54],
+  [8, 10, 38],
+  [34, 10, 64],
 ])('floating bar clearance preserves safe-area and offsets (%d, %d)', (inset, offset, bottom) => {
   expect(getContentActionBarBottom(inset, offset)).toBe(bottom);
 });

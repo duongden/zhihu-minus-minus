@@ -42,6 +42,7 @@ let mockMutationOptions: MutationOptions;
 const mockPush = jest.fn();
 const mockMutate = jest.fn();
 const mockInvalidateQueries = jest.fn();
+const mockDownvoteButton = jest.fn((_props: { voted?: number }) => null);
 const mockAnswer: AnswerDetail = {
   id: '84',
   question: { id: '7', title: '合成问题', type: 'question' },
@@ -246,7 +247,7 @@ jest.mock('../components/StableAvatar', () => ({ StableAvatar: () => null }));
 jest.mock('../components/FollowButton', () => ({ FollowButton: () => null }));
 jest.mock('../components/LikeButton', () => ({ LikeButton: () => null }));
 jest.mock('../components/DownvoteButton', () => ({
-  DownvoteButton: () => null,
+  DownvoteButton: (props: { voted?: number }) => mockDownvoteButton(props),
 }));
 jest.mock('../components/ReadingProgressNotice', () => ({
   ReadingProgressNotice: () => null,
@@ -390,6 +391,19 @@ test('both article more buttons directly open the same article menu', async () =
     expect(mockMenuProps.additionalOptions).toBeUndefined();
     await act(() => mockMenuProps.onClose());
   }
+});
+
+test.each([
+  -1, 0, 1,
+])('article action bar preserves voting state %d', async (voting) => {
+  mockQueryData['zhihu-article'] = {
+    ...(mockQueryData['zhihu-article'] as object),
+    relationship: { voting },
+  };
+  await render(<ArticleDetail />);
+  expect(mockDownvoteButton).toHaveBeenLastCalledWith(
+    expect.objectContaining({ voted: voting }),
+  );
 });
 
 test.each([
