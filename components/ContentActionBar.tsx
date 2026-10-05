@@ -19,7 +19,7 @@ export function getContentActionBarBottom(
   bottomInset: number,
   bottomOffset = 0,
 ): number {
-  return Math.max(bottomInset + bottomOffset, 16);
+  return Math.max(bottomInset + bottomOffset, 12);
 }
 
 /** Common floating surface; each content screen owns its action row layout. */

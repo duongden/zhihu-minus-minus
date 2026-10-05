@@ -20,6 +20,7 @@ interface AnswerPreviewFloatingBarProps {
   answer: ZhihuPreviewAnswerMetadata | null;
   visible: boolean;
   bottomInset: number;
+  canCollapse?: boolean;
   onCollapse: (answerId: string) => void;
   onMore: (answer: ZhihuPreviewAnswerMetadata) => void;
 }
@@ -28,6 +29,7 @@ export function AnswerPreviewFloatingBar({
   answer,
   visible,
   bottomInset,
+  canCollapse = true,
   onCollapse,
   onMore,
 }: AnswerPreviewFloatingBarProps) {
@@ -84,21 +86,23 @@ export function AnswerPreviewFloatingBar({
               {answer.comment_count}
             </Text>
           </ContentActionButton>
-          <ContentActionButton
-            accessibilityRole="button"
-            accessibilityLabel="收起当前回答"
-            style={styles.action}
-            onPress={() => {
-              if (shown) onCollapse(answer.id);
-            }}
-          >
-            <Ionicons
-              name="chevron-up-circle-outline"
-              size={20}
-              color={colors.link}
-            />
-            <Text style={[styles.label, { color: colors.link }]}>收起</Text>
-          </ContentActionButton>
+          {canCollapse ? (
+            <ContentActionButton
+              accessibilityRole="button"
+              accessibilityLabel="收起当前回答"
+              style={styles.action}
+              onPress={() => {
+                if (shown) onCollapse(answer.id);
+              }}
+            >
+              <Ionicons
+                name="chevron-up-circle-outline"
+                size={20}
+                color={colors.link}
+              />
+              <Text style={[styles.label, { color: colors.link }]}>收起</Text>
+            </ContentActionButton>
+          ) : null}
           <MoreActionsButton
             accessibilityLabel="回答更多操作"
             style={styles.more}

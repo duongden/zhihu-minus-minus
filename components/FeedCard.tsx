@@ -1,4 +1,3 @@
-import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -6,7 +5,7 @@ import { View as RNView } from 'react-native';
 import Animated, { SharedTransition } from 'react-native-reanimated';
 import { hasAuthenticationCookie } from '@/api/client';
 import { type FeedItem, getVoteSuccessMessage, voteContent } from '@/api/zhihu';
-import { MoreActionsButton } from '@/components/MoreActionsButton';
+import { FeedCardActionRow } from '@/components/FeedCardActionRow';
 import { useColorScheme } from '@/components/useColorScheme';
 import Colors from '@/constants/Colors';
 import { useContentActions } from '@/hooks/useContentActions';
@@ -28,9 +27,8 @@ import { BouncyButton } from './BouncyButton';
 import { CustomContextMenu, type MenuOption } from './CustomContextMenu';
 import { FeedCardPreview } from './FeedCardPreview';
 import { FeedExcerpt } from './FeedExcerpt';
-import { LikeButton } from './LikeButton';
 import { type ShareContentType, ShareMenu } from './ShareMenu';
-import { Text, useThemeColor, View } from './Themed';
+import { Text, View } from './Themed';
 
 const slowTransition = SharedTransition.duration(600);
 
@@ -147,7 +145,6 @@ const FeedCardComponent = ({ item, tab, answerContext }: FeedCardProps) => {
   const storeCollected = useCollectionStore((state) =>
     itemIdStr ? state.collectedStatusMap[itemIdStr] : undefined,
   );
-  const secondaryColor = useThemeColor({}, 'textSecondary');
 
   const cleanTitle =
     typeof item.title === 'string' ? item.title : item.titleString || '';
@@ -484,54 +481,29 @@ const FeedCardComponent = ({ item, tab, answerContext }: FeedCardProps) => {
           )}
         </View>
 
-        <View className="flex-row items-center bg-transparent">
-          {engagementType ? (
-            <>
-              <LikeButton
-                id={item.id}
-                count={voteCount}
-                voted={voted}
-                type={engagementType}
-                variant="ghost"
-                onVoteChange={(newVoted, newCount) => {
-                  setVoted(newVoted);
-                  setVoteCount(newCount);
-                }}
-              />
-
-              {/* 点击评论按钮 -> 评论页 */}
-              <BouncyButton
-                onPress={() => {
-                  const type =
-                    item.type === 'articles'
-                      ? 'article'
-                      : item.type === 'answers'
-                        ? 'answer'
-                        : item.type.slice(0, -1);
-                  router.push(
-                    `/comments/${item.id}?type=${type}&count=${item.commentCount}`,
-                  );
-                }}
-                className="flex-row items-center  bg-transparent ml-4 py-1 px-3 rounded-full"
-              >
-                <Ionicons
-                  name="chatbubble-outline"
-                  size={16}
-                  color={secondaryColor}
-                />
-                <Text type="secondary" className="ml-1 text-xs font-semibold">
-                  {item.commentCount > 0 ? item.commentCount : '0'}
-                </Text>
-              </BouncyButton>
-            </>
-          ) : null}
-
-          <MoreActionsButton
-            onPress={() => setMenuVisible(true)}
-            color={secondaryColor}
-            style={{ marginLeft: 'auto', marginRight: -8 }}
-          />
-        </View>
+        <FeedCardActionRow
+          id={item.id}
+          voteCount={voteCount}
+          voted={voted}
+          engagementType={engagementType}
+          commentCount={item.commentCount}
+          onVoteChange={(newVoted, newCount) => {
+            setVoted(newVoted);
+            setVoteCount(newCount);
+          }}
+          onComments={() => {
+            const type =
+              item.type === 'articles'
+                ? 'article'
+                : item.type === 'answers'
+                  ? 'answer'
+                  : item.type.slice(0, -1);
+            router.push(
+              `/comments/${item.id}?type=${type}&count=${item.commentCount}`,
+            );
+          }}
+          onMore={() => setMenuVisible(true)}
+        />
 
         <ShareMenu
           visible={menuVisible}

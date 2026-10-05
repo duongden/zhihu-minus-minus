@@ -1,8 +1,13 @@
-import { Ionicons } from '@expo/vector-icons';
 import { FlashList, type FlashListRef } from '@shopify/flash-list';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   ActivityIndicator,
   type NativeScrollEvent,
@@ -25,13 +30,11 @@ import {
 import { AnswerPreviewPlainBody } from '@/components/AnswerPreviewPlainBody';
 import { AnswerPreviewQuestionHeader } from '@/components/AnswerPreviewQuestionHeader';
 import { getContentActionBarBottom } from '@/components/ContentActionBar';
-import { ContentActionButton } from '@/components/ContentActionButton';
 import {
   DetailNavigationHeader,
   useDetailNavigationHeight,
 } from '@/components/DetailNavigationHeader';
-import { LikeButton } from '@/components/LikeButton';
-import { MoreActionsButton } from '@/components/MoreActionsButton';
+import { FeedCardActionRow } from '@/components/FeedCardActionRow';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { ShareMenu } from '@/components/ShareMenu';
 import { StableAvatar } from '@/components/StableAvatar';
@@ -57,7 +60,6 @@ type PreviewItem = ZhihuReadingPreviewItem;
 type PreviewAnswer = Exclude<PreviewItem, ZhihuPreviewLoginPrompt>;
 const initialContentIds = new WeakMap<StructuredContent, number>();
 let initialContentSequence = 0;
-const EMPTY_EXPANDED_IDS: ReadonlySet<string> = new Set();
 const DEFAULT_ANSWER_CONTEXT: AnswerReadingContext = { scene: 'unknown' };
 
 /** Cache identity is local; neither prose nor opaque continuation URLs become keys. */
@@ -233,8 +235,6 @@ const AnswerPreviewCard = React.memo(function AnswerPreviewCard({
         <AnswerPreviewPlainBody
           item={item}
           scope={scope}
-          expanded={expanded}
-          onExpandedChange={onExpandedChange}
           onRefresh={onRefresh}
         />
       )}
@@ -242,30 +242,23 @@ const AnswerPreviewCard = React.memo(function AnswerPreviewCard({
         ref={footerRef}
         collapsable={false}
         onLayout={onFooterLayout}
-        className="flex-row items-center justify-between mt-3 bg-transparent"
+        className="mt-3 bg-transparent"
       >
-        <LikeButton
+        <FeedCardActionRow
           id={item.id}
-          count={item.voteup_count}
+          voteCount={item.voteup_count}
           voted={item.relationship.voting}
-          variant="minimal"
+          engagementType="answers"
+          commentCount={item.comment_count}
+          showDownvote
+          commentAccessibilityLabel="查看评论"
+          onComments={() =>
+            router.push(
+              `/comments/${item.id}?type=answer&count=${item.comment_count}`,
+            )
+          }
+          onMore={onMore}
         />
-        <ContentActionButton
-          accessibilityRole="button"
-          accessibilityLabel="查看评论"
-          className="flex-row items-center px-2 py-2 rounded-full"
-          onPress={() => router.push(`/comments/${item.id}?type=answer`)}
-        >
-          <Ionicons
-            name="chatbubble-outline"
-            size={18}
-            color={colors.textSecondary}
-          />
-          <Text type="secondary" className="ml-1 text-xs">
-            {item.comment_count}
-          </Text>
-        </ContentActionButton>
-        <MoreActionsButton accessibilityLabel="更多操作" onPress={onMore} />
       </NativeView>
     </View>
   );
@@ -340,8 +333,16 @@ export function AnswerPreviewList({
     scope,
     ids: new Set<string>(),
   });
-  const expandedIds =
-    expandedState.scope === scope ? expandedState.ids : EMPTY_EXPANDED_IDS;
+  useEffect(() => {
+    setExpandedState((current) =>
+      current.scope === scope ? current : { scope, ids: new Set() },
+    );
+  }, [scope]);
+  const expandedIds = useMemo(() => {
+    const ids = new Set(expandedState.scope === scope ? expandedState.ids : []);
+    ids.add(answerId);
+    return ids;
+  }, [answerId, expandedState, scope]);
   const floatingBar = useAnswerPreviewFloatingBar({
     scope,
     items: query.items,
@@ -437,7 +438,7 @@ export function AnswerPreviewList({
   );
   const changeExpanded = useCallback(
     (id: string, expanded: boolean) => {
-      if (currentScope.current !== scope) return;
+      if (currentScope.current !== scope || id === answerId) return;
       if (expanded) recordAnswer(id);
       setExpandedState((current) => {
         const ids = new Set(current.scope === scope ? current.ids : []);
@@ -458,7 +459,7 @@ export function AnswerPreviewList({
           });
       }
     },
-    [recordAnswer, scope, query.items, insets.top, navigationHeight],
+    [recordAnswer, scope, answerId, query.items, insets.top, navigationHeight],
   );
   const selectedQuestion =
     query.items.find(
@@ -651,6 +652,7 @@ export function AnswerPreviewList({
         answer={floatingBar.activeAnswer}
         visible={floatingBar.visible}
         bottomInset={insets.bottom}
+        canCollapse={floatingBar.activeAnswer?.id !== answerId}
         onCollapse={(id) => changeExpanded(id, false)}
         onMore={(item) => setMenuState({ scope, item })}
       />

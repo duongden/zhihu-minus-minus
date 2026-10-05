@@ -121,15 +121,44 @@ test('an old downvote completion cannot select the next recycled target', async 
       }),
   );
   const host = await render(
-    createElement(DownvoteButton, { id: 'original', voted: 0 }),
+    createElement(DownvoteButton, {
+      id: 'original',
+      voted: 0,
+      variant: 'ghost',
+    }),
   );
-  await fireEvent.press(host.getByRole('button'));
-  await host.rerender(createElement(DownvoteButton, { id: 'next', voted: 0 }));
-  await act(() => finish({ voted: -1 }));
+  await fireEvent.press(host.getByRole('button', { name: '反对' }));
+  expect(voteContentDirect).toHaveBeenCalledWith('original', 'answers', 'down');
+  await host.rerender(
+    createElement(DownvoteButton, { id: 'next', voted: 0, variant: 'ghost' }),
+  );
+  await act(() => finish({ voted: -1, voteCount: 9 }));
   expect(host.getByRole('button').props.accessibilityState).toMatchObject({
     busy: false,
     selected: false,
   });
+  expect(updateContentInteractionCaches).toHaveBeenCalledWith(
+    expect.anything(),
+    {
+      type: 'answers',
+      id: 'original',
+      voted: -1,
+      voteCount: 9,
+    },
+  );
+  await fireEvent.press(host.getByRole('button', { name: '反对' }));
+  expect(voteContentDirect).toHaveBeenLastCalledWith('next', 'answers', 'down');
+  await act(() => finish({ voted: -1, voteCount: 7 }));
+  expect(host.getByRole('button', { name: '取消反对' })).toBeSelected();
+  expect(updateContentInteractionCaches).toHaveBeenLastCalledWith(
+    expect.anything(),
+    {
+      type: 'answers',
+      id: 'next',
+      voted: -1,
+      voteCount: 7,
+    },
+  );
 });
 
 test('an old follow completion leaves the next user card unchanged', async () => {

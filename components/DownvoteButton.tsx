@@ -31,7 +31,7 @@ export const DownvoteButton = ({
   id: string | number;
   voted?: number;
   type?: VoteContentType;
-  variant?: 'default' | 'minimal';
+  variant?: 'default' | 'ghost' | 'minimal';
 }) => {
   const [voted, setVoted] = useState(initialVoted);
   const identity = `${type}:${id}`;
@@ -102,19 +102,24 @@ export const DownvoteButton = ({
   return (
     <BouncyButton
       accessibilityRole="button"
+      accessibilityLabel={isDownvoted ? '取消反对' : '反对'}
       accessibilityState={{ busy: loading, selected: isDownvoted }}
       onPress={handlePress}
       disabled={loading}
       className={
         variant === 'default'
           ? 'w-9 h-9 rounded-lg justify-center items-center '
-          : 'flex-row items-center justify-center bg-transparent p-2'
+          : variant === 'ghost'
+            ? 'flex-row items-center justify-center bg-transparent py-1 px-1 rounded-full'
+            : 'flex-row items-center justify-center bg-transparent p-2'
       }
       style={[
         variant === 'default' && {
           backgroundColor: isDownvoted ? primaryColor : `${primaryColor}1a`,
         },
-        variant === 'minimal' && { borderRadius: 99 },
+        (variant === 'ghost' || variant === 'minimal') && {
+          borderRadius: 99,
+        },
       ]}
     >
       {loading ? (
@@ -125,7 +130,7 @@ export const DownvoteButton = ({
             active={isDownvoted}
             color={foregroundColor}
             direction="down"
-            size={variant === 'minimal' ? 24 : 20}
+            size={variant === 'minimal' ? 24 : variant === 'ghost' ? 16 : 20}
           />
         </Animated.View>
       )}
