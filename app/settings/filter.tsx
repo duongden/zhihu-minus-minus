@@ -13,6 +13,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { FeedItem } from '@/api/zhihu';
 import { BouncyButton } from '@/components/BouncyButton';
+import { FeedRegexSettings } from '@/components/FeedRegexSettings';
 import {
   Section,
   SettingItem,
@@ -55,6 +56,7 @@ export default function FilterSettings() {
     filterBlockAdvertiser,
     filterEnableQuality,
     filterQualityLevel,
+    filterRegexPatterns,
     filterKeepFollowing,
     filterKeepUpvotedByFollowee,
     enableLocalFeedDedup,
@@ -117,6 +119,7 @@ export default function FilterSettings() {
       blockAdvertiser: filterBlockAdvertiser,
       enableQuality: filterEnableQuality,
       qualityLevel: filterQualityLevel,
+      regexPatterns: filterRegexPatterns,
       keepFollowing: filterKeepFollowing,
       keepUpvotedByFollowee: filterKeepUpvotedByFollowee,
     });
@@ -132,6 +135,7 @@ export default function FilterSettings() {
     filterBlockAdvertiser,
     filterEnableQuality,
     filterQualityLevel,
+    filterRegexPatterns,
     filterKeepFollowing,
     filterKeepUpvotedByFollowee,
   ]);
@@ -363,6 +367,14 @@ export default function FilterSettings() {
                 </RNView>
               </SettingItem>
             </Section>
+
+            <FeedRegexSettings
+              patterns={filterRegexPatterns}
+              onChange={(patterns) =>
+                updateSettings({ filterRegexPatterns: patterns })
+              }
+              colorScheme={colorScheme}
+            />
 
             {/* 以下内容永不过滤 */}
             <Section title="以下内容永不过滤" colorScheme={colorScheme}>
