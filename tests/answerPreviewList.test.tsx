@@ -136,6 +136,7 @@ jest.mock('../components/Themed', () => {
   };
 });
 jest.mock('../components/ContentActionBar', () => ({
+  CONTENT_ACTION_BAR_HEIGHT: 44,
   getContentActionBarBottom: (inset: number) => Math.max(inset, 12),
 }));
 jest.mock('../components/BouncyButton', () => ({
@@ -151,7 +152,6 @@ jest.mock('../components/AnswerPreviewFloatingBar', () => ({
     canCollapse?: boolean;
     onCollapse: (id: string) => void;
   }) => mockRenderFloatingBar(props),
-  FLOATING_BAR_HEIGHT: 54,
 }));
 jest.mock('../components/AnswerPreviewQuestionHeader', () => ({
   AnswerPreviewQuestionHeader: () => null,

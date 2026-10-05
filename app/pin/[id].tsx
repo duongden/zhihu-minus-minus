@@ -10,6 +10,7 @@ import { getPin } from '@/api/zhihu/pin';
 import { getContentVoteCount, getContentVoteState } from '@/api/zhihu/voters';
 import { BouncyButton } from '@/components/BouncyButton';
 import {
+  CONTENT_ACTION_BAR_HEIGHT,
   ContentActionBar,
   getContentActionBarBottom,
 } from '@/components/ContentActionBar';
@@ -203,7 +204,9 @@ export default function PinDetailScreen() {
         onContentSizeChange={readingProgress.onContentSizeChange}
         onScrollEndDrag={readingProgress.commitProgress}
         onMomentumScrollEnd={readingProgress.commitProgress}
-        contentContainerStyle={{ paddingBottom: 100 + actionBarBottom }}
+        contentContainerStyle={{
+          paddingBottom: CONTENT_ACTION_BAR_HEIGHT + 36 + actionBarBottom,
+        }}
       >
         {/* 作者信息栏 */}
         <View className="flex-row items-center p-5 justify-between bg-transparent">
@@ -263,7 +266,9 @@ export default function PinDetailScreen() {
         visible={readingProgress.restoredOffset !== null}
         onBackToTop={readingProgress.scrollToTop}
         onDismiss={readingProgress.dismissRestoreNotice}
-        bottomOffset={88 + actionBarBottom - insets.bottom}
+        bottomOffset={
+          CONTENT_ACTION_BAR_HEIGHT + 24 + actionBarBottom - insets.bottom
+        }
       />
 
       {/* 底部交互栏 */}

@@ -23,13 +23,13 @@ import type {
   ZhihuPreviewLoginPrompt,
   ZhihuReadingPreviewItem,
 } from '@/api/zhihu/nextRender';
-import {
-  AnswerPreviewFloatingBar,
-  FLOATING_BAR_HEIGHT,
-} from '@/components/AnswerPreviewFloatingBar';
+import { AnswerPreviewFloatingBar } from '@/components/AnswerPreviewFloatingBar';
 import { AnswerPreviewPlainBody } from '@/components/AnswerPreviewPlainBody';
 import { AnswerPreviewQuestionHeader } from '@/components/AnswerPreviewQuestionHeader';
-import { getContentActionBarBottom } from '@/components/ContentActionBar';
+import {
+  CONTENT_ACTION_BAR_HEIGHT,
+  getContentActionBarBottom,
+} from '@/components/ContentActionBar';
 import {
   DetailNavigationHeader,
   useDetailNavigationHeight,
@@ -524,7 +524,7 @@ export function AnswerPreviewList({
           contentContainerStyle={{
             paddingHorizontal: 6,
             paddingTop: insets.top + navigationHeight + 4,
-            paddingBottom: actionBarBottom + FLOATING_BAR_HEIGHT + 20,
+            paddingBottom: actionBarBottom + CONTENT_ACTION_BAR_HEIGHT + 20,
           }}
           renderItem={({ item, index }) =>
             item.type === 'login_prompt' ? (

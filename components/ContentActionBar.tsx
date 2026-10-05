@@ -5,10 +5,11 @@ import Animated from 'react-native-reanimated';
 import { useRuntimeThemeColors } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 
+export const CONTENT_ACTION_BAR_HEIGHT = 44;
+
 interface ContentActionBarProps {
   bottomInset: number;
   bottomOffset?: number;
-  height?: number;
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
   visible?: boolean;
@@ -26,7 +27,6 @@ export function getContentActionBarBottom(
 export function ContentActionBar({
   bottomInset,
   bottomOffset = 0,
-  height = 64,
   children,
   style,
   visible = true,
@@ -41,7 +41,12 @@ export function ContentActionBar({
       importantForAccessibility={visible ? 'auto' : 'no-hide-descendants'}
       style={[
         styles.container,
-        { bottom, height, borderRadius: height / 2, opacity: visible ? 1 : 0 },
+        {
+          bottom,
+          height: CONTENT_ACTION_BAR_HEIGHT,
+          borderRadius: CONTENT_ACTION_BAR_HEIGHT / 2,
+          opacity: visible ? 1 : 0,
+        },
         colorScheme === 'light' && {
           shadowColor: colors.shadow,
           ...styles.shadow,
@@ -55,8 +60,8 @@ export function ContentActionBar({
         style={[
           styles.surface,
           {
-            height,
-            borderRadius: height / 2,
+            height: CONTENT_ACTION_BAR_HEIGHT,
+            borderRadius: CONTENT_ACTION_BAR_HEIGHT / 2,
             backgroundColor: colors.contentOverlayStrong,
             borderColor: colors.contentBorder,
           },

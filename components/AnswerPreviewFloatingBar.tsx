@@ -14,8 +14,6 @@ import { LikeButton } from '@/components/LikeButton';
 import { MoreActionsButton } from '@/components/MoreActionsButton';
 import { Text, useRuntimeThemeColors, View } from '@/components/Themed';
 
-export const FLOATING_BAR_HEIGHT = 54;
-
 interface AnswerPreviewFloatingBarProps {
   answer: ZhihuPreviewAnswerMetadata | null;
   visible: boolean;
@@ -48,7 +46,6 @@ export function AnswerPreviewFloatingBar({
   return (
     <ContentActionBar
       bottomInset={bottomInset}
-      height={FLOATING_BAR_HEIGHT}
       visible={shown}
       style={animatedStyle}
     >

@@ -23,6 +23,7 @@ import { recordReadHistory } from '@/api/zhihu/history';
 import { followMember, unfollowMember } from '@/api/zhihu/member';
 import { BouncyButton } from '@/components/BouncyButton';
 import {
+  CONTENT_ACTION_BAR_HEIGHT,
   ContentActionBar,
   getContentActionBarBottom,
 } from '@/components/ContentActionBar';
@@ -359,7 +360,10 @@ export default function ArticleDetail() {
           paddingTop: isDaily ? 0 : insets.top + 60,
           paddingBottom: isDaily
             ? 100 + insets.bottom
-            : 120 + actionBarBottom - ARTICLE_ACTION_BAR_OFFSET,
+            : CONTENT_ACTION_BAR_HEIGHT +
+              56 +
+              actionBarBottom -
+              ARTICLE_ACTION_BAR_OFFSET,
         }}
       >
         {isDaily ? (
@@ -493,7 +497,11 @@ export default function ArticleDetail() {
         bottomOffset={
           isDaily
             ? 20
-            : 88 + actionBarBottom - insets.bottom - ARTICLE_ACTION_BAR_OFFSET
+            : CONTENT_ACTION_BAR_HEIGHT +
+              24 +
+              actionBarBottom -
+              insets.bottom -
+              ARTICLE_ACTION_BAR_OFFSET
         }
       />
 

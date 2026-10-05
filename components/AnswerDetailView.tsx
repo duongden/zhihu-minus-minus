@@ -22,6 +22,7 @@ import { getAllContentCollectionStatus } from '@/api/zhihu/collection';
 import { followMember, unfollowMember } from '@/api/zhihu/member';
 import { BouncyButton } from '@/components/BouncyButton';
 import {
+  CONTENT_ACTION_BAR_HEIGHT,
   ContentActionBar,
   getContentActionBarBottom,
 } from '@/components/ContentActionBar';
@@ -450,7 +451,7 @@ export const AnswerDetailView = ({
         }}
         contentContainerStyle={{
           paddingTop: navigationHeight + 14,
-          paddingBottom: 100 + actionBarBottom,
+          paddingBottom: CONTENT_ACTION_BAR_HEIGHT + 36 + actionBarBottom,
         }}
       >
         <View
@@ -617,7 +618,7 @@ export const AnswerDetailView = ({
         contentHeight={contentHeight}
         viewportHeight={viewportHeight}
         top={navigationHeight + 8}
-        bottom={actionBarBottom + 84}
+        bottom={actionBarBottom + CONTENT_ACTION_BAR_HEIGHT + 20}
         visible={isFocused && contentLayoutReady}
       />
 
@@ -625,7 +626,9 @@ export const AnswerDetailView = ({
         visible={readingProgress.restoredOffset !== null}
         onBackToTop={readingProgress.scrollToTop}
         onDismiss={readingProgress.dismissRestoreNotice}
-        bottomOffset={88 + actionBarBottom - insets.bottom}
+        bottomOffset={
+          CONTENT_ACTION_BAR_HEIGHT + 24 + actionBarBottom - insets.bottom
+        }
       />
 
       {/* Footer Actions */}

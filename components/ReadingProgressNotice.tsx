@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BouncyButton } from '@/components/BouncyButton';
+import { CONTENT_ACTION_BAR_HEIGHT } from '@/components/ContentActionBar';
 import { Text, useRuntimeThemeColors, View } from '@/components/Themed';
 import { readableColor } from '@/utils/colorContrast';
 
@@ -18,7 +19,7 @@ export function ReadingProgressNotice({
   visible,
   onBackToTop,
   onDismiss,
-  bottomOffset = 88,
+  bottomOffset = CONTENT_ACTION_BAR_HEIGHT + 24,
 }: ReadingProgressNoticeProps) {
   const insets = useSafeAreaInsets();
   const colors = useRuntimeThemeColors();
