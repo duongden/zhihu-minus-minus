@@ -24,7 +24,6 @@ interface AnswerPreviewFloatingBarProps {
   onMore: (answer: ZhihuPreviewAnswerMetadata) => void;
 }
 
-/** Animate actions for the expanded answer while respecting the shared minimum bottom gap. */
 export function AnswerPreviewFloatingBar({
   answer,
   visible,
