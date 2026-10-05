@@ -37,7 +37,7 @@ function page(ids: string[], next = '') {
   };
 }
 
-test('pages recommendations within their question, keeps unknown origins single, and isolates profile and account changes', async () => {
+test('pages all non-profile origins within their question and isolates profile and account changes', async () => {
   const get = jest.mocked(apiClient.get);
   get.mockReset();
   mockSessionVersion = 1;
@@ -74,6 +74,7 @@ test('pages recommendations within their question, keeps unknown origins single,
     'selected-question',
     'default',
   ]);
+  expect(host.result.current.isQuestionSource).toBe(true);
   expect(get.mock.calls[0]).toEqual([
     '/questions/selected-question/answers',
     {
@@ -148,14 +149,49 @@ test('pages recommendations within their question, keeps unknown origins single,
   expect(host.result.current.data?.pages[0].data[0].id).toBe(
     'resolved-question-answer',
   );
+  get
+    .mockResolvedValueOnce({
+      data: page(
+        ['selected', 'unknown-origin-next'],
+        'https://www.zhihu.com/api/v4/questions/selected-question/answers?offset=20',
+      ),
+    })
+    .mockResolvedValueOnce({ data: page(['unknown-origin-last']) });
   await host.rerender({ ...options, context: { scene: 'unknown' } });
-  expect(host.result.current.data?.pages[0].data).toEqual([{ id: 'selected' }]);
-  expect(host.result.current.hasNextPage).toBe(false);
+  await waitFor(() => expect(host.result.current.isSuccess).toBe(true));
+  expect(host.result.current.queryKey).toEqual([
+    'answer-pager-source',
+    1,
+    'unknown',
+    'selected-question',
+    'default',
+  ]);
+  expect(host.result.current.isQuestionSource).toBe(true);
+  expect(get.mock.calls[3][0]).toBe('/questions/selected-question/answers');
+  expect(host.result.current.data?.pages[0].data).toEqual([
+    { id: 'selected', question: { id: 'question-selected' } },
+    {
+      id: 'unknown-origin-next',
+      question: { id: 'question-unknown-origin-next' },
+    },
+  ]);
+  expect(host.result.current.hasNextPage).toBe(true);
   expect(host.result.current.pagerKey).not.toBe(recommendationKey);
   await act(async () => {
     await host.result.current.fetchNextPage();
   });
-  expect(get).toHaveBeenCalledTimes(3);
+  await waitFor(() =>
+    expect(host.result.current.data?.pages[1]?.data[0]?.id).toBe(
+      'unknown-origin-last',
+    ),
+  );
+  expect(get.mock.calls[4][1]).toEqual(
+    expect.objectContaining({
+      params: expect.objectContaining({ offset: 20, sort_by: 'default' }),
+    }),
+  );
+  expect(host.result.current.hasNextPage).toBe(false);
+  expect(get).toHaveBeenCalledTimes(5);
 
   const profileStart = get.mock.calls.length;
   get
@@ -175,6 +211,7 @@ test('pages recommendations within their question, keeps unknown origins single,
     },
   });
   await waitFor(() => expect(host.result.current.isSuccess).toBe(true));
+  expect(host.result.current.isQuestionSource).toBe(false);
   const profileKey = host.result.current.pagerKey;
   expect(host.result.current.queryKey).toEqual([
     'answer-pager-source',
@@ -293,6 +330,128 @@ test('pages recommendations within their question, keeps unknown origins single,
       },
     },
   ]);
+  await host.unmount();
+  client.clear();
+});
+
+test('waits for an unknown origin answer to resolve its question, then pages and switches question sort', async () => {
+  const get = jest.mocked(apiClient.get);
+  get.mockReset();
+  mockSessionVersion = 1;
+  useAuthStore.setState({ cookies: null });
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+  });
+  const wrapper = ({ children }: PropsWithChildren) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+  const options: AnswerPagerSourceOptions = {
+    initialId: 'selected',
+    sortBy: 'created',
+    context: { scene: 'unknown' },
+  };
+  const host = await renderHook(useAnswerPagerSource, {
+    initialProps: options,
+    wrapper,
+  });
+  expect(get).not.toHaveBeenCalled();
+  expect(host.result.current.data).toBeUndefined();
+  expect(host.result.current.isFetching).toBe(false);
+  expect(host.result.current.isQuestionSource).toBe(true);
+  expect(host.result.current.queryKey).toEqual([
+    'answer-pager-source',
+    1,
+    'unknown',
+    '',
+    'created',
+  ]);
+
+  const resolvedOptions: AnswerPagerSourceOptions = {
+    ...options,
+    initialAnswer: {
+      id: 'selected',
+      question: {
+        id: 'resolved-question',
+        title: '合成问题',
+        type: 'question',
+      },
+      author: {
+        id: 'synthetic-author',
+        name: '合成作者',
+        avatar_url: '',
+        type: 'people',
+      },
+      content: '<p>合成所选正文</p>',
+      excerpt: '合成摘要',
+      created_time: 0,
+      voteup_count: 0,
+      comment_count: 0,
+    },
+  };
+  get
+    .mockResolvedValueOnce({
+      data: page(
+        ['same-question-first'],
+        'https://www.zhihu.com/api/v4/questions/resolved-question/answers?offset=40',
+      ),
+    })
+    .mockResolvedValueOnce({ data: page(['same-question-next']) });
+  await host.rerender(resolvedOptions);
+  await waitFor(() => expect(host.result.current.isSuccess).toBe(true));
+  const createdKey = host.result.current.queryKey;
+  expect(createdKey).toEqual([
+    'answer-pager-source',
+    1,
+    'unknown',
+    'resolved-question',
+    'created',
+  ]);
+  expect(get.mock.calls[0]).toEqual([
+    '/questions/resolved-question/answers',
+    {
+      signal: expect.any(AbortSignal),
+      params: {
+        include: 'data[*].id',
+        limit: 20,
+        offset: 0,
+        sort_by: 'created',
+      },
+    },
+  ]);
+  await act(async () => {
+    await host.result.current.fetchNextPage();
+  });
+  expect(get.mock.calls[1][1]).toEqual(
+    expect.objectContaining({
+      params: expect.objectContaining({ offset: 40, sort_by: 'created' }),
+    }),
+  );
+  await waitFor(() =>
+    expect(
+      host.result.current.data?.pages.flatMap((item) => item.data),
+    ).toHaveLength(2),
+  );
+  expect(host.result.current.hasNextPage).toBe(false);
+
+  get.mockResolvedValueOnce({ data: page(['default-order-answer']) });
+  await host.rerender({ ...resolvedOptions, sortBy: 'default' });
+  await waitFor(() => expect(host.result.current.isSuccess).toBe(true));
+  expect(host.result.current.queryKey).toEqual([
+    'answer-pager-source',
+    1,
+    'unknown',
+    'resolved-question',
+    'default',
+  ]);
+  expect(host.result.current.queryKey).not.toEqual(createdKey);
+  expect(get.mock.calls[2][1]).toEqual(
+    expect.objectContaining({
+      params: expect.objectContaining({ offset: 0, sort_by: 'default' }),
+    }),
+  );
+  expect(host.result.current.data?.pages[0]?.data[0]?.id).toBe(
+    'default-order-answer',
+  );
   await host.unmount();
   client.clear();
 });

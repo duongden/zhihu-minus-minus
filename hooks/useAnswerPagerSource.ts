@@ -20,9 +20,8 @@ export interface AnswerPagerSourceOptions {
   initialAnswer?: AnswerDetail;
 }
 
-/** Recommendations keep same-question paging; profiles page the author's answers. */
+/** Default to same-question paging; explicit profiles page the author's answers. */
 export function useAnswerPagerSource({
-  initialId,
   questionId,
   sortBy,
   context,
@@ -30,24 +29,17 @@ export function useAnswerPagerSource({
 }: AnswerPagerSourceOptions) {
   const sessionVersion = useAuthStore(() => getAuthSessionVersion());
   const { scene } = context;
-  const isSingleAnswer = scene === 'unknown';
-  const isQuestionSource = scene === 'recommend' || scene === 'question_feed';
+  const isQuestionSource = scene !== 'profile_answer';
   const memberId =
     context.memberId?.trim() ||
     initialAnswer?.author.url_token?.trim() ||
     initialAnswer?.author.id;
-  const sourceId =
-    scene === 'profile_answer'
-      ? (memberId ?? '')
-      : isQuestionSource
-        ? String(questionId ?? initialAnswer?.question?.id ?? '')
-        : initialId;
-  const sourceSort =
-    scene === 'profile_answer'
-      ? (context.memberSort ?? 'created')
-      : isQuestionSource
-        ? sortBy
-        : '';
+  const sourceId = isQuestionSource
+    ? String(questionId ?? initialAnswer?.question?.id ?? '')
+    : (memberId ?? '');
+  const sourceSort = isQuestionSource
+    ? sortBy
+    : (context.memberSort ?? 'created');
   const queryKey = useMemo(
     () =>
       [
@@ -64,11 +56,6 @@ export function useAnswerPagerSource({
     queryFn: async ({ pageParam, signal }) => {
       if (sessionVersion !== getAuthSessionVersion())
         throw new Error('登录状态已变化');
-      if (isSingleAnswer)
-        return {
-          data: [{ id: initialId }],
-          paging: { is_end: true, next: '' },
-        };
       if (!sourceId) throw new Error('回答列表来源尚未加载');
       const page =
         scene === 'profile_answer'
@@ -94,16 +81,13 @@ export function useAnswerPagerSource({
       return page;
     },
     initialPageParam: 0,
-    initialData: isSingleAnswer
-      ? {
-          pages: [
-            { data: [{ id: initialId }], paging: { is_end: true, next: '' } },
-          ],
-          pageParams: [0],
-        }
-      : undefined,
-    enabled: !isSingleAnswer && Boolean(sourceId),
+    enabled: Boolean(sourceId),
     staleTime: 5 * 60 * 1000,
   });
-  return { ...query, pagerKey: JSON.stringify(queryKey), queryKey };
+  return {
+    ...query,
+    pagerKey: JSON.stringify(queryKey),
+    queryKey,
+    isQuestionSource,
+  };
 }

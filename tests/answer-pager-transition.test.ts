@@ -48,7 +48,7 @@ interface HeaderMenuProps {
 
 let mockParams: {
   id: string;
-  questionId: string;
+  questionId?: string;
   sortBy: string;
   readingMode?: string;
   title?: string;
@@ -114,14 +114,13 @@ jest.mock('../hooks/useAnswerPagerSource', () => ({
     context: { scene: string; memberId?: string; memberSort?: string };
   }) => {
     mockPagerSource(options);
-    const { initialId, questionId, sortBy, context } = options;
-    const pages =
-      context.scene === 'unknown' ? [{ data: [{ id: initialId }] }] : mockPages;
+    const { questionId, sortBy, context } = options;
     return {
-      data: pages ? { pages } : undefined,
+      data: mockPages ? { pages: mockPages } : undefined,
       fetchNextPage: mockFetchNextPage,
       hasNextPage: false,
       isFetchingNextPage: false,
+      isQuestionSource: context.scene !== 'profile_answer',
       pagerKey: JSON.stringify([
         context.scene,
         context.scene === 'profile_answer' ? context.memberId : questionId,
@@ -438,8 +437,12 @@ describe('answer pager list transitions', () => {
     expect(mockAnswerProps.get('101')?.isPreloading).toBe(false);
   });
 
-  it('keeps the recommended answer mounted and allows swiping when its question answer list arrives', async () => {
-    mockParams = { ...mockParams, answerScene: 'recommend' };
+  it.each([
+    'recommend',
+    'unknown',
+    undefined,
+  ])('keeps the selected answer mounted and allows swiping when the question list arrives for %s origin', async (answerScene) => {
+    mockParams = { ...mockParams, answerScene };
     const page = await render(React.createElement(AnswerDetailScreen));
     const initialPager = mockPagerProps;
     expect(mockAnswerProps.get('42')?.isFocused).toBe(true);
@@ -448,7 +451,7 @@ describe('answer pager list transitions', () => {
       expect.objectContaining({
         questionId: '7',
         sortBy: 'default',
-        context: { scene: 'recommend' },
+        context: { scene: answerScene ?? 'unknown' },
       }),
     );
 
@@ -1130,14 +1133,78 @@ test('keeps profile navigation across questions and passes its source to both re
     }),
   );
   await host.unmount();
+});
 
-  mockReadingMode = 'detail';
-  mockParams = { id: '42', questionId: '7', sortBy: 'default' };
+test.each([
+  'unknown',
+  undefined,
+])('uses the question metadata while a swiped answer is loading for %s origin', async (answerScene) => {
+  mockParams = { id: '42', questionId: '7', sortBy: 'default', answerScene };
+  mockAnswerQuestions.set('42', { id: '7', title: '合成问题' });
+  mockUnavailableAnswers.add('11');
+  setList(['42', '11']);
   await render(React.createElement(AnswerDetailScreen));
-  expect(renderedAnswerIds()).toEqual(['42']);
+  expect(mockAnswerProps.get('11')?.questionId).toBe('7');
+  expect(mockPagerSource).toHaveBeenLastCalledWith(
+    expect.objectContaining({ context: { scene: 'unknown' } }),
+  );
+
+  await selectPage(1);
+  expect(mockAnswerProps.get('11')?.isFocused).toBe(true);
+  expect(mockSetParams).toHaveBeenLastCalledWith({ id: '11' });
+  expect(mockHeaderProps.title).toBe('合成问题');
+  await act(() => mockHeaderProps.onTitlePress?.());
+  expect(mockRouter.push).toHaveBeenLastCalledWith('/question/7');
+  await openHeaderMenu();
+  expect(mockHeaderMenuProps.data).toEqual({ id: '7', title: '合成问题' });
+});
+
+test('resolves a missing question from the selected answer before the default pager list arrives', async () => {
+  mockParams = { id: '42', sortBy: 'default' };
+  mockUnavailableAnswers.add('42');
+  const host = await render(React.createElement(AnswerDetailScreen));
   expect(mockPagerSource).toHaveBeenLastCalledWith(
     expect.objectContaining({
+      questionId: undefined,
+      initialAnswer: undefined,
       context: { scene: 'unknown' },
     }),
   );
+  expect(mockPagerMounts).toBe(0);
+
+  mockUnavailableAnswers.delete('42');
+  mockAnswerQuestions.set('42', { id: 'resolved-question', title: '合成问题' });
+  await host.rerender(React.createElement(AnswerDetailScreen));
+  expect(mockPagerSource).toHaveBeenLastCalledWith(
+    expect.objectContaining({ questionId: 'resolved-question' }),
+  );
+  expect(mockPagerMounts).toBe(1);
+  expect(renderedAnswerIds()).toEqual(['42']);
+
+  setList(['11', '99']);
+  await host.rerender(React.createElement(AnswerDetailScreen));
+  expect(renderedAnswerIds()).toEqual(['42', '11', '99']);
+  expect(mockAnswerProps.get('42')?.isFocused).toBe(true);
+  expect(mockAnswerMounts.get('42')).toBe(1);
+  expect(mockPagerMounts).toBe(1);
+  expect(mockAnswerProps.get('11')?.questionId).toBe('resolved-question');
+  await startDrag();
+  await selectPage(1);
+  expect(mockAnswerProps.get('11')?.isFocused).toBe(true);
+  expect(mockSetParams).toHaveBeenLastCalledWith({ id: '11' });
+});
+
+test.each([
+  'unknown',
+  undefined,
+])('keeps the original %s origin in preview mode without mounting the pager', async (answerScene) => {
+  mockReadingMode = 'preview-list';
+  mockParams = { ...mockParams, answerScene };
+  const host = await render(React.createElement(AnswerDetailScreen));
+  expect(host.getByTestId('answer-preview-list')).toHaveTextContent('42');
+  expect(mockPreviewProps).toHaveBeenLastCalledWith(
+    expect.objectContaining({ answerContext: { scene: 'unknown' } }),
+  );
+  expect(mockPagerSource).not.toHaveBeenCalled();
+  expect(mockPagerMounts).toBe(0);
 });

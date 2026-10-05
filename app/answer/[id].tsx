@@ -80,7 +80,7 @@ function AnswerDetailScreen() {
     }
   }, [enableBrowseHistory, initialId]);
 
-  // 先获取选中回答，推荐和问题来源切换同题回答，用户来源切换该用户的回答。
+  // 先获取选中回答，默认切换同题回答，明确的用户来源切换该用户的回答。
   const { data: initialAnswer, isLoading: loadingInitial } = useQuery({
     queryKey: ['answer-detail', initialId],
     queryFn: ({ signal }) => getAnswer(initialId, undefined, { signal }),
@@ -101,6 +101,7 @@ function AnswerDetailScreen() {
     hasNextPage,
     isFetchingNextPage,
     pagerKey,
+    isQuestionSource,
   } = useAnswerPagerSource({
     initialId,
     questionId,
@@ -187,9 +188,6 @@ function AnswerDetailScreen() {
     retry: (failureCount, err) =>
       getZhihuErrorStatus(err) === 404 ? false : failureCount < 2,
   });
-  const isQuestionSource =
-    answerContext.scene === 'recommend' ||
-    answerContext.scene === 'question_feed';
   const headerQuestionId =
     currentAnswer?.question?.id ||
     questionIdsByAnswer.get(currentId) ||
