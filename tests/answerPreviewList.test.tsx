@@ -137,7 +137,7 @@ jest.mock('../components/Themed', () => {
 });
 jest.mock('../components/ContentActionBar', () => ({
   CONTENT_ACTION_BAR_HEIGHT: 48,
-  getContentActionBarBottom: (inset: number) => Math.max(inset, 12),
+  getContentActionBarBottom: (inset: number) => Math.max(inset, 12) + 20,
 }));
 jest.mock('../components/BouncyButton', () => ({
   BouncyButton:

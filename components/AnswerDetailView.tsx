@@ -28,13 +28,12 @@ import {
 } from '@/components/ContentActionBar';
 import { ContentActionButton } from '@/components/ContentActionButton';
 import { useDetailNavigationHeight } from '@/components/DetailNavigationHeader';
-import { DownvoteButton } from '@/components/DownvoteButton';
 import { FollowButton } from '@/components/FollowButton';
-import { LikeButton } from '@/components/LikeButton';
 import { MoreActionsButton } from '@/components/MoreActionsButton';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { ReadingProgressNotice } from '@/components/ReadingProgressNotice';
 import { ReadingScrollIndicator } from '@/components/ReadingScrollIndicator';
+import { SegmentedVoteCapsule } from '@/components/SegmentedVoteCapsule';
 import { ShareMenu } from '@/components/ShareMenu';
 import { StableAvatar } from '@/components/StableAvatar';
 import { Text, ThemedIcon, useThemeColor, View } from '@/components/Themed';
@@ -632,52 +631,50 @@ export const AnswerDetailView = ({
       />
 
       {/* Footer Actions */}
-      <ContentActionBar bottomInset={insets.bottom}>
-        <View className="flex-row items-center px-5 h-full bg-transparent">
+      <ContentActionBar
+        bottomInset={insets.bottom}
+        leading={
+          <SegmentedVoteCapsule
+            id={answer?.id ?? ''}
+            count={answer?.voteup_count ?? 0}
+            voted={
+              answer?.relationship?.voting ??
+              (answer?.reaction?.relation?.vote === 'UP' ? 1 : 0)
+            }
+            type="answers"
+          />
+        }
+        trailing={
           <View className="flex-row items-center bg-transparent">
-            <LikeButton
-              id={answer?.id ?? ''}
-              count={answer?.voteup_count ?? 0}
-              voted={
-                answer?.relationship?.voting ??
-                (answer?.reaction?.relation?.vote === 'UP' ? 1 : 0)
-              }
-              variant="minimal"
-            />
-            <View className="w-2.5 bg-transparent" />
-            <DownvoteButton
-              id={answer?.id ?? ''}
-              voted={answer?.relationship?.voting}
-              variant="minimal"
-            />
-          </View>
-          <View className="flex-1 flex-row justify-end items-center bg-transparent">
             <ContentActionButton
               accessibilityRole="button"
               accessibilityLabel="评论"
               disabled={!answer}
-              className="items-center justify-center ml-3 p-2 flex-row bg-transparent"
+              className="items-center justify-center ml-2 px-2.5 py-1.5 flex-row bg-transparent"
               onPress={() => router.push(`/comments/${id}?type=answer`)}
             >
               <ThemedIcon
                 name="chatbubble-outline"
-                size={24}
+                size={20}
                 colorType="secondary"
               />
               {(answer?.comment_count ?? 0) > 0 && (
-                <Text type="secondary" className="ml-1 text-[13px] font-medium">
+                <Text
+                  type="secondary"
+                  className="ml-1 text-[13px] font-semibold"
+                >
                   {answer?.comment_count}
                 </Text>
               )}
             </ContentActionButton>
             <MoreActionsButton
               disabled={!answer}
-              style={{ marginLeft: 12 }}
+              style={{ marginLeft: 4 }}
               onPress={() => setMenuVisible(true)}
             />
           </View>
-        </View>
-      </ContentActionBar>
+        }
+      />
 
       <ShareMenu
         visible={isFocused && menuVisible}

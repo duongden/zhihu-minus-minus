@@ -24,14 +24,18 @@ import { VoteTriangle } from './VoteTriangle';
 
 export const DownvoteButton = ({
   id,
+  count,
   voted: initialVoted = 0,
   type = 'answers',
   variant = 'default',
+  onVoteChange,
 }: {
   id: string | number;
+  count?: number | string;
   voted?: number;
   type?: VoteContentType;
-  variant?: 'default' | 'ghost' | 'minimal';
+  variant?: 'default' | 'ghost' | 'minimal' | 'segmented';
+  onVoteChange?: (voted: number, count?: number) => void;
 }) => {
   const [voted, setVoted] = useState(initialVoted);
   const identity = `${type}:${id}`;
@@ -81,13 +85,24 @@ export const DownvoteButton = ({
     try {
       const voteType = nextVoted === -1 ? 'down' : 'neutral';
       const result = await voteContent(id, type, voteType);
-      if (currentIdentityRef.current === identity) setVoted(result.voted);
+      const resolvedCount =
+        result.voteCount ??
+        (typeof count === 'number'
+          ? Math.max(
+              0,
+              count + Number(result.voted === 1) - Number(voted === 1),
+            )
+          : undefined);
+      if (currentIdentityRef.current === identity) {
+        setVoted(result.voted);
+        onVoteChange?.(result.voted, resolvedCount);
+      }
       if (type !== 'comments') {
         updateContentInteractionCaches(queryClient, {
           type,
           id,
           voted: result.voted,
-          voteCount: result.voteCount,
+          voteCount: resolvedCount,
         });
       }
       showToast(getVoteSuccessMessage(type, voted, result.voted));
@@ -111,13 +126,17 @@ export const DownvoteButton = ({
           ? 'w-9 h-9 rounded-lg justify-center items-center '
           : variant === 'ghost'
             ? 'flex-row items-center justify-center bg-transparent py-1 px-1 rounded-full'
-            : 'flex-row items-center justify-center bg-transparent p-2'
+            : variant === 'segmented'
+              ? 'flex-row items-center justify-center bg-transparent py-1.5 px-2.5'
+              : 'flex-row items-center justify-center bg-transparent p-2'
       }
       style={[
         variant === 'default' && {
           backgroundColor: isDownvoted ? primaryColor : `${primaryColor}1a`,
         },
-        (variant === 'ghost' || variant === 'minimal') && {
+        (variant === 'ghost' ||
+          variant === 'minimal' ||
+          variant === 'segmented') && {
           borderRadius: 99,
         },
       ]}
@@ -130,7 +149,15 @@ export const DownvoteButton = ({
             active={isDownvoted}
             color={foregroundColor}
             direction="down"
-            size={variant === 'minimal' ? 24 : variant === 'ghost' ? 16 : 20}
+            size={
+              variant === 'minimal'
+                ? 24
+                : variant === 'ghost'
+                  ? 16
+                  : variant === 'segmented'
+                    ? 15
+                    : 20
+            }
           />
         </Animated.View>
       )}

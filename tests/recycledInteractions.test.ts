@@ -120,23 +120,31 @@ test('an old downvote completion cannot select the next recycled target', async 
         finish = resolve;
       }),
   );
+  const onVoteChange = jest.fn();
   const host = await render(
     createElement(DownvoteButton, {
       id: 'original',
       voted: 0,
       variant: 'ghost',
+      onVoteChange,
     }),
   );
   await fireEvent.press(host.getByRole('button', { name: '反对' }));
   expect(voteContentDirect).toHaveBeenCalledWith('original', 'answers', 'down');
   await host.rerender(
-    createElement(DownvoteButton, { id: 'next', voted: 0, variant: 'ghost' }),
+    createElement(DownvoteButton, {
+      id: 'next',
+      voted: 0,
+      variant: 'ghost',
+      onVoteChange,
+    }),
   );
   await act(() => finish({ voted: -1, voteCount: 9 }));
   expect(host.getByRole('button').props.accessibilityState).toMatchObject({
     busy: false,
     selected: false,
   });
+  expect(onVoteChange).not.toHaveBeenCalled();
   expect(updateContentInteractionCaches).toHaveBeenCalledWith(
     expect.anything(),
     {
@@ -150,6 +158,8 @@ test('an old downvote completion cannot select the next recycled target', async 
   expect(voteContentDirect).toHaveBeenLastCalledWith('next', 'answers', 'down');
   await act(() => finish({ voted: -1, voteCount: 7 }));
   expect(host.getByRole('button', { name: '取消反对' })).toBeSelected();
+  expect(onVoteChange).toHaveBeenCalledWith(-1, 7);
+  expect(onVoteChange).toHaveBeenCalledTimes(1);
   expect(updateContentInteractionCaches).toHaveBeenLastCalledWith(
     expect.anything(),
     {

@@ -16,11 +16,11 @@ import {
 } from '@/components/ContentActionBar';
 import { ContentActionButton } from '@/components/ContentActionButton';
 import { FollowButton } from '@/components/FollowButton';
-import { LikeButton } from '@/components/LikeButton';
 import { MoreActionsButton } from '@/components/MoreActionsButton';
 import { PinPollCard } from '@/components/PinPollCard';
 import { QueryErrorView } from '@/components/QueryErrorView';
 import { ReadingProgressNotice } from '@/components/ReadingProgressNotice';
+import { SegmentedVoteCapsule } from '@/components/SegmentedVoteCapsule';
 import { ShareMenu } from '@/components/ShareMenu';
 import { StableAvatar } from '@/components/StableAvatar';
 import { Text, ThemedIcon, useThemeColor, View } from '@/components/Themed';
@@ -272,40 +272,46 @@ export default function PinDetailScreen() {
       />
 
       {/* 底部交互栏 */}
-      <ContentActionBar bottomInset={insets.bottom}>
-        <View className="flex-row items-center px-5 h-full bg-transparent">
+      <ContentActionBar
+        bottomInset={insets.bottom}
+        leading={
+          <SegmentedVoteCapsule
+            id={pin?.id ?? ''}
+            count={pinVoteCount}
+            voted={pinVoteState}
+            type="pins"
+            showDownvote={false}
+          />
+        }
+        trailing={
           <View className="flex-row items-center bg-transparent">
-            <LikeButton
-              id={pin?.id}
-              count={pinVoteCount}
-              voted={pinVoteState}
-              type="pins"
-              variant="minimal"
-            />
-          </View>
-          <View className="flex-1 flex-row justify-end items-center bg-transparent">
             <ContentActionButton
-              className="items-center justify-center ml-3 p-2 flex-row rounded-full bg-transparent"
+              accessibilityRole="button"
+              accessibilityLabel="评论"
+              className="items-center justify-center ml-2 px-2.5 py-1.5 flex-row bg-transparent"
               onPress={() => router.push(`/comments/${id}?type=pin`)}
             >
               <ThemedIcon
                 name="chatbubble-outline"
-                size={24}
+                size={20}
                 colorType="secondary"
               />
               {pin?.comment_count > 0 && (
-                <Text type="secondary" className="ml-1 text-[13px] font-medium">
+                <Text
+                  type="secondary"
+                  className="ml-1 text-[13px] font-semibold"
+                >
                   {pin?.comment_count}
                 </Text>
               )}
             </ContentActionButton>
             <MoreActionsButton
-              style={{ marginLeft: 12 }}
+              style={{ marginLeft: 4 }}
               onPress={() => setOpenMenuIdentity(contentIdentity)}
             />
           </View>
-        </View>
-      </ContentActionBar>
+        }
+      />
 
       <VoterListModal
         visible={votersVisible}
