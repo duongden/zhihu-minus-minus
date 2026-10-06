@@ -90,11 +90,16 @@ export function SegmentedVoteCapsule({
           <View style={[styles.divider, { backgroundColor: dividerColor }]} />
           <DownvoteButton
             id={id}
+            count={currentCount}
             voted={currentVoted}
             type={type}
             variant="segmented"
-            onVoteChange={(nextVoted) => {
+            onVoteChange={(nextVoted, nextCount) => {
               setCurrentVoted(nextVoted);
+              if (nextCount !== undefined) {
+                setCurrentCount(nextCount);
+                onVoteChange?.(nextVoted, nextCount);
+              }
             }}
           />
         </>

@@ -61,17 +61,11 @@ export function ContentActionBar({
         ]}
       >
         {leading ? (
-          <BlurView
-            intensity={130}
-            tint={colorScheme}
+          <View
             style={[
-              styles.surface,
-              styles.islandLeading,
+              styles.islandShadow,
               {
-                height: CONTENT_ACTION_BAR_HEIGHT,
-                borderRadius: CONTENT_ACTION_BAR_HEIGHT / 2,
                 backgroundColor: colors.contentOverlayStrong,
-                borderColor: colors.contentBorder,
               },
               colorScheme === 'light' && {
                 shadowColor: colors.shadow,
@@ -79,23 +73,31 @@ export function ContentActionBar({
               },
             ]}
           >
-            {leading}
-          </BlurView>
+            <BlurView
+              intensity={130}
+              tint={colorScheme}
+              style={[
+                styles.surface,
+                styles.islandLeading,
+                {
+                  height: CONTENT_ACTION_BAR_HEIGHT,
+                  borderRadius: CONTENT_ACTION_BAR_HEIGHT / 2,
+                  borderColor: colors.contentBorder,
+                },
+              ]}
+            >
+              {leading}
+            </BlurView>
+          </View>
         ) : null}
 
         <View style={styles.islandRightGroup}>
           {trailing ? (
-            <BlurView
-              intensity={130}
-              tint={colorScheme}
+            <View
               style={[
-                styles.surface,
-                styles.islandTrailing,
+                styles.islandShadow,
                 {
-                  height: CONTENT_ACTION_BAR_HEIGHT,
-                  borderRadius: CONTENT_ACTION_BAR_HEIGHT / 2,
                   backgroundColor: colors.contentOverlayStrong,
-                  borderColor: colors.contentBorder,
                 },
                 colorScheme === 'light' && {
                   shadowColor: colors.shadow,
@@ -103,23 +105,31 @@ export function ContentActionBar({
                 },
               ]}
             >
-              {trailing}
-            </BlurView>
+              <BlurView
+                intensity={130}
+                tint={colorScheme}
+                style={[
+                  styles.surface,
+                  styles.islandTrailing,
+                  {
+                    height: CONTENT_ACTION_BAR_HEIGHT,
+                    borderRadius: CONTENT_ACTION_BAR_HEIGHT / 2,
+                    borderColor: colors.contentBorder,
+                  },
+                ]}
+              >
+                {trailing}
+              </BlurView>
+            </View>
           ) : null}
 
           {accessory ? (
-            <BlurView
-              intensity={130}
-              tint={colorScheme}
+            <View
               style={[
-                styles.surface,
-                styles.islandAccessory,
+                styles.islandShadow,
+                styles.islandAccessoryContainer,
                 {
-                  width: CONTENT_ACTION_BAR_HEIGHT,
-                  height: CONTENT_ACTION_BAR_HEIGHT,
-                  borderRadius: CONTENT_ACTION_BAR_HEIGHT / 2,
                   backgroundColor: colors.contentOverlayStrong,
-                  borderColor: colors.contentBorder,
                 },
                 colorScheme === 'light' && {
                   shadowColor: colors.shadow,
@@ -127,8 +137,23 @@ export function ContentActionBar({
                 },
               ]}
             >
-              {accessory}
-            </BlurView>
+              <BlurView
+                intensity={130}
+                tint={colorScheme}
+                style={[
+                  styles.surface,
+                  styles.islandAccessory,
+                  {
+                    width: CONTENT_ACTION_BAR_HEIGHT,
+                    height: CONTENT_ACTION_BAR_HEIGHT,
+                    borderRadius: CONTENT_ACTION_BAR_HEIGHT / 2,
+                    borderColor: colors.contentBorder,
+                  },
+                ]}
+              >
+                {accessory}
+              </BlurView>
+            </View>
           ) : null}
         </View>
       </Animated.View>
@@ -224,6 +249,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     backgroundColor: 'transparent',
   },
+  islandShadow: {
+    height: CONTENT_ACTION_BAR_HEIGHT,
+    borderRadius: CONTENT_ACTION_BAR_HEIGHT / 2,
+  },
   islandLeading: {
     paddingHorizontal: 6,
     flexDirection: 'row',
@@ -244,6 +273,9 @@ const styles = StyleSheet.create({
   islandAccessory: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  islandAccessoryContainer: {
+    width: CONTENT_ACTION_BAR_HEIGHT,
     marginLeft: 8,
   },
 });

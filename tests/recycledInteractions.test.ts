@@ -158,7 +158,7 @@ test('an old downvote completion cannot select the next recycled target', async 
   expect(voteContentDirect).toHaveBeenLastCalledWith('next', 'answers', 'down');
   await act(() => finish({ voted: -1, voteCount: 7 }));
   expect(host.getByRole('button', { name: '取消反对' })).toBeSelected();
-  expect(onVoteChange).toHaveBeenCalledWith(-1);
+  expect(onVoteChange).toHaveBeenCalledWith(-1, 7);
   expect(onVoteChange).toHaveBeenCalledTimes(1);
   expect(updateContentInteractionCaches).toHaveBeenLastCalledWith(
     expect.anything(),

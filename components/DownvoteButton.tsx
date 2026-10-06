@@ -24,16 +24,18 @@ import { VoteTriangle } from './VoteTriangle';
 
 export const DownvoteButton = ({
   id,
+  count,
   voted: initialVoted = 0,
   type = 'answers',
   variant = 'default',
   onVoteChange,
 }: {
   id: string | number;
+  count?: number | string;
   voted?: number;
   type?: VoteContentType;
   variant?: 'default' | 'ghost' | 'minimal' | 'segmented';
-  onVoteChange?: (voted: number) => void;
+  onVoteChange?: (voted: number, count?: number) => void;
 }) => {
   const [voted, setVoted] = useState(initialVoted);
   const identity = `${type}:${id}`;
@@ -83,16 +85,24 @@ export const DownvoteButton = ({
     try {
       const voteType = nextVoted === -1 ? 'down' : 'neutral';
       const result = await voteContent(id, type, voteType);
+      const resolvedCount =
+        result.voteCount ??
+        (typeof count === 'number'
+          ? Math.max(
+              0,
+              count + Number(result.voted === 1) - Number(voted === 1),
+            )
+          : undefined);
       if (currentIdentityRef.current === identity) {
         setVoted(result.voted);
-        onVoteChange?.(result.voted);
+        onVoteChange?.(result.voted, resolvedCount);
       }
       if (type !== 'comments') {
         updateContentInteractionCaches(queryClient, {
           type,
           id,
           voted: result.voted,
-          voteCount: result.voteCount,
+          voteCount: resolvedCount,
         });
       }
       showToast(getVoteSuccessMessage(type, voted, result.voted));
