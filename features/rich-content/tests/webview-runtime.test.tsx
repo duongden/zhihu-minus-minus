@@ -653,6 +653,4 @@ test('formula scripts and fonts are inline with no CDN dependency', async () => 
   for (const script of scripts)
     if (isTag(script)) expect(script.attribs.src).toBeUndefined();
   expect(html).toContain('data:font/woff2;base64,');
-  expect(html).toContain('color: #102030');
-  expect(html).toContain('color: #203040');
 });

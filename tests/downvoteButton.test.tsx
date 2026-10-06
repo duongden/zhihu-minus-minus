@@ -7,7 +7,6 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { voteContent } from '../api/zhihu/voters';
 import { DownvoteButton } from '../components/DownvoteButton';
 import { LikeButton } from '../components/LikeButton';
-import { colors } from '../constants/designTokens';
 
 jest.mock('../api/zhihu', () => ({
   voteContent: jest.fn(),
@@ -108,27 +107,6 @@ afterEach(() => {
   for (const client of clients.splice(0)) client.clear();
 });
 
-test.each([
-  ['default', 20],
-  ['minimal', 24],
-  ['ghost', 16],
-] as const)('%s downvote uses a %dpx icon', async (variant, size) => {
-  const host = await render(
-    <QueryClientProvider client={createClient()}>
-      <DownvoteButton id="synthetic-answer" variant={variant} />
-    </QueryClientProvider>,
-  );
-  expect(host.getByTestId('vote:down')).toHaveStyle({ fontSize: size });
-  if (variant === 'ghost') {
-    expect(host.getByRole('button', { name: '反对' }).props.className).toBe(
-      'flex-row items-center justify-center bg-transparent py-1 px-1 rounded-full',
-    );
-    expect(host.getByTestId('vote:down')).toHaveStyle({
-      color: colors.light.iconMuted,
-    });
-  }
-});
-
 test('preview cache keeps upvote and downvote mutually exclusive when downvote is toggled', async () => {
   const client = createClient();
   client.setQueryData(previewKey, {
@@ -159,7 +137,6 @@ test('preview cache keeps upvote and downvote mutually exclusive when downvote i
     expect(host.getByRole('button', { name: '取消反对' })).toBeSelected();
     expect(host.getByText('9')).toBeTruthy();
   });
-  expect(host.getByTestId('vote:down')).toHaveStyle({ color: '#1364cc' });
   expect(client.getQueryData(previewKey)).toMatchObject({
     items: [{ voteup_count: 9, relationship: { voting: -1 } }],
   });

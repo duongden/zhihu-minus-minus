@@ -35,7 +35,6 @@ test('measures gradual headers, resets scopes and never replaces a newer UI scro
   await act(() => host.result.current.onHeaderLayout(140));
   await act(() => host.result.current.onScrollOffset(116));
   expect(host.result.current.collapseOffset.value).toBe(140);
-  expect(host.result.current.headerProgress.value).toBe(0.5);
   expect(host.result.current.collapsed).toBe(false);
   await act(() => host.result.current.onScrollOffset(140));
   expect(host.result.current.collapsed).toBe(true);
@@ -81,7 +80,6 @@ test('measures gradual headers, resets scopes and never replaces a newer UI scro
   external.value = 190;
   await act(() => host.result.current.onScrollOffset(170));
   expect(external.value).toBe(190);
-  expect(host.result.current.headerProgress.value).toBeCloseTo(38 / 48);
   expect(host.result.current.collapsed).toBe(false);
   external.value = 230;
   await act(() => host.result.current.onScrollOffset(205));

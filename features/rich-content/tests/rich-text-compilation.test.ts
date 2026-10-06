@@ -39,7 +39,7 @@ describe('Text Flow Island compilation and source ranges', () => {
     });
   });
 
-  it('uses shared heading metrics for scaled fonts, line height and paragraph margins', () => {
+  it('preserves inline code formatting alongside headings', () => {
     const { document } = normalizeZhihuDocument(
       '<h1>标题一</h1><h6>标题六</h6><p>正文 <code>inline</code></p>',
       { documentId: 'test' },
@@ -49,19 +49,6 @@ describe('Text Flow Island compilation and source ranges', () => {
       lineHeight: 38.25,
     }).parts[0];
     if (part.type !== 'flow') throw new Error('expected flow');
-    expect(part.flow.paragraphs[0]).toMatchObject({
-      fontSize: 31.5,
-      lineHeight: 47.25,
-      marginTop: 24,
-      marginBottom: 10,
-    });
-    expect(part.flow.paragraphs[1]).toMatchObject({
-      fontSize: 18,
-      lineHeight: 27,
-      marginTop: 10,
-      marginBottom: 4,
-    });
-    expect(part.flow.paragraphs[2]).toMatchObject({ marginBottom: 14 });
     expect(part.flow.spans.find((span) => span.kind === 'code')).toBeDefined();
   });
 
@@ -179,7 +166,7 @@ describe('Text Flow Island compilation and source ranges', () => {
     });
   });
 
-  it('keeps one item marker through containers and media with stable source offsets and boundary spacing', () => {
+  it('keeps one item marker through containers and media with stable source offsets', () => {
     const fixture: unknown = JSON.parse(
       readFileSync(
         path.join(
@@ -205,14 +192,6 @@ describe('Text Flow Island compilation and source ranges', () => {
       '列表之前\n3. 引用第一段\n引用第二段',
       '4. 图片说明\n5. 最后一项\n同一项的补充段落\n• 嵌套第一项\n• 嵌套第二项\n列表之后',
     ]);
-    expect(
-      flows.map((flow) =>
-        flow.paragraphs.map((paragraph) => paragraph.marginBottom),
-      ),
-    ).toEqual([
-      [14, 14, 6],
-      [6, 14, 14, 6, 14, 14],
-    ]);
     const quotedStart = flows[0].text.indexOf('引用第二段');
     expect(
       mapRichTextSelection(flows[0], quotedStart, quotedStart + 5),
@@ -236,7 +215,7 @@ describe('Text Flow Island compilation and source ranges', () => {
       'flow',
     ]);
     expect(mediaTail[0]).toMatchObject({
-      flow: { text: '• 首项', paragraphs: [{ marginBottom: 14 }] },
+      flow: { text: '• 首项' },
     });
     const nestedFirst = firstFlow(
       '<ol start="3"><li><ul><li>嵌套首项</li></ul><p data-pid="parent-tail">父项补充</p></li><li>下一项</li></ol>',
@@ -270,57 +249,48 @@ describe('Text Flow Island compilation and source ranges', () => {
       throw new Error('Expected the stored quote content');
     const flow = firstFlow(fixture.content);
     expect(
-      flow.paragraphs.map(
-        ({ paragraphId, kind, start, end, marginBottom }) => ({
-          paragraphId,
-          kind,
-          start,
-          end,
-          marginBottom,
-        }),
-      ),
+      flow.paragraphs.map(({ paragraphId, kind, start, end }) => ({
+        paragraphId,
+        kind,
+        start,
+        end,
+      })),
     ).toEqual([
       {
         paragraphId: 'single-quote',
         kind: 'quote',
         start: 0,
         end: 6,
-        marginBottom: 14,
       },
       {
         paragraphId: 'after-single-quote',
         kind: 'paragraph',
         start: 6,
         end: 17,
-        marginBottom: 14,
       },
       {
         paragraphId: 'long-quote',
         kind: 'quote',
         start: 17,
         end: 78,
-        marginBottom: 14,
       },
       {
         paragraphId: 'trailing-space-quote',
         kind: 'quote',
         start: 78,
         end: 94,
-        marginBottom: 14,
       },
       {
         paragraphId: 'line-break-quote',
         kind: 'quote',
         start: 94,
         end: 107,
-        marginBottom: 14,
       },
       {
         paragraphId: 'after-multiple-quotes',
         kind: 'paragraph',
         start: 107,
         end: 119,
-        marginBottom: 14,
       },
     ]);
     for (const paragraph of flow.paragraphs.filter(

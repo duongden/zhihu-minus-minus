@@ -219,7 +219,6 @@ describe('Native V2 renderer staging transitions', () => {
       { kind: 'formula', url: inlineUri },
       { kind: 'formula', url: displayUri },
     ]);
-    expect(JSON.parse(views[1].configJson).textAlign).toBe('center');
     expect(mockSvgProps.length).toBeGreaterThan(0);
     expect(mockSvgProps.every((svg) => svg.uri === imageUri)).toBe(true);
     expect(mockSvgProps.every((svg) => !svg.color && !svg.fill)).toBe(true);

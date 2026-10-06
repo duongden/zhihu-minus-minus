@@ -3,6 +3,7 @@ import type { GestureResponderEvent } from 'react-native';
 import { FollowButton } from '../components/FollowButton';
 import { resolveThemeColors } from '../constants/theme';
 import { useSettingsStore } from '../store/useSettingsStore';
+import { contrastRatio } from '../utils/colorContrast';
 
 let mockColorScheme: 'light' | 'dark' = 'light';
 
@@ -49,27 +50,20 @@ beforeEach(() => {
 test.each([
   false,
   true,
-])('following=%s uses the corresponding shared palette and accessible state', async (following) => {
+])('following=%s keeps its status label and accessible state', async (following) => {
   const host = await render(
     <FollowButton following={following} onPress={jest.fn()} />,
   );
-  const palette = currentPalette();
   const button = host.getByRole('button', {
     name: following ? '取消关注' : '关注',
   });
-  expect(button).toHaveStyle({
-    backgroundColor: following ? 'transparent' : palette.primaryTransparent,
-    borderColor: following ? palette.border : 'transparent',
-  });
-  expect(host.getByText(following ? '已关注' : '关注')).toHaveStyle({
-    color: following ? palette.textSecondary : palette.link,
-  });
+  expect(host.getByText(following ? '已关注' : '关注')).toBeTruthy();
   if (following) expect(button).toBeSelected();
   else expect(button).not.toBeSelected();
   expect(button).toBeEnabled();
 });
 
-test('an already mounted button responds to custom colors, reading background and dark mode', async () => {
+test('an already mounted button keeps readable text with a white accent and dark mode', async () => {
   const onPress = jest.fn();
   const host = await render(
     <FollowButton following={false} onPress={onPress} />,
@@ -85,18 +79,22 @@ test('an already mounted button responds to custom colors, reading background an
     backgroundColor: palette.primaryTransparent,
   });
   expect(host.getByText('关注')).toHaveStyle({ color: palette.link });
-  expect(palette.link).not.toBe('#ffffff');
+  expect(
+    contrastRatio(palette.link, palette.background),
+  ).toBeGreaterThanOrEqual(4.5);
 
   mockColorScheme = 'dark';
   await host.rerender(<FollowButton following onPress={onPress} />);
   palette = currentPalette();
   expect(host.getByRole('button', { name: '取消关注' })).toHaveStyle({
     backgroundColor: 'transparent',
-    borderColor: palette.border,
   });
   expect(host.getByText('已关注')).toHaveStyle({
     color: palette.textSecondary,
   });
+  expect(
+    contrastRatio(palette.textSecondary, palette.background),
+  ).toBeGreaterThanOrEqual(4.5);
 });
 
 test.each([

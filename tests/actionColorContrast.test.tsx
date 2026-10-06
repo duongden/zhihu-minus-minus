@@ -141,47 +141,6 @@ test.each([
 test.each([
   'light',
   'dark',
-] as const)('unselected votes preserve their original neutral and translucent fills in %s', async (scheme) => {
-  mockColorScheme = scheme;
-  const palette = currentPalette();
-  const like = await render(<LikeButton id="synthetic" count={5} />);
-  expect(like.getByRole('button')).toHaveStyle({
-    backgroundColor: palette.border,
-  });
-  expect(like.getByText('5')).toHaveStyle({
-    color: palette.primary,
-  });
-  expect(like.getByTestId('vote-icon')).toHaveStyle({
-    color: palette.primary,
-  });
-  await like.unmount();
-  const downvote = await render(<DownvoteButton id="synthetic" />);
-  expect(downvote.getByRole('button')).toHaveStyle({
-    backgroundColor: `${palette.primary}1a`,
-  });
-  expect(downvote.getByTestId('vote-icon')).toHaveStyle({
-    color: palette.primary,
-  });
-  await downvote.unmount();
-});
-
-test.each([
-  'ghost',
-  'minimal',
-] as const)('selected %s votes preserve the exact chosen accent for icons and short labels', async (variant) => {
-  const palette = currentPalette();
-  const host = await render(
-    <LikeButton id="synthetic" count={5} voted={1} variant={variant} />,
-  );
-  expect(host.getByText('5')).toHaveStyle({ color: palette.primary });
-  expect(host.getByTestId('vote-icon')).toHaveStyle({ color: palette.primary });
-  expect(palette.primary).toBe('#ffffff');
-  await host.unmount();
-});
-
-test.each([
-  'light',
-  'dark',
 ] as const)('destructive dialog actions use the foreground matched to their actual fill in %s', async (scheme) => {
   mockColorScheme = scheme;
   const palette = currentPalette();

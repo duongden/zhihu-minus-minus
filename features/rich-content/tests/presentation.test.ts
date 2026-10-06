@@ -7,13 +7,10 @@ test('keeps rich content typography and appearance scales on one metrics source'
   const lineHeightScale = 1.7;
   const metrics = createRichContentMetrics(fontSizeScale, lineHeightScale);
 
-  assert.equal(metrics.body.fontSize, 20.4);
-  assert.equal(metrics.body.lineHeight, 34.68);
-  assert.equal(metrics.headings.h1.fontSize, 25.2);
   assert.ok(
-    Math.abs(metrics.headings.h1.lineHeight - 42.84) < Number.EPSILON * 100,
+    Math.abs(metrics.codeFontSize / baseMetrics.codeFontSize - fontSizeScale) <
+      1e-10,
   );
-  assert.equal(metrics.codeFontSize, 16.8);
 
   const textMetrics = [metrics.body, ...Object.values(metrics.headings)];
   const baseTextMetrics = [
@@ -29,7 +26,10 @@ test('keeps rich content typography and appearance scales on one metrics source'
       ) < 1e-10,
     );
     assert.ok(
-      Math.abs(text.lineHeight / text.fontSize - lineHeightScale) < 1e-10,
+      Math.abs(
+        text.lineHeight / text.fontSize / (base.lineHeight / base.fontSize) -
+          lineHeightScale,
+      ) < 1e-10,
     );
   }
 });

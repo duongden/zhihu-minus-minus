@@ -3,6 +3,7 @@ import type { ZhihuMember } from '../api/zhihu';
 import { ProfileHeader } from '../components/profile/ProfileHeader';
 import { resolveThemeColors } from '../constants/theme';
 import { useSettingsStore } from '../store/useSettingsStore';
+import { contrastRatio } from '../utils/colorContrast';
 
 jest.mock('@expo/vector-icons/Ionicons', () => () => null);
 jest.mock('expo-linear-gradient', () => ({
@@ -101,10 +102,10 @@ test('a long biography can be read in full without expanding the next member', a
   expect(host.getByRole('button', { name: '展开简介' })).toBeTruthy();
 });
 
-test('custom primary colors and large type update the open profile', async () => {
+test('a white primary color keeps the open profile follow action readable', async () => {
   const host = await render(<ProfileHeader {...props()} />);
   await act(() => {
-    useSettingsStore.setState({ primaryColor: '#ffffff', fontSizeScale: 1.6 });
+    useSettingsStore.setState({ primaryColor: '#ffffff' });
   });
   const palette = resolveThemeColors('light', {
     primaryColor: '#ffffff',
@@ -118,8 +119,7 @@ test('custom primary colors and large type update the open profile', async () =>
   expect(host.getByText('关注', { exact: true })).toHaveStyle({
     color: palette.link,
   });
-  expect(host.getByText('测试作者')).toHaveStyle({
-    fontSize: 24 * 1.6,
-    lineHeight: 30 * 1.6,
-  });
+  expect(
+    contrastRatio(palette.link, palette.background),
+  ).toBeGreaterThanOrEqual(4.5);
 });

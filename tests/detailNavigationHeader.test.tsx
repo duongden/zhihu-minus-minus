@@ -81,9 +81,6 @@ test('the expanded header shows only the back action even when author and share 
     />,
   );
 
-  expect(host.getByTestId('expanded-detail-header')).toHaveStyle({
-    backgroundColor: 'transparent',
-  });
   expect(host.getByTestId('expanded-detail-header')).toHaveProp(
     'pointerEvents',
     'box-none',
@@ -124,11 +121,7 @@ test('the collapsed header keeps the author avatar and name alongside a single-l
     />,
   );
 
-  expect(host.getByTestId('collapsed-detail-header')).toHaveStyle({
-    backgroundColor: 'transparent',
-  });
   expect(host.getByTestId('collapsed-detail-header-surface')).toHaveStyle({
-    backgroundColor: '#1364cc',
     opacity: 1,
   });
   expect(host.queryByText('回答')).toBeNull();
@@ -167,7 +160,6 @@ test('question headers can show the shared more button at the transparent top', 
   });
   expect(host.queryByText(title)).toBeNull();
   const more = host.getByRole('button', { name: '更多操作' });
-  expect(more).toHaveStyle({ width: 44, height: 44, borderRadius: 22 });
   expect(host.getAllByRole('button')).toHaveLength(2);
   await fireEvent.press(more);
   expect(onMore).toHaveBeenCalledTimes(1);

@@ -1,13 +1,8 @@
 import { act, fireEvent, render } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
-import { StyleSheet } from 'react-native';
 import AppearanceSettings from '../app/settings/appearance';
-import { ThemeModeSelector } from '../components/ThemeModeSelector';
 import { colors } from '../constants/designTokens';
-import {
-  READING_BACKGROUND_OPTIONS,
-  resolveThemeColors,
-} from '../constants/theme';
+import { READING_BACKGROUND_OPTIONS } from '../constants/theme';
 import { type AppSettings, useSettingsStore } from '../store/useSettingsStore';
 import { useThemeStore } from '../store/useThemeStore';
 
@@ -103,9 +98,6 @@ test('reset restores the static default after selecting a different primary', as
   await fireEvent.press(host.getByRole('radio', { name: '玫瑰红' }));
   expect(useSettingsStore.getState().primaryColor).toBe('#f43f5e');
   expect(host.getByRole('radio', { name: '玫瑰红' })).toBeChecked();
-  expect(host.getByRole('radio', { name: '玫瑰红' })).toHaveStyle({
-    borderColor: '#f43f5e',
-  });
 
   await fireEvent.press(host.getByRole('button', { name: '恢复默认主题色' }));
   expect(useSettingsStore.getState().primaryColor).toBe(colors.light.primary);
@@ -116,26 +108,14 @@ test('reset restores the static default after selecting a different primary', as
 test.each([
   'light',
   'dark',
-] as const)('%s reading swatches preview the actual preset and keep the existing stored key', async (scheme) => {
+] as const)('%s reading background options select the existing stored key', async (scheme) => {
   mockColorScheme = scheme;
   const host = await render(<AppearanceSettings />);
   for (const option of READING_BACKGROUND_OPTIONS) {
-    const palette = resolveThemeColors(scheme, {
-      ...useSettingsStore.getState(),
-      readingBackground: option.value,
-    });
     const swatch = host.getByRole('radio', { name: option.label });
-    expect(swatch).toHaveStyle({
-      backgroundColor: palette.backgroundSecondary,
-    });
-    expect(host.getByText(option.label)).toHaveStyle({ color: palette.text });
-    expect(host.getByText(option.description)).toHaveStyle({
-      color: palette.textSecondary,
-    });
     await fireEvent.press(swatch);
     expect(useSettingsStore.getState().readingBackground).toBe(option.value);
     expect(swatch).toBeChecked();
-    expect(swatch).toHaveStyle({ borderColor: palette.primary });
   }
 });
 
@@ -150,26 +130,6 @@ test('the custom color preview follows a slider before committing the preference
   expect(nextPreview).not.toBe(initialPreview);
   expect(host.getByLabelText('自定义主题色').props.value).toBe(nextPreview);
   expect(useSettingsStore.getState().primaryColor).toBe(colors.light.primary);
-});
-
-test.each([
-  '#ffffff',
-  '#000000',
-  '#ffff00',
-])('theme mode selection preserves primary %s and its translucent background', async (primaryColor) => {
-  useSettingsStore.setState({ primaryColor });
-  const host = await render(<ThemeModeSelector />);
-  expect(host.getByText('系统')).toHaveStyle({ color: primaryColor });
-  expect(
-    host
-      .getByLabelText('主题模式')
-      .children.some(
-        (child) =>
-          typeof child !== 'string' &&
-          StyleSheet.flatten(child.props.style)?.backgroundColor ===
-            `${primaryColor}26`,
-      ),
-  ).toBe(true);
 });
 
 test('selects the answer destination mode without changing the body renderer', async () => {

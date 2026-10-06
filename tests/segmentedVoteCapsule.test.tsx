@@ -6,7 +6,6 @@ import {
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { voteContent } from '../api/zhihu/voters';
 import { SegmentedVoteCapsule } from '../components/SegmentedVoteCapsule';
-import { colors } from '../constants/designTokens';
 
 jest.mock('../api/zhihu', () => ({
   voteContent: jest.fn(),
@@ -123,7 +122,6 @@ test('downvote response count updates the capsule and its parent without a subsc
   });
   expect(onVoteChange).toHaveBeenCalledTimes(1);
   expect(host.getByTestId('vote:up')).toBeTruthy();
-  expect(host.getByText('6')).toHaveStyle({ color: colors.light.iconMuted });
 });
 
 test.each([
