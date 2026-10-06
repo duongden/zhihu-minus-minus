@@ -5,7 +5,7 @@ import Animated from 'react-native-reanimated';
 import { useRuntimeThemeColors } from '@/components/Themed';
 import { useColorScheme } from '@/components/useColorScheme';
 
-export const CONTENT_ACTION_BAR_HEIGHT = 48;
+export const CONTENT_ACTION_BAR_HEIGHT = 52;
 
 export interface ContentActionBarProps {
   bottomInset: number;
@@ -24,7 +24,7 @@ export function getContentActionBarBottom(
   bottomInset: number,
   bottomOffset = 0,
 ): number {
-  return Math.max(bottomInset + bottomOffset, 12) + 20;
+  return Math.max(bottomInset + bottomOffset, 12) + 12;
 }
 
 /** Common floating surface; supports unified bar (Variant A) or floating islands (Variant B). */
